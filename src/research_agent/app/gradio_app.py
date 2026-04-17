@@ -7,9 +7,11 @@ import gradio as gr
 from research_agent.config import load_settings
 from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
+from research_agent.tools import build_tool_registry
 
 
 SETTINGS = load_settings()
+TOOL_REGISTRY = build_tool_registry(SETTINGS)
 
 
 def run_placeholder(topic: str, template: str) -> str:
@@ -22,7 +24,7 @@ def run_placeholder(topic: str, template: str) -> str:
         topic=topic,
         template=template,
     )
-    updated = run_graph(initial_state)
+    updated = run_graph(initial_state, registry=TOOL_REGISTRY)
 
     if updated.phase == "awaiting_user_clarification":
         questions = "\n".join(f"- {q}" for q in updated.clarification_questions)

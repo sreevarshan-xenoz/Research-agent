@@ -7,14 +7,15 @@ def test_graph_plans_for_specific_topic() -> None:
         run_id="smoke",
         topic="A comparative analysis of retrieval augmentation for software engineering agents",
     )
-    updated = run_graph(state)
-    assert updated.phase == "planned"
+    updated = run_graph(state, registry={})
+    assert updated.phase == "workers_executed"
     assert updated.tasks
+    assert any(task.status == "complete" for task in updated.tasks)
 
 
 def test_graph_routes_to_clarification_for_ambiguous_topic() -> None:
-    state = WorkflowState(run_id="smoke", topic="AI")
-    updated = run_graph(state)
+    state = WorkflowState(run_id="smoke", topic="AI", task_findings={})
+    updated = run_graph(state, registry={})
     assert updated.phase == "awaiting_user_clarification"
     assert updated.stop_reason == "clarification_required"
     assert len(updated.clarification_questions) >= 2

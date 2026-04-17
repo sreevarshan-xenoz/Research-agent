@@ -23,6 +23,7 @@ class GraphState(TypedDict):
     section_confidence: dict[str, float]
     clarification_questions: list[str]
     needs_clarification: bool
+    task_findings: dict[str, dict[str, dict[str, object]]]
 
 
 @dataclass
@@ -46,6 +47,7 @@ class WorkflowState:
     section_confidence: Dict[str, float] = field(default_factory=dict)
     clarification_questions: List[str] = field(default_factory=list)
     needs_clarification: bool = False
+    task_findings: Dict[str, Dict[str, Dict[str, object]]] = field(default_factory=dict)
 
 
 def to_graph_state(state: WorkflowState) -> GraphState:
@@ -69,6 +71,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "section_confidence": state.section_confidence,
         "clarification_questions": state.clarification_questions,
         "needs_clarification": state.needs_clarification,
+        "task_findings": state.task_findings,
     }
 
 
@@ -93,4 +96,5 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         section_confidence=state["section_confidence"],
         clarification_questions=state["clarification_questions"],
         needs_clarification=state["needs_clarification"],
+        task_findings=state["task_findings"],
     )
