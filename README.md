@@ -40,6 +40,15 @@ copy .env.example .env
 python -m research_agent.app.gradio_app
 ```
 
+## Web App (LLM-Style UI)
+Run the browser-based chat experience:
+
+```powershell
+uvicorn research_agent.app.webapp:app --reload
+```
+
+Then open `http://127.0.0.1:8000`.
+
 ## Notes
 - Local model support is intentionally deferred to v2.
 - Final deliverables are source artifacts (`main.tex`, `references.bib`) and optional compile instructions.

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Agent Web</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1>Research Agent</h1>
+      <p class="tagline">Autonomous multi-agent research with LaTeX output.</p>
+
+      <div class="panel">
+        <label for="templateSelect">Template</label>
+        <select id="templateSelect">
+          <option value="ieee">IEEE</option>
+          <option value="acm">ACM</option>
+        </select>
+      </div>
+
+      <div class="panel">
+        <button id="newSessionBtn" class="secondary">New Session</button>
+        <div id="sessionInfo" class="mono small">Session: not initialized</div>
+      </div>
+
+      <div class="panel status-panel">
+        <h2>Run Insights</h2>
+        <div id="insightBox" class="small">No run yet.</div>
+      </div>
+    </aside>
+
+    <main class="chat-area">
+      <header class="chat-header">
+        <span class="badge">v1</span>
+        <span class="header-title">LLM-style Research Workspace</span>
+      </header>
+
+      <section id="messages" class="messages"></section>
+
+      <form id="chatForm" class="composer">
+        <textarea id="messageInput" rows="3" placeholder="Enter a research topic or answer clarification questions..."></textarea>
+        <div class="composer-actions">
+          <button id="sendBtn" type="submit">Send</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
