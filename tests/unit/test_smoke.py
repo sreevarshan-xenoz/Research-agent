@@ -1,17 +1,23 @@
+from pathlib import Path
+
 from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
 
 
-def test_graph_plans_for_specific_topic() -> None:
+def test_graph_plans_for_specific_topic(tmp_path: Path) -> None:
     state = WorkflowState(
         run_id="smoke",
         topic="A comparative analysis of retrieval augmentation for software engineering agents",
+        artifact_root=str(tmp_path),
     )
     updated = run_graph(state, registry={})
-    assert updated.phase == "workers_complete"
-    assert updated.stop_reason == "worker_execution_complete"
+    assert updated.phase == "completed"
+    assert updated.stop_reason == "completed"
     assert updated.tasks
     assert all(task.status == "complete" for task in updated.tasks)
+    assert updated.artifact_dir
+    assert (Path(updated.artifact_dir) / "main.tex").exists()
+    assert (Path(updated.artifact_dir) / "references.bib").exists()
 
 
 def test_graph_routes_to_clarification_for_ambiguous_topic() -> None:

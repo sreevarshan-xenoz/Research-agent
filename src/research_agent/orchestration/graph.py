@@ -4,8 +4,13 @@ from langgraph.graph import END, START, StateGraph
 
 from research_agent.orchestration.nodes import (
     awaiting_user_node,
+    citation_verifier_node,
     clarifier_node,
+    combiner_node,
+    composer_node,
+    critic_node,
     dependency_blocked_node,
+    exporter_node,
     get_pending_task_ids,
     get_ready_task_ids,
     intake_node,
@@ -45,6 +50,11 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_node("worker_executor", make_worker_node(tool_registry))
     graph.add_node("workers_complete", workers_complete_node)
     graph.add_node("workers_blocked", dependency_blocked_node)
+    graph.add_node("critic", critic_node)
+    graph.add_node("combiner", combiner_node)
+    graph.add_node("citation_verifier", citation_verifier_node)
+    graph.add_node("composer", composer_node)
+    graph.add_node("exporter", exporter_node)
 
     graph.add_edge(START, "intake")
     graph.add_edge("intake", "clarifier")
@@ -67,8 +77,13 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
             "blocked": "workers_blocked",
         },
     )
-    graph.add_edge("workers_complete", END)
-    graph.add_edge("workers_blocked", END)
+    graph.add_edge("workers_complete", "critic")
+    graph.add_edge("workers_blocked", "critic")
+    graph.add_edge("critic", "combiner")
+    graph.add_edge("combiner", "citation_verifier")
+    graph.add_edge("citation_verifier", "composer")
+    graph.add_edge("composer", "exporter")
+    graph.add_edge("exporter", END)
     return graph.compile()
 
 

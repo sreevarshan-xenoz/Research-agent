@@ -1,8 +1,13 @@
 from research_agent.orchestration.nodes.clarifier import awaiting_user_node, clarifier_node
+from research_agent.orchestration.nodes.combiner import combiner_node
+from research_agent.orchestration.nodes.composer import composer_node
+from research_agent.orchestration.nodes.citation_verifier import citation_verifier_node
+from research_agent.orchestration.nodes.critic import critic_node
 from research_agent.orchestration.nodes.dependency import (
 	dependency_blocked_node,
 	workers_complete_node,
 )
+from research_agent.orchestration.nodes.exporter import exporter_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
 from research_agent.orchestration.nodes.worker import (
@@ -21,4 +26,9 @@ __all__ = [
 	"get_pending_task_ids",
 	"workers_complete_node",
 	"dependency_blocked_node",
+	"critic_node",
+	"combiner_node",
+	"citation_verifier_node",
+	"composer_node",
+	"exporter_node",
 ]

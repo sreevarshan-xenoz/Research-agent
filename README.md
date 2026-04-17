@@ -2,6 +2,13 @@
 
 API-first, subagent-driven research system that performs iterative topic research and exports grounded LaTeX source packages.
 
+Current implementation is a working v1 pipeline with:
+- Clarification-first intake for ambiguous topics
+- Dependency-aware multi-pass worker execution
+- Critic scoring and section synthesis
+- Citation extraction and verification pass
+- LaTeX package generation and artifact export
+
 ## v1 Scope
 - API model providers only
 - Hybrid autonomy with clarification + critic loops
@@ -36,3 +43,21 @@ python -m research_agent.app.gradio_app
 ## Notes
 - Local model support is intentionally deferred to v2.
 - Final deliverables are source artifacts (`main.tex`, `references.bib`) and optional compile instructions.
+
+## End-to-End Flow (v1)
+1. Intake and ambiguity detection
+2. Clarification questions (if needed)
+3. Planner builds dependent subtopic tasks
+4. Worker executes tools until all dependencies resolve or block
+5. Critic scores evidence confidence
+6. Combiner produces section drafts
+7. Citation verifier extracts citation records
+8. Composer generates `main.tex` and `references.bib`
+9. Exporter writes artifact package to `artifacts/<run_id>/`
+
+## Exported Artifacts
+Each completed run writes:
+- `main.tex`
+- `references.bib`
+- `compile_instructions.md`
+- `summary.json`

@@ -34,6 +34,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
             return {"phase": "workers_idle"}
 
         findings = dict(state["task_findings"])
+        run_warnings = list(state["run_warnings"])
 
         for task in tasks:
             task_id = str(task["task_id"])
@@ -47,15 +48,20 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
                     "item_count": len(result.items),
                     "warning_count": len(result.warnings),
                     "warnings": result.warnings,
+                    "items": result.items,
                 }
                 for provider, result in result_map.items()
             }
+            for provider, result in result_map.items():
+                for warning in result.warnings:
+                    run_warnings.append(f"{provider}:{warning}")
             task["status"] = "complete"
 
         return {
             "tasks": tasks,
             "task_findings": findings,
             "phase": "workers_executed",
+            "run_warnings": run_warnings,
             "stop_reason": None,
         }
 

@@ -24,6 +24,14 @@ class GraphState(TypedDict):
     clarification_questions: list[str]
     needs_clarification: bool
     task_findings: dict[str, dict[str, dict[str, object]]]
+    critic_notes: list[str]
+    combined_sections: list[dict[str, str]]
+    citations: list[dict[str, str]]
+    latex_main: str
+    bibtex: str
+    artifact_root: str
+    artifact_dir: str
+    run_warnings: list[str]
 
 
 @dataclass
@@ -48,6 +56,14 @@ class WorkflowState:
     clarification_questions: List[str] = field(default_factory=list)
     needs_clarification: bool = False
     task_findings: Dict[str, Dict[str, Dict[str, object]]] = field(default_factory=dict)
+    critic_notes: List[str] = field(default_factory=list)
+    combined_sections: List[Dict[str, str]] = field(default_factory=list)
+    citations: List[Dict[str, str]] = field(default_factory=list)
+    latex_main: str = ""
+    bibtex: str = ""
+    artifact_root: str = "artifacts"
+    artifact_dir: str = ""
+    run_warnings: List[str] = field(default_factory=list)
 
 
 def to_graph_state(state: WorkflowState) -> GraphState:
@@ -72,6 +88,14 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "clarification_questions": state.clarification_questions,
         "needs_clarification": state.needs_clarification,
         "task_findings": state.task_findings,
+        "critic_notes": state.critic_notes,
+        "combined_sections": state.combined_sections,
+        "citations": state.citations,
+        "latex_main": state.latex_main,
+        "bibtex": state.bibtex,
+        "artifact_root": state.artifact_root,
+        "artifact_dir": state.artifact_dir,
+        "run_warnings": state.run_warnings,
     }
 
 
@@ -97,4 +121,12 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         clarification_questions=state["clarification_questions"],
         needs_clarification=state["needs_clarification"],
         task_findings=state["task_findings"],
+        critic_notes=state["critic_notes"],
+        combined_sections=state["combined_sections"],
+        citations=state["citations"],
+        latex_main=state["latex_main"],
+        bibtex=state["bibtex"],
+        artifact_root=state["artifact_root"],
+        artifact_dir=state["artifact_dir"],
+        run_warnings=state["run_warnings"],
     )
