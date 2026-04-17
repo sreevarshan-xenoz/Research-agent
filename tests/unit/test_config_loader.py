@@ -88,3 +88,40 @@ retrieval:
 
     with pytest.raises(Exception):
         load_settings(settings_path=settings_file)
+
+
+def test_load_settings_model_alias_overrides(tmp_path: Path) -> None:
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        """
+runtime:
+  mode: api_only
+  max_iterations: 2
+  max_runtime_minutes: 10
+  max_cost_usd: 1.0
+models:
+  worker_model: old-worker
+  strong_model: old-strong
+output:
+  default_template: ieee
+  supported_templates:
+    - ieee
+    - acm
+retrieval:
+  web_provider: tavily
+  paper_providers:
+    - arxiv
+  allow_metadata_fallback: true
+  metadata_fallback_confidence_penalty: 0.1
+""".strip(),
+        encoding="utf-8",
+    )
+
+    env = {
+        "WORKER_MODEL": "openrouter/meta-llama/llama-3.1-8b-instruct",
+        "STRONG_MODEL": "nvidia_nim/meta/llama-3.1-70b-instruct",
+    }
+    settings = load_settings(settings_path=settings_file, env=env)
+
+    assert settings.models.worker_model == "openrouter/meta-llama/llama-3.1-8b-instruct"
+    assert settings.models.strong_model == "nvidia_nim/meta/llama-3.1-70b-instruct"

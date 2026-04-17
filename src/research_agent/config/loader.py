@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Mapping
 
+from dotenv import load_dotenv
 import yaml
 
 from research_agent.config.schema import AppSettings
@@ -31,8 +32,13 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
 
     if env.get("LITELLM_DEFAULT_MODEL"):
         models["worker_model"] = env["LITELLM_DEFAULT_MODEL"]
+    if env.get("WORKER_MODEL"):
+        models["worker_model"] = env["WORKER_MODEL"]
+
     if env.get("LITELLM_STRONG_MODEL"):
         models["strong_model"] = env["LITELLM_STRONG_MODEL"]
+    if env.get("STRONG_MODEL"):
+        models["strong_model"] = env["STRONG_MODEL"]
 
     if env.get("DEFAULT_TEMPLATE"):
         output["default_template"] = env["DEFAULT_TEMPLATE"]
@@ -76,6 +82,9 @@ def load_settings(
     settings_path: str | Path | None = None,
     env: Mapping[str, str] | None = None,
 ) -> AppSettings:
+    # Load local .env for developer-friendly provider key/model configuration.
+    load_dotenv(override=False)
+
     env_map = dict(os.environ if env is None else env)
     path = resolve_settings_path(settings_path)
     data = _read_yaml_file(path)
