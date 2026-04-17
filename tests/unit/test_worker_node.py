@@ -18,7 +18,11 @@ class FakeAdapter(BaseToolAdapter):
         )
 
 
-def test_worker_executes_ready_tasks_and_stores_findings(tmp_path: Path) -> None:
+def test_worker_executes_ready_tasks_and_stores_findings(
+    tmp_path: Path,
+    monkeypatch,  # noqa: ANN001
+) -> None:
+    monkeypatch.setenv("ENABLE_NVIDIA_MODEL", "0")
     state = WorkflowState(
         run_id="worker-smoke",
         topic="Retrieval evaluation methods for coding agents in enterprise settings",

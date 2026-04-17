@@ -14,7 +14,7 @@ SETTINGS = load_settings()
 TOOL_REGISTRY = build_tool_registry(SETTINGS)
 
 
-def run_placeholder(topic: str, template: str) -> str:
+def run_research(topic: str, template: str) -> str:
     topic = (topic or "").strip()
     if not topic:
         return "Please provide a research topic."
@@ -67,7 +67,7 @@ def run_placeholder(topic: str, template: str) -> str:
 
 def build_app() -> gr.Blocks:
     with gr.Blocks(title="Research Agent v1") as demo:
-        gr.Markdown("# Research Agent v1 (Scaffold)")
+        gr.Markdown("# Research Agent v1")
         topic = gr.Textbox(label="Research topic", lines=3)
         template = gr.Dropdown(
             choices=SETTINGS.output.supported_templates,
@@ -76,7 +76,7 @@ def build_app() -> gr.Blocks:
         )
         run_btn = gr.Button("Start")
         output = gr.Textbox(label="Status", lines=8)
-        run_btn.click(fn=run_placeholder, inputs=[topic, template], outputs=[output])
+        run_btn.click(fn=run_research, inputs=[topic, template], outputs=[output])
     return demo
 
 
