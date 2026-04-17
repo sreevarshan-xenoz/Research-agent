@@ -83,6 +83,11 @@ body {
   padding: 14px;
 }
 
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
 label {
   display: block;
   font-size: 0.9rem;
@@ -191,6 +196,119 @@ button.secondary {
   background: var(--assistant);
 }
 
+.message.generating {
+  position: relative;
+  overflow: hidden;
+}
+
+.message.generating::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 80%
+  );
+  transform: translateX(-110%);
+  animation: shimmer 1.8s infinite;
+}
+
+.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: bounce 0.8s ease-in-out infinite;
+}
+
+.typing span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.agent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.agent-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.agent-row .detail {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.agent-name {
+  font-size: 0.9rem;
+}
+
+.agent-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  text-transform: lowercase;
+  border: 1px solid var(--line);
+  background: #f3f6f4;
+}
+
+.agent-pill.complete {
+  background: #e4f4ed;
+  border-color: #9ed4ba;
+  color: #1e5a43;
+}
+
+.agent-pill.running {
+  background: #fff2e0;
+  border-color: #f1c89b;
+  color: #915019;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.agent-pill.waiting {
+  background: #eef2f8;
+  border-color: #c9d5eb;
+  color: #3a4d73;
+}
+
+.agent-pill.idle,
+.agent-pill.pending {
+  background: #f4f5f6;
+  color: #6a747a;
+}
+
+.agent-pill.blocked,
+.agent-pill.error {
+  background: #ffe8e8;
+  border-color: #f1bbbb;
+  color: #8f2b2b;
+}
+
 .message .meta {
   font-size: 0.78rem;
   color: var(--muted);
@@ -234,6 +352,32 @@ button.secondary {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(110%);
+  }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.65;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
   }
 }
 

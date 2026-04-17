@@ -41,6 +41,12 @@ class TaskStatus(BaseModel):
     status: str
 
 
+class AgentActivity(BaseModel):
+    name: str
+    status: str
+    detail: str = ""
+
+
 class ChatResponse(BaseModel):
     kind: str
     assistant_message: str
@@ -51,6 +57,7 @@ class ChatResponse(BaseModel):
     section_confidence: dict[str, float] = Field(default_factory=dict)
     task_statuses: list[TaskStatus] = Field(default_factory=list)
     artifact_urls: dict[str, str] = Field(default_factory=dict)
+    agent_activity: list[AgentActivity] = Field(default_factory=list)
 
 
 @dataclass
@@ -86,6 +93,43 @@ def _build_result_message(state: WorkflowState) -> str:
         f"Template: {state.template}\n"
         f"Artifacts: {state.artifact_dir}"
     )
+
+
+def _build_agent_activity(state: WorkflowState) -> list[AgentActivity]:
+    activities: list[AgentActivity] = [
+        AgentActivity(name="Orchestrator", status="complete", detail="Workflow routed successfully"),
+        AgentActivity(name="Planner", status="complete", detail=f"Planned {len(state.tasks)} tasks"),
+    ]
+
+    for task in state.tasks:
+        activities.append(
+            AgentActivity(
+                name=f"SubResearch {task.task_id}",
+                status=task.status,
+                detail=task.title,
+            )
+        )
+
+    if state.phase == "awaiting_user_clarification":
+        activities.append(
+            AgentActivity(
+                name="Clarifier",
+                status="waiting",
+                detail="Awaiting user scope details",
+            )
+        )
+        return activities
+
+    activities.extend(
+        [
+            AgentActivity(name="Critic", status="complete", detail="Confidence scoring done"),
+            AgentActivity(name="Combiner", status="complete", detail="Sections synthesized"),
+            AgentActivity(name="Citation Verifier", status="complete", detail="References extracted"),
+            AgentActivity(name="Composer", status="complete", detail="LaTeX content generated"),
+            AgentActivity(name="Exporter", status="complete", detail="Artifacts written"),
+        ]
+    )
+    return activities
 
 
 def create_app(
@@ -163,6 +207,7 @@ def create_app(
                 assistant_message="I need a few details before I run deep research.",
                 run_id=updated.run_id,
                 questions=session.pending_questions,
+                agent_activity=_build_agent_activity(updated),
             )
 
         session.awaiting_clarification = False
@@ -188,6 +233,7 @@ def create_app(
                 for task in updated.tasks
             ],
             artifact_urls=artifact_urls,
+            agent_activity=_build_agent_activity(updated),
         )
 
     return app
