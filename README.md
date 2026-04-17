@@ -49,6 +49,15 @@ uvicorn research_agent.app.webapp:app --reload
 
 Then open `http://127.0.0.1:8000`.
 
+## NVIDIA Chat Model Usage
+To use NVIDIA generation in the composer stage, set these in `.env`:
+
+- `ENABLE_NVIDIA_MODEL=true`
+- `NVIDIA_API_KEY=...` (or `NVIDIA_NIMS_API_KEY=...`)
+- `NVIDIA_MODEL=qwen/qwen3-coder-480b-a35b-instruct`
+
+The integration uses `ChatNVIDIA(...).stream(...)` and falls back to deterministic local composition if the NVIDIA call is unavailable.
+
 ## Notes
 - Local model support is intentionally deferred to v2.
 - Final deliverables are source artifacts (`main.tex`, `references.bib`) and optional compile instructions.
