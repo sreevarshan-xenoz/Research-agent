@@ -35,16 +35,33 @@ def run_placeholder(topic: str, template: str) -> str:
             f"Questions:\n{questions}"
         )
 
-    task_lines = "\n".join(f"- {task.task_id}: {task.title}" for task in updated.tasks)
+    task_lines = "\n".join(
+        f"- {task.task_id}: {task.title} ({task.status})" for task in updated.tasks
+    )
+    note_lines = "\n".join(f"- {note}" for note in updated.critic_notes)
+    warning_lines = "\n".join(f"- {warning}" for warning in updated.run_warnings[:10])
+    section_lines = "\n".join(
+        f"- {section.get('heading', 'Section')}: {section.get('content', '')[:120]}..."
+        for section in updated.combined_sections
+    )
+    note_lines = note_lines or "- none"
+    warning_lines = warning_lines or "- none"
+    section_lines = section_lines or "- none"
+
     return (
-        "Initial orchestration complete.\n"
+        "Research run completed.\n"
         f"Topic: {updated.topic}\n"
         f"Template: {updated.template}\n"
         f"Phase: {updated.phase}\n\n"
         f"Runtime mode: {SETTINGS.runtime.mode}\n"
         f"Worker model: {SETTINGS.models.worker_model}\n"
-        f"Strong model: {SETTINGS.models.strong_model}\n\n"
-        f"Planned tasks:\n{task_lines}"
+        f"Strong model: {SETTINGS.models.strong_model}\n"
+        f"Artifact directory: {updated.artifact_dir}\n\n"
+        f"Tasks:\n{task_lines}\n\n"
+        f"Critic notes:\n{note_lines}\n\n"
+        f"Warnings:\n{warning_lines}\n\n"
+        f"Sections:\n{section_lines}\n\n"
+        "Generated files: main.tex, references.bib, compile_instructions.md, summary.json"
     )
 
 
