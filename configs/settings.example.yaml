@@ -1,0 +1,23 @@
+runtime:
+  mode: api_only
+  max_iterations: 4
+  max_runtime_minutes: 25
+  max_cost_usd: 5.0
+
+models:
+  worker_model: gpt-4o-mini
+  strong_model: claude-3-7-sonnet-latest
+
+output:
+  default_template: ieee
+  supported_templates:
+    - ieee
+    - acm
+
+retrieval:
+  web_provider: tavily
+  paper_providers:
+    - arxiv
+    - semantic_scholar
+  allow_metadata_fallback: true
+  metadata_fallback_confidence_penalty: 0.15

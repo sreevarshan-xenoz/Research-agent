@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+
+# Build artifacts
+build/
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Project runtime data
+data/raw/*
+data/processed/*
+data/vector_index/*
+data/graph/*
+artifacts/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/vector_index/.gitkeep
+!data/graph/.gitkeep
+!artifacts/.gitkeep
+spec/
