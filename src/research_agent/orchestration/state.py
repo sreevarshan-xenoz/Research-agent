@@ -1,7 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypedDict
+
+
+class GraphTask(TypedDict):
+    task_id: str
+    title: str
+    objective: str
+    depends_on: list[str]
+    status: str
+
+
+class GraphState(TypedDict):
+    run_id: str
+    topic: str
+    template: str
+    phase: str
+    iteration_index: int
+    stop_reason: str | None
+    tasks: list[GraphTask]
+    section_confidence: dict[str, float]
+    clarification_questions: list[str]
+    needs_clarification: bool
 
 
 @dataclass
@@ -23,3 +44,53 @@ class WorkflowState:
     stop_reason: Optional[str] = None
     tasks: List[SubtopicTask] = field(default_factory=list)
     section_confidence: Dict[str, float] = field(default_factory=dict)
+    clarification_questions: List[str] = field(default_factory=list)
+    needs_clarification: bool = False
+
+
+def to_graph_state(state: WorkflowState) -> GraphState:
+    return {
+        "run_id": state.run_id,
+        "topic": state.topic,
+        "template": state.template,
+        "phase": state.phase,
+        "iteration_index": state.iteration_index,
+        "stop_reason": state.stop_reason,
+        "tasks": [
+            {
+                "task_id": task.task_id,
+                "title": task.title,
+                "objective": task.objective,
+                "depends_on": task.depends_on,
+                "status": task.status,
+            }
+            for task in state.tasks
+        ],
+        "section_confidence": state.section_confidence,
+        "clarification_questions": state.clarification_questions,
+        "needs_clarification": state.needs_clarification,
+    }
+
+
+def from_graph_state(state: GraphState) -> WorkflowState:
+    return WorkflowState(
+        run_id=state["run_id"],
+        topic=state["topic"],
+        template=state["template"],
+        phase=state["phase"],
+        iteration_index=state["iteration_index"],
+        stop_reason=state["stop_reason"],
+        tasks=[
+            SubtopicTask(
+                task_id=task["task_id"],
+                title=task["title"],
+                objective=task["objective"],
+                depends_on=task["depends_on"],
+                status=task["status"],
+            )
+            for task in state["tasks"]
+        ],
+        section_confidence=state["section_confidence"],
+        clarification_questions=state["clarification_questions"],
+        needs_clarification=state["needs_clarification"],
+    )
