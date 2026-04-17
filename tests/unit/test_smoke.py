@@ -8,9 +8,10 @@ def test_graph_plans_for_specific_topic() -> None:
         topic="A comparative analysis of retrieval augmentation for software engineering agents",
     )
     updated = run_graph(state, registry={})
-    assert updated.phase == "workers_executed"
+    assert updated.phase == "workers_complete"
+    assert updated.stop_reason == "worker_execution_complete"
     assert updated.tasks
-    assert any(task.status == "complete" for task in updated.tasks)
+    assert all(task.status == "complete" for task in updated.tasks)
 
 
 def test_graph_routes_to_clarification_for_ambiguous_topic() -> None:

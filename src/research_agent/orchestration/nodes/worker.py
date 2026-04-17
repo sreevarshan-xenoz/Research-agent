@@ -5,7 +5,7 @@ from research_agent.tools.base import BaseToolAdapter
 from research_agent.tools.registry import run_multi_source_search
 
 
-def _get_ready_task_ids(tasks: list[dict[str, object]]) -> list[str]:
+def get_ready_task_ids(tasks: list[dict[str, object]]) -> list[str]:
     status_by_id = {str(task["task_id"]): str(task["status"]) for task in tasks}
     ready_ids: list[str] = []
 
@@ -19,13 +19,17 @@ def _get_ready_task_ids(tasks: list[dict[str, object]]) -> list[str]:
     return ready_ids
 
 
+def get_pending_task_ids(tasks: list[dict[str, object]]) -> list[str]:
+    return [str(task["task_id"]) for task in tasks if str(task["status"]) == "pending"]
+
+
 def make_worker_node(registry: dict[str, BaseToolAdapter]):
     def worker_node(state: GraphState) -> dict:
         tasks = [dict(task) for task in state["tasks"]]
         if not tasks:
             return {"phase": "workers_idle"}
 
-        ready_task_ids = _get_ready_task_ids(tasks)
+        ready_task_ids = get_ready_task_ids(tasks)
         if not ready_task_ids:
             return {"phase": "workers_idle"}
 

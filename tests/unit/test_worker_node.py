@@ -28,9 +28,14 @@ def test_worker_executes_ready_tasks_and_stores_findings() -> None:
     task_status = {task.task_id: task.status for task in updated.tasks}
     assert task_status["t1"] == "complete"
     assert task_status["t2"] == "complete"
-    assert task_status["t3"] == "pending"
+    assert task_status["t3"] == "complete"
+    assert task_status["t4"] == "complete"
+
+    assert updated.phase == "workers_complete"
+    assert updated.stop_reason == "worker_execution_complete"
 
     assert "t1" in updated.task_findings
     assert "fake" in updated.task_findings["t1"]
     assert updated.task_findings["t1"]["fake"]["item_count"] == 2
     assert updated.task_findings["t1"]["fake"]["warning_count"] == 1
+    assert "t4" in updated.task_findings
