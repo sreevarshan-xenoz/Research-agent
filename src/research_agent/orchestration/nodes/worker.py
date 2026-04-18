@@ -54,6 +54,8 @@ def _emit_progress(
 
 
 def make_worker_node(registry: dict[str, BaseToolAdapter]):
+    registry_provider_count = max(len(registry), 1)
+
     def worker_node(state: GraphState) -> dict:
         tasks = [dict(task) for task in state["tasks"]]
         if not tasks:
@@ -65,6 +67,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
 
         findings = dict(state["task_findings"])
         run_warnings = list(state["run_warnings"])
+        estimated_cost_usd = float(state.get("estimated_cost_usd", 0.0) or 0.0)
         progress_handler = get_progress_callback()
 
         def execute_single_task(task: dict[str, object]) -> tuple[str, dict[str, object], list[str]]:
@@ -110,6 +113,9 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
         
         with ThreadPoolExecutor(max_workers=len(ready_tasks) or 1) as executor:
             results = list(executor.map(execute_single_task, ready_tasks))
+
+        # Rough cost estimator for provider API usage in v1.
+        estimated_cost_usd += len(ready_tasks) * registry_provider_count * 0.01
             
         for task_id, task_finding, task_warnings in results:
             findings[task_id] = task_finding
@@ -120,6 +126,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
             "task_findings": findings,
             "phase": "workers_executed",
             "run_warnings": run_warnings,
+            "estimated_cost_usd": round(estimated_cost_usd, 4),
             "stop_reason": None,
         }
 

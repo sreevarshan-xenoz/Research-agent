@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import time
 from typing import Dict, List, Optional, TypedDict
 
 
@@ -19,6 +20,13 @@ class GraphState(TypedDict):
     phase: str
     iteration_index: int
     max_iterations: int
+    depth: str
+    autonomy_mode: str
+    max_runtime_minutes: int
+    max_cost_usd: float
+    estimated_cost_usd: float
+    started_at: float
+    interrupt_signal: object | None
     stop_reason: str | None
     tasks: list[GraphTask]
     section_confidence: dict[str, float]
@@ -52,6 +60,13 @@ class WorkflowState:
     phase: str = "intake"
     iteration_index: int = 0
     max_iterations: int = 3
+    depth: str = "balanced"
+    autonomy_mode: str = "hybrid"
+    max_runtime_minutes: int = 25
+    max_cost_usd: float = 5.0
+    estimated_cost_usd: float = 0.0
+    started_at: float = field(default_factory=time.time)
+    interrupt_signal: object | None = None
     stop_reason: Optional[str] = None
     tasks: List[SubtopicTask] = field(default_factory=list)
     section_confidence: Dict[str, float] = field(default_factory=dict)
@@ -76,6 +91,13 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "phase": state.phase,
         "iteration_index": state.iteration_index,
         "max_iterations": state.max_iterations,
+        "depth": state.depth,
+        "autonomy_mode": state.autonomy_mode,
+        "max_runtime_minutes": state.max_runtime_minutes,
+        "max_cost_usd": state.max_cost_usd,
+        "estimated_cost_usd": state.estimated_cost_usd,
+        "started_at": state.started_at,
+        "interrupt_signal": state.interrupt_signal,
         "stop_reason": state.stop_reason,
         "tasks": [
             {
@@ -110,6 +132,13 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         phase=state["phase"],
         iteration_index=state["iteration_index"],
         max_iterations=state.get("max_iterations", 3),
+        depth=state.get("depth", "balanced"),
+        autonomy_mode=state.get("autonomy_mode", "hybrid"),
+        max_runtime_minutes=state.get("max_runtime_minutes", 25),
+        max_cost_usd=state.get("max_cost_usd", 5.0),
+        estimated_cost_usd=state.get("estimated_cost_usd", 0.0),
+        started_at=state.get("started_at", time.time()),
+        interrupt_signal=state.get("interrupt_signal"),
         stop_reason=state["stop_reason"],
         tasks=[
             SubtopicTask(

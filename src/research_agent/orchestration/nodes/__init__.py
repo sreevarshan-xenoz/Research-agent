@@ -5,6 +5,7 @@ from research_agent.orchestration.nodes.citation_verifier import citation_verifi
 from research_agent.orchestration.nodes.critic import critic_node
 from research_agent.orchestration.nodes.dependency import (
 	dependency_blocked_node,
+	stop_node,
 	workers_complete_node,
 )
 from research_agent.orchestration.nodes.exporter import exporter_node
@@ -27,6 +28,7 @@ __all__ = [
 	"get_pending_task_ids",
 	"workers_complete_node",
 	"dependency_blocked_node",
+	"stop_node",
 	"indexing_node",
 	"critic_node",
 	"combiner_node",

@@ -15,3 +15,10 @@ def dependency_blocked_node(state: GraphState) -> dict:
         "phase": "workers_blocked",
         "stop_reason": "dependency_blocked",
     }
+
+
+def stop_node(state: GraphState) -> dict:
+    return {
+        "phase": "stopped",
+        "stop_reason": state.get("stop_reason") or "stopped",
+    }
