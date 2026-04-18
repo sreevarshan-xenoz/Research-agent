@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Iterable
 
 
@@ -98,3 +99,56 @@ def build_compile_instructions(template_name: str) -> str:
         "- pdflatex main.tex\n\n"
         "Or upload main.tex and references.bib to Overleaf.\n"
     )
+
+
+def validate_latex_package(
+    *,
+    template_name: str,
+    main_tex: str,
+    bibtex: str,
+) -> list[str]:
+    errors: list[str] = []
+    normalized = main_tex.replace("\\\\", "\\")
+
+    required_markers = [
+        "\\begin{document}",
+        "\\end{document}",
+        "\\title",
+        "\\author",
+        "\\begin{abstract}",
+        "\\bibliography{references}",
+    ]
+    for marker in required_markers:
+        if marker not in normalized:
+            errors.append(f"missing_latex_marker:{marker}")
+
+    if "\\section{" not in normalized:
+        errors.append("missing_required_section")
+
+    if template_name == "ieee" and "IEEEtran" not in normalized:
+        errors.append("template_structure_invalid:ieee")
+    if template_name == "acm" and "acmart" not in normalized:
+        errors.append("template_structure_invalid:acm")
+
+    cite_keys: set[str] = set()
+    for match in re.finditer(r"\\+cite\{([^}]+)\}", normalized):
+        joined = match.group(1)
+        for key in joined.split(","):
+            stripped = key.strip()
+            if stripped:
+                cite_keys.add(stripped)
+
+    bib_keys = {
+        m.group(1).strip()
+        for m in re.finditer(r"@\w+\{\s*([^,\s]+)", bibtex)
+        if m.group(1).strip()
+    }
+
+    if cite_keys and not bib_keys:
+        errors.append("missing_bib_entries")
+
+    unresolved = sorted(cite_keys - bib_keys)
+    if unresolved:
+        errors.append("unresolved_citations:" + ",".join(unresolved))
+
+    return errors

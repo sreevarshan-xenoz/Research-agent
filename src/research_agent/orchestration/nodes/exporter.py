@@ -3,6 +3,7 @@ from __future__ import annotations
 from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output import export_run_artifacts
+from research_agent.output.latex import validate_latex_package
 
 
 def exporter_node(state: GraphState) -> dict:
@@ -12,6 +13,26 @@ def exporter_node(state: GraphState) -> dict:
         detail="Writing artifacts",
         message="Exporting run outputs",
     )
+    run_warnings = list(state["run_warnings"])
+    validation_errors = validate_latex_package(
+        template_name=state["template"],
+        main_tex=state["latex_main"],
+        bibtex=state["bibtex"],
+    )
+    if validation_errors:
+        run_warnings.extend([f"export_validation:{error}" for error in validation_errors])
+        publish_progress(
+            agent="Exporter",
+            status="error",
+            detail="Validation failed",
+            message="Export blocked by validation gate",
+        )
+        return {
+            "phase": "validation_failed",
+            "stop_reason": "validation_failed",
+            "run_warnings": run_warnings,
+        }
+
     summary = {
         "run_id": state["run_id"],
         "topic": state["topic"],
@@ -20,7 +41,7 @@ def exporter_node(state: GraphState) -> dict:
         "stop_reason": state["stop_reason"],
         "critic_notes": state["critic_notes"],
         "section_confidence": state["section_confidence"],
-        "warning_count": len(state["run_warnings"]),
+        "warning_count": len(run_warnings),
     }
 
     artifact_dir = export_run_artifacts(
@@ -42,4 +63,5 @@ def exporter_node(state: GraphState) -> dict:
         "artifact_dir": artifact_dir,
         "phase": "completed",
         "stop_reason": "completed",
+        "run_warnings": run_warnings,
     }
