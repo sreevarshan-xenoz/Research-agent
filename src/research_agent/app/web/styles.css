@@ -273,29 +273,78 @@ button.secondary:hover {
   background: #fef2f2;
 }
 
+.btn-link {
+  display: inline-block;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  background: white;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--assistant);
+}
+
 .discovery-feed {
-  max-height: 240px;
+  max-height: 200px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-right: 4px;
+  gap: 8px;
 }
 
 .discovery-item {
   font-size: 0.75rem;
-  padding: 8px;
+  padding: 10px;
   background: #f8fafc;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--accent-2);
+  border-left: 4px solid var(--accent-2);
+  line-height: 1.4;
 }
 
 .discovery-item .source {
-  font-weight: 700;
-  color: var(--muted);
+  font-weight: 800;
+  color: #475569;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
   margin-bottom: 4px;
   display: block;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.mono {
+  font-family: 'Fira Code', monospace;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
 }
 
 .composer {
@@ -328,14 +377,32 @@ textarea:focus {
   text-transform: uppercase;
 }
 
-.workbench-status.running { background: #fef3c7; color: #92400e; }
-.workbench-status.ready { background: #d1fae5; color: #065f46; }
-
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.6; }
-  100% { opacity: 1; }
+.workbench-status.success {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #6ee7b7;
 }
+
+.tab-btn.pulse {
+  animation: tabPulse 1.5s infinite;
+}
+
+@keyframes tabPulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.doc-editor .ql-editor {
+  min-height: 400px;
+  padding: 40px;
+  background: #fff;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.doc-editor h1 { font-size: 2.2rem; margin-bottom: 0.5rem; }
+.doc-editor h2 { font-size: 1.5rem; margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
+.doc-editor p { margin-bottom: 1.2rem; text-align: justify; }
 
 .fade-in {
   animation: fadeIn 0.3s ease-in-out forwards;

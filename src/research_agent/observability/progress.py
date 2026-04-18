@@ -22,6 +22,10 @@ def progress_callback(callback: ProgressCallback | None) -> Iterator[None]:
         _PROGRESS_CALLBACK.reset(token)
 
 
+def get_progress_callback() -> ProgressCallback | None:
+    return _PROGRESS_CALLBACK.get()
+
+
 def publish_progress(
     *,
     agent: str,

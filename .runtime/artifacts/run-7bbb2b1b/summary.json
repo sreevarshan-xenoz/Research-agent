@@ -1,0 +1,24 @@
+{
+  "run_id": "run-7bbb2b1b",
+  "topic": "Retrieval evaluation methods for coding agents",
+  "template": "ieee",
+  "phase": "latex_composed",
+  "stop_reason": "worker_execution_complete",
+  "critic_notes": [
+    "Low evidence confidence for t1",
+    "Low evidence confidence for t2",
+    "Low evidence confidence for t3",
+    "Low evidence confidence for t4",
+    "Low evidence confidence for f1",
+    "Low evidence confidence for f2"
+  ],
+  "section_confidence": {
+    "t1": 0.25,
+    "t2": 0.25,
+    "t3": 0.25,
+    "t4": 0.25,
+    "f1": 0.25,
+    "f2": 0.25
+  },
+  "warning_count": 0
+}

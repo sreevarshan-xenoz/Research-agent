@@ -114,9 +114,29 @@ def _latex_to_doc_html(latex_text: str) -> str:
         return "<p>No LaTeX output generated.</p>"
 
     lines = latex_text.splitlines()
-    in_doc = False
     html_parts: list[str] = []
-
+    
+    # Extract Metadata
+    title = ""
+    author = ""
+    abstract = ""
+    
+    for line in lines:
+        l = line.strip()
+        if l.startswith("\\title{") and l.endswith("}"):
+            title = l[7:-1]
+        elif l.startswith("\\author{") and l.endswith("}"):
+            author = l[8:-1]
+            
+    if title:
+        html_parts.append(f"<h1 style='text-align: center;'>{html.escape(title)}</h1>")
+    if author:
+        html_parts.append(f"<p style='text-align: center; color: #64748b;'>{html.escape(author)}</p>")
+    
+    # Process Body
+    in_doc = False
+    in_abstract = False
+    
     for raw_line in lines:
         line = raw_line.strip()
         if not in_doc:
@@ -126,29 +146,44 @@ def _latex_to_doc_html(latex_text: str) -> str:
 
         if line.startswith("\\end{document}"):
             break
+            
+        if line.startswith("\\begin{abstract}"):
+            in_abstract = True
+            html_parts.append("<h2>Abstract</h2>")
+            continue
+        if line.startswith("\\end{abstract}"):
+            in_abstract = False
+            continue
+            
         if not line:
             continue
 
         if line.startswith("\\section{") and line.endswith("}"):
-            title = line[len("\\section{") : -1]
-            html_parts.append(f"<h2>{html.escape(title)}</h2>")
+            title_text = line[len("\\section{") : -1]
+            html_parts.append(f"<h2>{html.escape(title_text)}</h2>")
             continue
 
         if line.startswith("\\subsection{") and line.endswith("}"):
-            title = line[len("\\subsection{") : -1]
-            html_parts.append(f"<h3>{html.escape(title)}</h3>")
+            title_text = line[len("\\subsection{") : -1]
+            html_parts.append(f"<h3>{html.escape(title_text)}</h3>")
             continue
 
-        # Skip template directives and bibliography commands in document preview.
-        if line.startswith("\\bibliographystyle") or line.startswith("\\bibliography"):
-            continue
-        if line.startswith("\\title") or line.startswith("\\author"):
-            continue
-        if line.startswith("\\maketitle"):
-            continue
+        # Skip commands
+        if line.startswith("\\") and not (in_abstract or any(line.startswith(p) for p in ["\\section", "\\subsection"])):
+            if "cite" in line:
+                # Simple regex-like cleanup for citations in preview
+                line = line.replace("\\cite{", "[").replace("}", "]")
+            else:
+                continue
 
         cleaned = html.escape(line)
-        html_parts.append(f"<p>{cleaned}</p>")
+        # Handle some basic LaTeX formatting in HTML
+        cleaned = cleaned.replace("\\_", "_").replace("\\&", "&").replace("\\%", "%")
+        
+        if in_abstract:
+            html_parts.append(f"<p style='font-style: italic;'>{cleaned}</p>")
+        else:
+            html_parts.append(f"<p>{cleaned}</p>")
 
     if not html_parts:
         return "<p>Document preview is not available.</p>"
@@ -429,8 +464,16 @@ def create_app(
 
             run_task = asyncio.create_task(asyncio.to_thread(run_graph_with_stream_hook))
             streamed_latex = False
+            last_heartbeat = asyncio.get_event_loop().time()
 
             while True:
+                current_time = asyncio.get_event_loop().time()
+                
+                # Heartbeat every 15 seconds to keep connection alive
+                if current_time - last_heartbeat > 15:
+                    yield emit("ping", {"time": current_time})
+                    last_heartbeat = current_time
+
                 # Check for errors in the background task
                 if run_task.done():
                     try:

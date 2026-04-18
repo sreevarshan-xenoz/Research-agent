@@ -4,21 +4,28 @@ from pathlib import Path
 from typing import Iterable
 
 
-def _escape_latex(value: str) -> str:
+def escape_latex(value: str) -> str:
+    """Escapes special LaTeX characters in a string."""
+    if not value:
+        return ""
     replacements = {
-        "\\": r"\\textbackslash{}",
-        "&": r"\\&",
-        "%": r"\\%",
-        "$": r"\\$",
-        "#": r"\\#",
-        "_": r"\\_",
-        "{": r"\\{",
-        "}": r"\\}",
-        "~": r"\\textasciitilde{}",
-        "^": r"\\textasciicircum{}",
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
     }
     escaped = value
+    # Handle backslash first to avoid escaping the escape sequences
+    escaped = escaped.replace("\\", replacements["\\"])
     for original, replacement in replacements.items():
+        if original == "\\":
+            continue
         escaped = escaped.replace(original, replacement)
     return escaped
 
@@ -40,9 +47,9 @@ def render_main_tex(
 ) -> str:
     template = _template_path(template_name).read_text(encoding="utf-8")
     rendered = template
-    rendered = rendered.replace("{{ title }}", _escape_latex(title))
-    rendered = rendered.replace("{{ author_block }}", _escape_latex(author_block))
-    rendered = rendered.replace("{{ abstract }}", _escape_latex(abstract))
+    rendered = rendered.replace("{{ title }}", escape_latex(title))
+    rendered = rendered.replace("{{ author_block }}", escape_latex(author_block))
+    rendered = rendered.replace("{{ abstract }}", escape_latex(abstract))
     rendered = rendered.replace("{{ body }}", body)
     return rendered
 
@@ -51,8 +58,8 @@ def build_bibtex(citations: Iterable[dict[str, str]]) -> str:
     blocks: list[str] = []
     for idx, citation in enumerate(citations, start=1):
         key = citation.get("key") or f"ref{idx}"
-        title = _escape_latex(citation.get("title", "Untitled source"))
-        author = _escape_latex(citation.get("author", "Unknown"))
+        title = escape_latex(citation.get("title", "Untitled source"))
+        author = escape_latex(citation.get("author", "Unknown"))
         year = citation.get("year", "2026")
         url = citation.get("url", "")
 
@@ -63,7 +70,9 @@ def build_bibtex(citations: Iterable[dict[str, str]]) -> str:
             f"  year = {{{year}}},",
         ]
         if url:
-            block.append(f"  howpublished = {{\\url{{{_escape_latex(url)}}}}},")
+            # URLs in BibTeX \url should not be escaped by our general escape function
+            # as \url handles special chars itself.
+            block.append(f"  howpublished = {{\\url{{{url}}}}},")
         block.append("}")
         blocks.append("\n".join(block))
 

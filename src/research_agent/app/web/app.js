@@ -18,18 +18,22 @@ const bundleLinkEl = document.getElementById("bundleLink");
 const workbenchStatusEl = document.getElementById("workbenchStatus");
 const discoveryFeedEl = document.getElementById("discoveryFeed");
 
-// Initialize Quill Editor
-const quill = new Quill("#docEditor", {
-  theme: "snow",
-  modules: {
-    toolbar: [
-      [{ header: [1, 2, 3, false] }],
-      ["bold", "italic", "underline", "strike"],
-      [{ list: "ordered" }, { list: "bullet" }],
-      ["clean"],
-    ],
-  },
-});
+// Initialize Quill Editor (if element exists)
+let quill = null;
+if (docEditorEl) {
+  quill = new Quill("#docEditor", {
+    theme: "snow",
+    modules: {
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ["bold", "italic", "underline", "strike"],
+        [{ list: "ordered" }, { list: "bullet" }],
+        [{ 'align': [] }],
+        ["clean"],
+      ],
+    },
+  });
+}
 
 let sessionId = null;
 let loadingMessageNode = null;
@@ -37,13 +41,14 @@ let loadingTickerId = null;
 
 function switchWorkbenchTab(tab) {
   const isDoc = tab === "doc";
-  docTabBtn.classList.toggle("active", isDoc);
-  latexTabBtn.classList.toggle("active", !isDoc);
-  docWorkbenchEl.classList.toggle("active", isDoc);
-  latexWorkbenchEl.classList.toggle("active", !isDoc);
+  if (docTabBtn) docTabBtn.classList.toggle("active", isDoc);
+  if (latexTabBtn) latexTabBtn.classList.toggle("active", !isDoc);
+  if (docWorkbenchEl) docWorkbenchEl.classList.toggle("active", isDoc);
+  if (latexWorkbenchEl) latexWorkbenchEl.classList.toggle("active", !isDoc);
 }
 
 function setWorkbenchStatus(status, label) {
+  if (!workbenchStatusEl) return;
   const normalized = String(status || "idle").toLowerCase();
   workbenchStatusEl.className = "workbench-status";
   if (["running", "generating", "active"].includes(normalized)) {
@@ -59,22 +64,31 @@ function setWorkbenchStatus(status, label) {
 }
 
 function resetWorkbench() {
-  latexStreamEl.textContent = "No generation yet.";
-  latexStreamEl.classList.remove("streaming");
-  quill.setText("Research document will appear here after generation...");
-  discoveryFeedEl.innerHTML = '<p class="small muted">Findings will stream here...</p>';
-  newOverleafLinkEl.href = "https://www.overleaf.com/project/new";
-  bundleLinkEl.href = "#";
-  bundleLinkEl.classList.add("hidden");
+  if (latexStreamEl) {
+    latexStreamEl.textContent = "No generation yet.";
+    latexStreamEl.classList.remove("streaming");
+  }
+  if (quill) {
+    quill.setText("Research document will appear here after generation...");
+  }
+  if (discoveryFeedEl) {
+    discoveryFeedEl.innerHTML = '<p class="small muted">Findings will stream here...</p>';
+  }
+  if (newOverleafLinkEl) newOverleafLinkEl.href = "https://www.overleaf.com/project/new";
+  if (bundleLinkEl) {
+    bundleLinkEl.href = "#";
+    bundleLinkEl.classList.add("hidden");
+  }
   setWorkbenchStatus("idle", "idle");
   switchWorkbenchTab("doc");
 }
 
 function appendLatexChunk(chunk) {
-  if (!chunk) return;
+  if (!chunk || !latexStreamEl) return;
   if (
     latexStreamEl.textContent === "No generation yet." ||
-    latexStreamEl.textContent.startsWith("Preparing")
+    latexStreamEl.textContent.startsWith("Preparing") ||
+    latexStreamEl.textContent.startsWith("Waiting")
   ) {
     latexStreamEl.textContent = "";
   }
@@ -83,28 +97,33 @@ function appendLatexChunk(chunk) {
 }
 
 function renderDocPreview(htmlContent) {
+  if (!quill) return;
   if (!htmlContent || !htmlContent.trim()) {
     quill.setText("Document preview is not available for this run.");
     return;
   }
+  // Use root.innerHTML to inject the formatted HTML from backend
   quill.root.innerHTML = htmlContent;
 }
 
 function applyOverleafUrls(overleafUrls) {
   const projectLink = overleafUrls?.new_project || "https://www.overleaf.com/project/new";
-  newOverleafLinkEl.href = projectLink;
+  if (newOverleafLinkEl) newOverleafLinkEl.href = projectLink;
 
   const bundleLink = overleafUrls?.upload_bundle;
-  if (bundleLink) {
-    bundleLinkEl.href = bundleLink;
-    bundleLinkEl.classList.remove("hidden");
-  } else {
-    bundleLinkEl.href = "#";
-    bundleLinkEl.classList.add("hidden");
+  if (bundleLinkEl) {
+    if (bundleLink) {
+      bundleLinkEl.href = bundleLink;
+      bundleLinkEl.classList.remove("hidden");
+    } else {
+      bundleLinkEl.href = "#";
+      bundleLinkEl.classList.add("hidden");
+    }
   }
 }
 
 function appendMessage(role, text, options = {}) {
+  if (!messagesEl) return;
   const node = document.createElement("article");
   node.className = `message ${role}`;
 
@@ -136,6 +155,9 @@ function appendMessage(role, text, options = {}) {
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.textContent = label;
+        link.className = "btn-link";
+        link.style.marginTop = "8px";
+        link.style.marginRight = "8px";
         links.appendChild(link);
       });
     node.appendChild(links);
@@ -157,7 +179,7 @@ function normalizeStatus(value) {
 }
 
 function appendDiscovery(agent, detail) {
-  if (!detail || detail.includes("Planned") || detail.includes("scored") || detail.includes("Initial")) return;
+  if (!discoveryFeedEl || !detail || detail.includes("Planned") || detail.includes("scored") || detail.includes("Initial")) return;
   
   // Clear initial placeholder
   if (discoveryFeedEl.querySelector(".muted")) {
@@ -180,6 +202,7 @@ function appendDiscovery(agent, detail) {
 }
 
 function renderAgentActivity(entries) {
+  if (!agentPanelEl) return;
   const safeEntries = Array.isArray(entries) ? entries : [];
   if (!safeEntries.length) {
     agentPanelEl.innerHTML = `
@@ -252,27 +275,29 @@ function stopLoadingActivity() {
 }
 
 function startGeneratingUI() {
-  sendBtn.disabled = true;
-  messageInput.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
+  if (messageInput) messageInput.disabled = true;
   loadingMessageNode = appendMessage("assistant", "Orchestrating research flow...", {
     generating: true,
   });
-  latexStreamEl.textContent = "Waiting for agent stream...";
-  latexStreamEl.classList.add("streaming");
+  if (latexStreamEl) {
+    latexStreamEl.textContent = "Waiting for agent stream...";
+    latexStreamEl.classList.add("streaming");
+  }
   setWorkbenchStatus("running", "running");
   switchWorkbenchTab("latex");
   startLoadingActivity();
 }
 
 function stopGeneratingUI() {
-  sendBtn.disabled = false;
-  messageInput.disabled = false;
+  if (sendBtn) sendBtn.disabled = false;
+  if (messageInput) messageInput.disabled = false;
   stopLoadingActivity();
   if (loadingMessageNode && loadingMessageNode.parentElement) {
     loadingMessageNode.parentElement.removeChild(loadingMessageNode);
   }
   loadingMessageNode = null;
-  latexStreamEl.classList.remove("streaming");
+  if (latexStreamEl) latexStreamEl.classList.remove("streaming");
 }
 
 async function ensureSession() {
@@ -281,18 +306,19 @@ async function ensureSession() {
   const response = await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ template: templateSelect.value }),
+    body: JSON.stringify({ template: templateSelect?.value || "ieee" }),
   });
 
   if (!response.ok) throw new Error("Failed to initialize research session.");
 
   const payload = await response.json();
   sessionId = payload.session_id;
-  sessionInfoEl.textContent = `Session: ${sessionId}`;
+  if (sessionInfoEl) sessionInfoEl.textContent = `Session: ${sessionId}`;
   return sessionId;
 }
 
 function renderInsights(payload) {
+  if (!insightBoxEl) return;
   if (payload.kind !== "result") {
     insightBoxEl.textContent = "Clarification active.";
     renderAgentActivity(payload.agent_activity || []);
@@ -332,7 +358,7 @@ async function sendMessageStream(text, onEvent) {
       body: JSON.stringify({
         session_id: sid,
         message: text,
-        template: templateSelect.value,
+        template: templateSelect?.value || "ieee",
       }),
     });
   } catch (err) {
@@ -379,18 +405,19 @@ async function sendMessageStream(text, onEvent) {
 
   if (pending.trim()) {
     try {
-      onEvent(JSON.parse(pending.trim()));
+      const event = JSON.parse(pending.trim());
+      onEvent(event);
     } catch (e) {}
   }
 }
 
-chatForm.addEventListener("submit", async (event) => {
+chatForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const text = messageInput.value.trim();
+  const text = messageInput?.value.trim();
   if (!text) return;
 
   appendMessage("user", text);
-  messageInput.value = "";
+  if (messageInput) messageInput.value = "";
   startGeneratingUI();
 
   try {
@@ -426,7 +453,7 @@ chatForm.addEventListener("submit", async (event) => {
     if (payload.kind === "clarification") {
       const questionText = [payload.assistant_message, "", ...(payload.questions || []).map((q, i) => `${i + 1}. ${q}`)].join("\n");
       appendMessage("assistant", questionText);
-      messageInput.placeholder = "Please clarify details above...";
+      if (messageInput) messageInput.placeholder = "Please clarify details above...";
       renderAgentActivity(payload.agent_activity || []);
       setWorkbenchStatus("waiting", "clarification");
     } else {
@@ -440,14 +467,20 @@ chatForm.addEventListener("submit", async (event) => {
           "overleaf bundle": payload.overleaf_urls?.upload_bundle,
         },
       });
-      messageInput.placeholder = "Enter a new topic...";
-      if (payload.latex_text) {
+      if (messageInput) messageInput.placeholder = "Enter a new topic...";
+      if (payload.latex_text && latexStreamEl) {
         latexStreamEl.textContent = payload.latex_text;
       }
       renderDocPreview(payload.doc_preview_html || "");
       applyOverleafUrls(payload.overleaf_urls || {});
-      setWorkbenchStatus("ready", "ready");
-      switchWorkbenchTab("doc");
+      
+      // FINISH RUN UI
+      setWorkbenchStatus("ready", "success");
+      switchWorkbenchTab("doc"); // AUTO SWITCH TO DOC VIEW
+      
+      // Optional: show a small toast or pulse the tab
+      docTabBtn.classList.add("pulse");
+      setTimeout(() => docTabBtn.classList.remove("pulse"), 2000);
     }
 
     renderInsights(payload);
@@ -459,18 +492,18 @@ chatForm.addEventListener("submit", async (event) => {
   }
 });
 
-newSessionBtn.addEventListener("click", () => {
+newSessionBtn?.addEventListener("click", () => {
   sessionId = null;
-  sessionInfoEl.textContent = "Session: not initialized";
-  insightBoxEl.textContent = "No run yet.";
+  if (sessionInfoEl) sessionInfoEl.textContent = "Session: not initialized";
+  if (insightBoxEl) insightBoxEl.textContent = "No run yet.";
   stopLoadingActivity();
   renderAgentActivity([]);
   resetWorkbench();
   appendMessage("assistant", "Session reset. Ready for new topic.");
 });
 
-latexTabBtn.addEventListener("click", () => switchWorkbenchTab("latex"));
-docTabBtn.addEventListener("click", () => switchWorkbenchTab("doc"));
+latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));
+docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
 
 appendMessage("assistant", "Welcome. I am your Research Agent. Enter a topic to start.");
 renderAgentActivity([]);

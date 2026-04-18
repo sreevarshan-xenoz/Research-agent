@@ -1,0 +1,29 @@
+{
+  "run_id": "run-e55763e8",
+  "topic": "agentic ai\n\nClarification context:\nQ: What exact scope should this research focus on?\nA: 1. general agentic ai \n2. publication depth\n3. methods",
+  "template": "ieee",
+  "phase": "latex_composed",
+  "stop_reason": "worker_execution_complete",
+  "critic_notes": [
+    "Low evidence confidence for t1",
+    "Low evidence confidence for t2",
+    "Low evidence confidence for t3",
+    "Low evidence confidence for t4",
+    "Low evidence confidence for t5",
+    "Low evidence confidence for f1",
+    "Low evidence confidence for f2",
+    "Low evidence confidence for f3",
+    "Low evidence confidence for f2"
+  ],
+  "section_confidence": {
+    "t1": 0.1,
+    "t2": 0.1,
+    "t3": 0.1,
+    "t4": 0.1,
+    "t5": 0.1,
+    "f1": 0.1,
+    "f2": 0.1,
+    "f3": 0.1
+  },
+  "warning_count": 30
+}

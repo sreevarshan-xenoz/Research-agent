@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from research_agent.observability import publish_progress
+from research_agent.observability.progress import ProgressCallback, get_progress_callback
 from research_agent.orchestration.state import GraphState
 from research_agent.tools.base import BaseToolAdapter
 from research_agent.tools.registry import run_multi_source_search
@@ -24,8 +25,32 @@ def get_pending_task_ids(tasks: list[dict[str, object]]) -> list[str]:
     return [str(task["task_id"]) for task in tasks if str(task["status"]) == "pending"]
 
 
-import os
 from concurrent.futures import ThreadPoolExecutor
+
+
+def _emit_progress(
+    callback: ProgressCallback | None,
+    *,
+    agent: str,
+    status: str,
+    detail: str,
+    message: str,
+) -> None:
+    if callback is not None:
+        try:
+            callback(
+                {
+                    "agent": agent,
+                    "status": status,
+                    "detail": detail,
+                    "message": message,
+                }
+            )
+            return
+        except Exception:
+            pass
+
+    publish_progress(agent=agent, status=status, detail=detail, message=message)
 
 
 def make_worker_node(registry: dict[str, BaseToolAdapter]):
@@ -40,11 +65,13 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
 
         findings = dict(state["task_findings"])
         run_warnings = list(state["run_warnings"])
+        progress_handler = get_progress_callback()
 
         def execute_single_task(task: dict[str, object]) -> tuple[str, dict[str, object], list[str]]:
             task_id = str(task["task_id"])
             task["status"] = "running"
-            publish_progress(
+            _emit_progress(
+                progress_handler,
                 agent=f"SubResearch {task_id}",
                 status="running",
                 detail=str(task["title"]),
@@ -69,7 +96,8 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
                     task_warnings.append(f"{provider}:{warning}")
             
             task["status"] = "complete"
-            publish_progress(
+            _emit_progress(
+                progress_handler,
                 agent=f"SubResearch {task_id}",
                 status="complete",
                 detail=f"{task['title']} ({sum(len(result.items) for result in result_map.values())} items)",
