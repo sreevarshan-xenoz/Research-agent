@@ -177,3 +177,43 @@ def test_webapp_stream_reports_real_subagent_progress(monkeypatch) -> None:  # n
     assert "SubResearch t1" in flattened_agents
     assert "SubResearch t4" in flattened_agents
     assert any(event["event"] == "result" for event in events)
+
+
+def test_webapp_resume_returns_last_checkpoint(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("CHECKPOINT_ROOT", str(tmp_path / "checkpoints"))
+    monkeypatch.setenv("RUN_EVENT_ROOT", str(tmp_path / "events"))
+
+    app = create_app(graph_runner=FakeRunner(), registry={})
+    client = TestClient(app)
+
+    session_response = client.post("/api/session", json={"template": "ieee"})
+    assert session_response.status_code == 200
+    session_id = session_response.json()["session_id"]
+
+    first_chat = client.post(
+        "/api/chat",
+        json={
+            "session_id": session_id,
+            "message": "AI",
+            "template": "ieee",
+        },
+    )
+    assert first_chat.status_code == 200
+    assert first_chat.json()["kind"] == "clarification"
+
+    second_chat = client.post(
+        "/api/chat",
+        json={
+            "session_id": session_id,
+            "message": "Focus on CI pipeline code review agents.",
+            "template": "ieee",
+        },
+    )
+    assert second_chat.status_code == 200
+    assert second_chat.json()["kind"] == "result"
+
+    resume = client.post(f"/api/session/{session_id}/resume")
+    assert resume.status_code == 200
+    payload = resume.json()
+    assert payload["kind"] == "result"
+    assert payload["run_id"] == second_chat.json()["run_id"]

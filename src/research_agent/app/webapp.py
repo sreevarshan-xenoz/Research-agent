@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from research_agent.config import load_settings
 from research_agent.models import nvidia_stream_callback
-from research_agent.observability import progress_callback
+from research_agent.observability import append_run_event, load_latest_checkpoint, progress_callback, save_checkpoint
 from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
 from research_agent.tools import build_tool_registry
@@ -92,6 +92,15 @@ class ChatSession:
 class StopResponse(BaseModel):
     ok: bool
     detail: str
+
+
+def _build_artifact_urls(run_id: str) -> dict[str, str]:
+    return {
+        "main_tex": f"/artifacts/{run_id}/main.tex",
+        "references_bib": f"/artifacts/{run_id}/references.bib",
+        "compile_instructions": f"/artifacts/{run_id}/compile_instructions.md",
+        "summary": f"/artifacts/{run_id}/summary.json",
+    }
 
 
 def _compose_refined_topic(topic: str, questions: list[str], answers: list[str]) -> str:
@@ -305,6 +314,7 @@ def create_app(
 
     sessions: dict[str, ChatSession] = {}
     session_active_runs: dict[str, str] = {}
+    session_last_run: dict[str, str] = {}
     run_interrupt_signals: dict[str, threading.Event] = {}
 
     app = FastAPI(title="Research Agent Web")
@@ -360,6 +370,7 @@ def create_app(
         interrupt_signal = threading.Event()
         run_interrupt_signals[run_id] = interrupt_signal
         session_active_runs[request.session_id] = run_id
+        session_last_run[request.session_id] = run_id
 
         runtime_cap = request.max_runtime_minutes or settings.runtime.max_runtime_minutes
         cost_cap = request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd
@@ -384,12 +395,15 @@ def create_app(
             interrupt_signal=interrupt_signal,
             artifact_root=str(ARTIFACT_DIR),
         )
+        save_checkpoint(state, label="start")
         try:
             updated = graph_runner(state, registry=tool_registry)
         finally:
             run_interrupt_signals.pop(run_id, None)
             if session_active_runs.get(request.session_id) == run_id:
                 session_active_runs.pop(request.session_id, None)
+
+        save_checkpoint(updated, label=updated.phase)
 
         if updated.phase == "awaiting_user_clarification":
             session.awaiting_clarification = True
@@ -406,12 +420,7 @@ def create_app(
         session.pending_questions = []
         session.clarification_answers = []
 
-        artifact_urls = {
-            "main_tex": f"/artifacts/{updated.run_id}/main.tex",
-            "references_bib": f"/artifacts/{updated.run_id}/references.bib",
-            "compile_instructions": f"/artifacts/{updated.run_id}/compile_instructions.md",
-            "summary": f"/artifacts/{updated.run_id}/summary.json",
-        }
+        artifact_urls = _build_artifact_urls(updated.run_id)
 
         overleaf_urls = _build_overleaf_urls(updated)
 
@@ -463,6 +472,7 @@ def create_app(
         interrupt_signal = threading.Event()
         run_interrupt_signals[run_id] = interrupt_signal
         session_active_runs[request.session_id] = run_id
+        session_last_run[request.session_id] = run_id
 
         runtime_cap = request.max_runtime_minutes or settings.runtime.max_runtime_minutes
         cost_cap = request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd
@@ -487,10 +497,12 @@ def create_app(
             interrupt_signal=interrupt_signal,
             artifact_root=str(ARTIFACT_DIR),
         )
+        save_checkpoint(state, label="start")
 
         async def event_generator():
             def emit(event: str, payload: dict) -> str:
                 envelope = {"event": event, "payload": payload}
+                append_run_event(run_id=run_id, event=event, payload=payload)
                 try:
                     return json.dumps(jsonable_encoder(envelope), ensure_ascii=True) + "\n"
                 except Exception:
@@ -598,6 +610,7 @@ def create_app(
                 await asyncio.sleep(0.01)
 
             updated = await run_task
+            save_checkpoint(updated, label=updated.phase)
 
             if updated.phase == "awaiting_user_clarification":
                 session.awaiting_clarification = True
@@ -634,12 +647,7 @@ def create_app(
                     yield emit("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
                     await asyncio.sleep(0.01)
 
-            artifact_urls = {
-                "main_tex": f"/artifacts/{updated.run_id}/main.tex",
-                "references_bib": f"/artifacts/{updated.run_id}/references.bib",
-                "compile_instructions": f"/artifacts/{updated.run_id}/compile_instructions.md",
-                "summary": f"/artifacts/{updated.run_id}/summary.json",
-            }
+            artifact_urls = _build_artifact_urls(updated.run_id)
 
             result = ChatResponse(
                 kind="result",
@@ -678,6 +686,50 @@ def create_app(
 
         signal.set()
         return StopResponse(ok=True, detail=f"Stop requested for {run_id}")
+
+    @app.post("/api/session/{session_id}/resume", response_model=ChatResponse)
+    def resume_session_run(session_id: str) -> ChatResponse:
+        session = sessions.get(session_id)
+        if session is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        run_id = session_last_run.get(session_id)
+        if not run_id:
+            raise HTTPException(status_code=404, detail="No run available for resume")
+
+        restored = load_latest_checkpoint(run_id)
+        if restored is None:
+            raise HTTPException(status_code=404, detail="Checkpoint not found")
+
+        if restored.phase == "awaiting_user_clarification":
+            session.awaiting_clarification = True
+            session.pending_questions = list(restored.clarification_questions)
+            return ChatResponse(
+                kind="clarification",
+                assistant_message="I need a few details before I run deep research.",
+                run_id=restored.run_id,
+                questions=session.pending_questions,
+                agent_activity=_build_agent_activity(restored),
+            )
+
+        artifact_urls = _build_artifact_urls(restored.run_id)
+        return ChatResponse(
+            kind="result",
+            assistant_message=_build_result_message(restored),
+            run_id=restored.run_id,
+            critic_notes=restored.critic_notes,
+            warnings=restored.run_warnings,
+            section_confidence=restored.section_confidence,
+            task_statuses=[
+                TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
+                for task in restored.tasks
+            ],
+            artifact_urls=artifact_urls,
+            agent_activity=_build_agent_activity(restored),
+            latex_text=restored.latex_main,
+            doc_preview_html=_latex_to_doc_html(restored.latex_main),
+            overleaf_urls=_build_overleaf_urls(restored),
+        )
 
     return app
 
