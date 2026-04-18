@@ -8,14 +8,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
+  <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 </head>
 <body>
   <div class="bg-orb orb-a"></div>
   <div class="bg-orb orb-b"></div>
   <div class="app-shell">
+    <!-- LEFT SIDEBAR: CONFIG & AGENTS -->
     <aside class="sidebar">
       <h1>Research Agent</h1>
-      <p class="tagline">Autonomous multi-agent research with LaTeX output.</p>
+      <p class="tagline">Autonomous multi-agent research.</p>
 
       <div class="panel">
         <label for="templateSelect">Template</label>
@@ -25,18 +27,11 @@
         </select>
       </div>
 
-      <div class="panel">
-        <button id="newSessionBtn" class="secondary">New Session</button>
-        <div id="sessionInfo" class="mono small">Session: not initialized</div>
-      </div>
-
       <div class="panel status-panel">
-        <h2>Run Insights</h2>
-        <div id="insightBox" class="small">No run yet.</div>
-      </div>
-
-      <div class="panel status-panel">
-        <h2>Agent Activity</h2>
+        <header class="panel-header">
+          <h2>Agent Activity</h2>
+          <span id="workbenchStatus" class="workbench-status idle">idle</span>
+        </header>
         <div id="agentPanel" class="agent-panel">
           <div class="agent-row idle">
             <span class="agent-name">No active run</span>
@@ -44,25 +39,68 @@
           </div>
         </div>
       </div>
+
+      <div class="panel status-panel">
+        <header class="panel-header">
+          <h2>Discovery Feed</h2>
+          <span class="badge small">Live</span>
+        </header>
+        <div id="discoveryFeed" class="discovery-feed">
+          <p class="small muted">Findings will stream here...</p>
+        </div>
+      </div>
+
+      <div class="panel status-panel">
+      
+      <div class="panel">
+        <button id="newSessionBtn" class="secondary">New Session</button>
+        <div id="sessionInfo" class="mono small">Session: not initialized</div>
+      </div>
     </aside>
 
-    <main class="chat-area">
+    <!-- CENTER: WORKBENCH (EDITOR & LATEX) -->
+    <main class="workbench">
+      <header class="workbench-tabs">
+        <button id="docTabBtn" class="tab-btn active" type="button">Document Editor</button>
+        <button id="latexTabBtn" class="tab-btn" type="button">LaTeX Source</button>
+      </header>
+
+      <section id="docWorkbench" class="panel doc-panel active">
+        <div id="editorToolbar"></div>
+        <div id="docEditor" class="doc-editor"></div>
+        <div class="overleaf-actions">
+          <a id="newOverleafLink" href="https://www.overleaf.com/project/new" target="_blank" rel="noopener noreferrer">Open Overleaf Project</a>
+          <a id="bundleLink" href="#" target="_blank" rel="noopener noreferrer" class="hidden">Download Overleaf Bundle</a>
+        </div>
+      </section>
+
+      <section id="latexWorkbench" class="panel latex-panel" aria-live="polite">
+        <div class="panel-head">
+          <span>Live generation stream</span>
+        </div>
+        <pre id="latexStream" class="latex-stream">No generation yet.</pre>
+      </section>
+    </main>
+
+    <!-- RIGHT: CHAT INTERFACE -->
+    <aside class="chat-area">
       <header class="chat-header">
         <span class="badge">v1</span>
-        <span class="header-title">LLM-style Research Workspace</span>
+        <span class="header-title">Research Chat</span>
       </header>
 
       <section id="messages" class="messages"></section>
 
       <form id="chatForm" class="composer">
-        <textarea id="messageInput" rows="3" placeholder="Enter a research topic or answer clarification questions..."></textarea>
+        <textarea id="messageInput" rows="3" placeholder="Enter a research topic..."></textarea>
         <div class="composer-actions">
           <button id="sendBtn" type="submit">Send</button>
         </div>
       </form>
-    </main>
+    </aside>
   </div>
 
+  <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

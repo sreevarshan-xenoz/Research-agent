@@ -34,7 +34,7 @@ class OutputSettings(BaseModel):
 
 
 class RetrievalSettings(BaseModel):
-    web_provider: str = "tavily"
+    web_provider: str = "scrape"
     paper_providers: list[str] = Field(default_factory=lambda: ["arxiv", "semantic_scholar"])
     allow_metadata_fallback: bool = True
     metadata_fallback_confidence_penalty: float = Field(default=0.15, ge=0, le=1)
@@ -44,6 +44,14 @@ class RetrievalSettings(BaseModel):
     def validate_paper_providers(cls, value: list[str]) -> list[str]:
         if not value:
             raise ValueError("paper_providers cannot be empty")
+        return value
+
+    @field_validator("web_provider")
+    @classmethod
+    def validate_web_provider(cls, value: str) -> str:
+        supported = {"tavily", "browser_use", "hybrid", "scrape"}
+        if value not in supported:
+            raise ValueError(f"web_provider must be one of: {sorted(supported)}")
         return value
 
 
