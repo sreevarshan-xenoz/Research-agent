@@ -13,6 +13,7 @@ from research_agent.orchestration.nodes import (
     exporter_node,
     get_pending_task_ids,
     get_ready_task_ids,
+    indexing_node,
     intake_node,
     make_worker_node,
     planner_node,
@@ -40,6 +41,15 @@ def _route_after_worker(state: GraphState) -> str:
     return "blocked"
 
 
+def _route_after_critic(state: GraphState) -> str:
+    # If confidence is low and we haven't hit max iterations, loop back
+    low_confidence = any(score < 0.35 for score in state["section_confidence"].values())
+    
+    if low_confidence and state["iteration_index"] < state["max_iterations"]:
+        return "loop"
+    return "combiner"
+
+
 def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     tool_registry = {} if registry is None else registry
     graph = StateGraph(GraphState)
@@ -50,6 +60,7 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_node("worker_executor", make_worker_node(tool_registry))
     graph.add_node("workers_complete", workers_complete_node)
     graph.add_node("workers_blocked", dependency_blocked_node)
+    graph.add_node("indexing", indexing_node)
     graph.add_node("critic", critic_node)
     graph.add_node("combiner", combiner_node)
     graph.add_node("citation_verifier", citation_verifier_node)
@@ -77,9 +88,20 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
             "blocked": "workers_blocked",
         },
     )
-    graph.add_edge("workers_complete", "critic")
-    graph.add_edge("workers_blocked", "critic")
-    graph.add_edge("critic", "combiner")
+    graph.add_edge("workers_complete", "indexing")
+    graph.add_edge("workers_blocked", "indexing")
+    graph.add_edge("indexing", "critic")
+
+    
+    graph.add_conditional_edges(
+        "critic",
+        _route_after_critic,
+        {
+            "loop": "worker_executor",
+            "combiner": "combiner",
+        },
+    )
+    
     graph.add_edge("combiner", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
     graph.add_edge("composer", "exporter")

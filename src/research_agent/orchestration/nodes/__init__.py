@@ -8,6 +8,7 @@ from research_agent.orchestration.nodes.dependency import (
 	workers_complete_node,
 )
 from research_agent.orchestration.nodes.exporter import exporter_node
+from research_agent.orchestration.nodes.indexing import indexing_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
 from research_agent.orchestration.nodes.worker import (
@@ -26,6 +27,7 @@ __all__ = [
 	"get_pending_task_ids",
 	"workers_complete_node",
 	"dependency_blocked_node",
+	"indexing_node",
 	"critic_node",
 	"combiner_node",
 	"citation_verifier_node",
