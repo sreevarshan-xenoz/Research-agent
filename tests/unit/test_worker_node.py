@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from research_agent.observability import progress_callback
 from research_agent.orchestration.graph import run_graph
-from research_agent.orchestration.state import WorkflowState
+from research_agent.orchestration.nodes.worker import make_worker_node
+from research_agent.orchestration.state import GraphState, WorkflowState
 from research_agent.tools.base import BaseToolAdapter, ToolResult
 
 
@@ -48,3 +50,64 @@ def test_worker_executes_ready_tasks_and_stores_findings(
     assert "t4" in updated.task_findings
     assert updated.artifact_dir
     assert (Path(updated.artifact_dir) / "summary.json").exists()
+
+
+def test_worker_node_emits_real_task_progress() -> None:
+    state: GraphState = {
+        "run_id": "worker-progress",
+        "topic": "Agent evaluation",
+        "template": "ieee",
+        "phase": "planned",
+        "iteration_index": 0,
+        "stop_reason": None,
+        "tasks": [
+        {
+            "task_id": "t1",
+            "title": "Background",
+            "objective": "Collect background",
+            "depends_on": [],
+            "status": "pending",
+        },
+        {
+            "task_id": "t2",
+            "title": "Analysis",
+            "objective": "Analyze methods",
+            "depends_on": ["t1"],
+            "status": "pending",
+        },
+        ],
+        "section_confidence": {},
+        "clarification_questions": [],
+        "needs_clarification": False,
+        "task_findings": {},
+        "critic_notes": [],
+        "combined_sections": [],
+        "citations": [],
+        "latex_main": "",
+        "bibtex": "",
+        "artifact_root": "artifacts",
+        "artifact_dir": "",
+        "run_warnings": [],
+    }
+    events: list[dict[str, str]] = []
+    worker = make_worker_node({"fake": FakeAdapter()})
+
+    with progress_callback(events.append):
+        result = worker(state)
+
+    assert result["tasks"][0]["status"] == "complete"
+    assert result["tasks"][1]["status"] == "pending"
+    assert events == [
+        {
+            "agent": "SubResearch t1",
+            "status": "running",
+            "detail": "Background",
+            "message": "Running t1",
+        },
+        {
+            "agent": "SubResearch t1",
+            "status": "complete",
+            "detail": "Background (2 items)",
+            "message": "Completed t1",
+        },
+    ]
