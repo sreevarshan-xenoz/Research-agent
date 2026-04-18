@@ -5,8 +5,8 @@ runtime:
   max_cost_usd: 5.0
 
 models:
-  worker_model: openrouter/meta-llama/llama-3.1-8b-instruct
-  strong_model: qwen/qwen3-coder-480b-a35b-instruct
+  worker_model: local/fallback-worker
+  strong_model: local/fallback-strong
 
 output:
   default_template: ieee
@@ -15,7 +15,7 @@ output:
     - acm
 
 retrieval:
-  web_provider: tavily
+  web_provider: scrape
   paper_providers:
     - arxiv
     - semantic_scholar
