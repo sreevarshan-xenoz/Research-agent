@@ -15,6 +15,8 @@ def critic_node(state: GraphState) -> dict:
     )
     section_confidence: dict[str, float] = {}
     notes: list[str] = []
+    settings = load_settings()
+    metadata_penalty = float(settings.retrieval.metadata_fallback_confidence_penalty)
     tasks = [dict(t) for t in state["tasks"]]
     iteration_index = state["iteration_index"] + 1
 
@@ -27,16 +29,29 @@ def critic_node(state: GraphState) -> dict:
         warning_count = sum(
             int(provider_data.get("warning_count", 0)) for provider_data in findings.values()
         )
+        metadata_only_count = sum(
+            int(provider_data.get("metadata_only_count", 0)) for provider_data in findings.values()
+        )
 
         if item_count == 0:
             confidence = 0.1
         else:
-            confidence = max(0.0, min(1.0, (item_count / 8.0) - (warning_count * 0.04)))
+            confidence = max(
+                0.0,
+                min(
+                    1.0,
+                    (item_count / 8.0)
+                    - (warning_count * 0.04)
+                    - (metadata_only_count * metadata_penalty),
+                ),
+            )
 
         section_confidence[task_id] = round(confidence, 3)
         if confidence < 0.35:
             notes.append(f"Low evidence confidence for {task_id}")
             low_confidence_tasks.append(task)
+        if metadata_only_count > 0:
+            notes.append(f"Metadata fallback penalty applied for {task_id} ({metadata_only_count} items)")
 
     if not notes:
         notes.append("Evidence confidence is acceptable for initial v1 synthesis")
@@ -49,7 +64,6 @@ def critic_node(state: GraphState) -> dict:
             detail="Generating follow-up tasks",
             message="Planning iteration loop",
         )
-        settings = load_settings()
         model_name = os.getenv("NVIDIA_MODEL") or settings.models.strong_model
         
         low_conf_str = "\n".join([f"- {t['title']}: {t['objective']}" for t in low_confidence_tasks])

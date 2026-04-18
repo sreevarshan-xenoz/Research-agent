@@ -23,6 +23,7 @@ def test_arxiv_adapter_parses_atom_feed() -> None:
     <id>http://arxiv.org/abs/1234.5678</id>
     <title>Test Paper</title>
     <summary>Paper abstract text.</summary>
+        <link rel="related" href="http://arxiv.org/pdf/1234.5678.pdf" />
     <published>2026-01-01T00:00:00Z</published>
   </entry>
 </feed>
@@ -37,6 +38,7 @@ def test_arxiv_adapter_parses_atom_feed() -> None:
 
     assert len(result.items) == 1
     assert result.items[0]["title"] == "Test Paper"
+    assert result.items[0]["pdf_url"] == "http://arxiv.org/pdf/1234.5678.pdf"
     assert result.items[0]["source_type"] == "paper"
 
 

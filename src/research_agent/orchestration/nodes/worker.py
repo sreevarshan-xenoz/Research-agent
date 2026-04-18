@@ -86,6 +86,12 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
             task_finding = {
                 provider: {
                     "item_count": len(result.items),
+                    "metadata_only_count": sum(
+                        1
+                        for item in result.items
+                        if isinstance(item, dict)
+                        and not str(item.get("snippet") or item.get("content") or "").strip()
+                    ),
                     "warning_count": len(result.warnings),
                     "warnings": result.warnings,
                     "items": result.items,
