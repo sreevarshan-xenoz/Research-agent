@@ -104,6 +104,15 @@ select {
   cursor: pointer;
 }
 
+input[type="number"] {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 0.875rem;
+}
+
 button {
   width: 100%;
   padding: 10px 16px;

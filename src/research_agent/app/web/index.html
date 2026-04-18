@@ -25,6 +25,28 @@
         </select>
       </div>
 
+      <div class="panel">
+        <label for="depthSelect">Depth</label>
+        <select id="depthSelect">
+          <option value="quick">Quick</option>
+          <option value="balanced" selected>Balanced</option>
+          <option value="deep">Deep</option>
+        </select>
+
+        <label for="autonomySelect" style="margin-top: 10px; display: block;">Autonomy</label>
+        <select id="autonomySelect">
+          <option value="guided">Guided</option>
+          <option value="hybrid" selected>Hybrid</option>
+          <option value="autonomous">Autonomous</option>
+        </select>
+
+        <label for="runtimeCapInput" style="margin-top: 10px; display: block;">Runtime cap (min)</label>
+        <input id="runtimeCapInput" type="number" min="1" step="1" value="25" />
+
+        <label for="costCapInput" style="margin-top: 10px; display: block;">Cost cap (USD)</label>
+        <input id="costCapInput" type="number" min="0" step="0.1" value="5.0" />
+      </div>
+
       <div class="panel status-panel">
         <header class="panel-header">
           <h2>Agent Activity</h2>
@@ -57,6 +79,7 @@
 
       <div class="panel">
         <button id="newSessionBtn" class="secondary">New Session</button>
+        <button id="stopRunBtn" class="secondary" style="margin-top: 8px;">Stop Run</button>
         <div id="sessionInfo" class="mono small" style="margin-top: 8px;">Session: not initialized</div>
       </div>
     </aside>

@@ -2,9 +2,14 @@ const messagesEl = document.getElementById("messages");
 const chatForm = document.getElementById("chatForm");
 const messageInput = document.getElementById("messageInput");
 const templateSelect = document.getElementById("templateSelect");
+const depthSelect = document.getElementById("depthSelect");
+const autonomySelect = document.getElementById("autonomySelect");
+const runtimeCapInput = document.getElementById("runtimeCapInput");
+const costCapInput = document.getElementById("costCapInput");
 const sessionInfoEl = document.getElementById("sessionInfo");
 const insightBoxEl = document.getElementById("insightBox");
 const newSessionBtn = document.getElementById("newSessionBtn");
+const stopRunBtn = document.getElementById("stopRunBtn");
 const sendBtn = document.getElementById("sendBtn");
 const agentPanelEl = document.getElementById("agentPanel");
 const latexTabBtn = document.getElementById("latexTabBtn");
@@ -350,6 +355,8 @@ function renderInsights(payload) {
 
 async function sendMessageStream(text, onEvent) {
   const sid = await ensureSession();
+  const runtimeCap = Number.parseInt(runtimeCapInput?.value || "25", 10);
+  const costCap = Number.parseFloat(costCapInput?.value || "5.0");
   let response;
   try {
     response = await fetch("/api/chat/stream", {
@@ -359,6 +366,10 @@ async function sendMessageStream(text, onEvent) {
         session_id: sid,
         message: text,
         template: templateSelect?.value || "ieee",
+        depth: depthSelect?.value || "balanced",
+        autonomy_mode: autonomySelect?.value || "hybrid",
+        max_runtime_minutes: Number.isFinite(runtimeCap) ? Math.max(1, runtimeCap) : 25,
+        max_cost_usd: Number.isFinite(costCap) ? Math.max(0, costCap) : 5.0,
       }),
     });
   } catch (err) {
@@ -500,6 +511,29 @@ newSessionBtn?.addEventListener("click", () => {
   renderAgentActivity([]);
   resetWorkbench();
   appendMessage("assistant", "Session reset. Ready for new topic.");
+});
+
+stopRunBtn?.addEventListener("click", async () => {
+  if (!sessionId) {
+    appendMessage("assistant", "No active session to stop.");
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/session/${sessionId}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const payload = await response.json();
+    if (response.ok && payload?.ok) {
+      appendMessage("assistant", "Stop request sent. Wrapping up current run...");
+      setWorkbenchStatus("waiting", "stopping");
+    } else {
+      appendMessage("assistant", `Stop request failed: ${payload?.detail || "unknown error"}`);
+    }
+  } catch (error) {
+    appendMessage("assistant", `Stop request failed: ${error.message}`);
+  }
 });
 
 latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));

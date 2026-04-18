@@ -6,6 +6,8 @@ import html
 import json
 import os
 from pathlib import Path
+import threading
+import time
 import uuid
 import zipfile
 
@@ -43,6 +45,10 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str = Field(min_length=1)
     template: str | None = None
+    depth: str | None = None
+    autonomy_mode: str | None = None
+    max_runtime_minutes: int | None = None
+    max_cost_usd: float | None = None
 
 
 class TaskStatus(BaseModel):
@@ -81,6 +87,11 @@ class ChatSession:
     awaiting_clarification: bool = False
     pending_questions: list[str] = field(default_factory=list)
     clarification_answers: list[str] = field(default_factory=list)
+
+
+class StopResponse(BaseModel):
+    ok: bool
+    detail: str
 
 
 def _compose_refined_topic(topic: str, questions: list[str], answers: list[str]) -> str:
@@ -293,6 +304,8 @@ def create_app(
     tool_registry = build_tool_registry(settings) if registry is None else registry
 
     sessions: dict[str, ChatSession] = {}
+    session_active_runs: dict[str, str] = {}
+    run_interrupt_signals: dict[str, threading.Event] = {}
 
     app = FastAPI(title="Research Agent Web")
 
@@ -343,13 +356,40 @@ def create_app(
             session.clarification_answers = []
             topic = message
 
+        run_id = f"run-{uuid.uuid4().hex[:8]}"
+        interrupt_signal = threading.Event()
+        run_interrupt_signals[run_id] = interrupt_signal
+        session_active_runs[request.session_id] = run_id
+
+        runtime_cap = request.max_runtime_minutes or settings.runtime.max_runtime_minutes
+        cost_cap = request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd
+        depth = (request.depth or "balanced").strip().lower()
+        autonomy_mode = (request.autonomy_mode or "hybrid").strip().lower()
+        max_iterations = max(1, min(settings.runtime.max_iterations, 3))
+        if depth == "quick":
+            max_iterations = max(1, min(max_iterations, 2))
+        elif depth == "deep":
+            max_iterations = min(5, max_iterations + 1)
+
         state = WorkflowState(
-            run_id=f"run-{uuid.uuid4().hex[:8]}",
+            run_id=run_id,
             topic=topic,
             template=template,
+            depth=depth,
+            autonomy_mode=autonomy_mode,
+            max_runtime_minutes=max(1, int(runtime_cap)),
+            max_cost_usd=max(0.0, float(cost_cap)),
+            max_iterations=max_iterations,
+            started_at=time.time(),
+            interrupt_signal=interrupt_signal,
             artifact_root=str(ARTIFACT_DIR),
         )
-        updated = graph_runner(state, registry=tool_registry)
+        try:
+            updated = graph_runner(state, registry=tool_registry)
+        finally:
+            run_interrupt_signals.pop(run_id, None)
+            if session_active_runs.get(request.session_id) == run_id:
+                session_active_runs.pop(request.session_id, None)
 
         if updated.phase == "awaiting_user_clarification":
             session.awaiting_clarification = True
@@ -419,10 +459,32 @@ def create_app(
             session.clarification_answers = []
             topic = message
 
+        run_id = f"run-{uuid.uuid4().hex[:8]}"
+        interrupt_signal = threading.Event()
+        run_interrupt_signals[run_id] = interrupt_signal
+        session_active_runs[request.session_id] = run_id
+
+        runtime_cap = request.max_runtime_minutes or settings.runtime.max_runtime_minutes
+        cost_cap = request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd
+        depth = (request.depth or "balanced").strip().lower()
+        autonomy_mode = (request.autonomy_mode or "hybrid").strip().lower()
+        max_iterations = max(1, min(settings.runtime.max_iterations, 3))
+        if depth == "quick":
+            max_iterations = max(1, min(max_iterations, 2))
+        elif depth == "deep":
+            max_iterations = min(5, max_iterations + 1)
+
         state = WorkflowState(
-            run_id=f"run-{uuid.uuid4().hex[:8]}",
+            run_id=run_id,
             topic=topic,
             template=template,
+            depth=depth,
+            autonomy_mode=autonomy_mode,
+            max_runtime_minutes=max(1, int(runtime_cap)),
+            max_cost_usd=max(0.0, float(cost_cap)),
+            max_iterations=max_iterations,
+            started_at=time.time(),
+            interrupt_signal=interrupt_signal,
             artifact_root=str(ARTIFACT_DIR),
         )
 
@@ -481,6 +543,9 @@ def create_app(
                         run_task.result()
                     except Exception as e:
                         yield emit("error", {"message": str(e)})
+                        run_interrupt_signals.pop(run_id, None)
+                        if session_active_runs.get(request.session_id) == run_id:
+                            session_active_runs.pop(request.session_id, None)
                         return
 
                 if run_task.done() and latex_queue.empty() and progress_queue.empty():
@@ -545,6 +610,9 @@ def create_app(
                     agent_activity=_build_agent_activity(updated),
                 )
                 yield emit("clarification", clarification.model_dump())
+                run_interrupt_signals.pop(run_id, None)
+                if session_active_runs.get(request.session_id) == run_id:
+                    session_active_runs.pop(request.session_id, None)
                 return
 
             session.awaiting_clarification = False
@@ -592,7 +660,24 @@ def create_app(
             )
             yield emit("result", result.model_dump())
 
+            run_interrupt_signals.pop(run_id, None)
+            if session_active_runs.get(request.session_id) == run_id:
+                session_active_runs.pop(request.session_id, None)
+
         return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+    @app.post("/api/session/{session_id}/stop", response_model=StopResponse)
+    def stop_session_run(session_id: str) -> StopResponse:
+        run_id = session_active_runs.get(session_id)
+        if not run_id:
+            return StopResponse(ok=False, detail="No active run for session")
+
+        signal = run_interrupt_signals.get(run_id)
+        if signal is None:
+            return StopResponse(ok=False, detail="Run signal not found")
+
+        signal.set()
+        return StopResponse(ok=True, detail=f"Stop requested for {run_id}")
 
     return app
 
