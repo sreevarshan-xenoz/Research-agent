@@ -18,6 +18,7 @@ class GraphState(TypedDict):
     template: str
     phase: str
     iteration_index: int
+    max_iterations: int
     stop_reason: str | None
     tasks: list[GraphTask]
     section_confidence: dict[str, float]
@@ -50,6 +51,7 @@ class WorkflowState:
     template: str = "ieee"
     phase: str = "intake"
     iteration_index: int = 0
+    max_iterations: int = 3
     stop_reason: Optional[str] = None
     tasks: List[SubtopicTask] = field(default_factory=list)
     section_confidence: Dict[str, float] = field(default_factory=dict)
@@ -61,7 +63,7 @@ class WorkflowState:
     citations: List[Dict[str, str]] = field(default_factory=list)
     latex_main: str = ""
     bibtex: str = ""
-    artifact_root: str = "artifacts"
+    artifact_root: str = ".runtime/artifacts"
     artifact_dir: str = ""
     run_warnings: List[str] = field(default_factory=list)
 
@@ -73,6 +75,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "template": state.template,
         "phase": state.phase,
         "iteration_index": state.iteration_index,
+        "max_iterations": state.max_iterations,
         "stop_reason": state.stop_reason,
         "tasks": [
             {
@@ -106,6 +109,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         template=state["template"],
         phase=state["phase"],
         iteration_index=state["iteration_index"],
+        max_iterations=state.get("max_iterations", 3),
         stop_reason=state["stop_reason"],
         tasks=[
             SubtopicTask(

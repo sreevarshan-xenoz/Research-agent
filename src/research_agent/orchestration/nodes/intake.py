@@ -4,6 +4,10 @@ from research_agent.orchestration.state import GraphState
 
 
 def _is_ambiguous_topic(topic: str) -> bool:
+    # If the topic already contains clarification context, do not flag it as ambiguous again.
+    if "Clarification context:" in topic:
+        return False
+        
     normalized = topic.strip().lower()
     if len(normalized.split()) <= 4:
         return True

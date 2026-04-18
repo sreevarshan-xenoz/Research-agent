@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import os
+
+from research_agent.config import load_settings
+from research_agent.models import generate_json_with_nvidia
+from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 
 
 def planner_node(state: GraphState) -> dict:
     topic = state["topic"]
+    publish_progress(
+        agent="Planner",
+        status="running",
+        detail="Building task graph",
+        message="Planning research subtasks",
+    )
+
+    # Fallback default tasks
     tasks = [
         {
             "task_id": "t1",
@@ -35,4 +48,32 @@ def planner_node(state: GraphState) -> dict:
             "status": "pending",
         },
     ]
+
+    settings = load_settings()
+    model_name = os.getenv("NVIDIA_MODEL") or settings.models.strong_model
+    prompt = (
+        f"Decompose the following research topic into 4-6 specific sub-research tasks: '{topic}'.\n"
+        "Each task must have a 'task_id' (e.g. t1, t2), 'title', 'objective', and 'depends_on' (a list of other task_ids).\n"
+        "Ensure the tasks form a valid Directed Acyclic Graph (DAG).\n"
+        "Return a JSON object with a 'tasks' key containing the list of task objects."
+    )
+
+    llm_plan = generate_json_with_nvidia(model=model_name, prompt=prompt)
+    if llm_plan and isinstance(llm_plan, dict) and "tasks" in llm_plan:
+        raw_tasks = llm_plan["tasks"]
+        valid_tasks = []
+        for t in raw_tasks:
+            if all(k in t for k in ("task_id", "title", "objective")):
+                t["status"] = "pending"
+                t["depends_on"] = t.get("depends_on", [])
+                valid_tasks.append(t)
+        if valid_tasks:
+            tasks = valid_tasks
+
+    publish_progress(
+        agent="Planner",
+        status="complete",
+        detail=f"Planned {len(tasks)} tasks",
+        message="Task graph ready",
+    )
     return {"tasks": tasks, "phase": "planned"}

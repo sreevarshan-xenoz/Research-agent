@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output import export_run_artifacts
 
 
 def exporter_node(state: GraphState) -> dict:
+    publish_progress(
+        agent="Exporter",
+        status="running",
+        detail="Writing artifacts",
+        message="Exporting run outputs",
+    )
     summary = {
         "run_id": state["run_id"],
         "topic": state["topic"],
@@ -25,6 +32,12 @@ def exporter_node(state: GraphState) -> dict:
         template_name=state["template"],
     )
 
+    publish_progress(
+        agent="Exporter",
+        status="complete",
+        detail="Artifacts written",
+        message="Export complete",
+    )
     return {
         "artifact_dir": artifact_dir,
         "phase": "completed",
