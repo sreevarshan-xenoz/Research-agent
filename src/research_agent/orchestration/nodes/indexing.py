@@ -40,7 +40,11 @@ def indexing_node(state: GraphState) -> dict:
     publish_progress(
         agent="Indexer",
         status="complete",
-        detail="Indexing complete",
+        detail=(
+            "Indexing complete "
+            f"(inserted={index.get_stats().get('inserted_points', 0)}, "
+            f"deduped={index.get_stats().get('skipped_duplicates', 0)})"
+        ),
         message="Deep RAG index updated",
     )
     

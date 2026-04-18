@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from qdrant_client import QdrantClient
@@ -15,6 +16,9 @@ class ResearchIndex:
         self.client = QdrantClient(":memory:")
         self.collection_name = collection_name
         self.vector_size = 384  # Default for many small local models
+        self._seen_fingerprints: set[str] = set()
+        self._inserted_points = 0
+        self._skipped_duplicates = 0
         
         self.client.create_collection(
             collection_name=self.collection_name,
@@ -60,8 +64,16 @@ class ResearchIndex:
             
         embeddings = self._get_embeddings(chunks)
         
+        source_url = str(item.get("url") or "")
         points = []
         for i, (chunk, vector) in enumerate(zip(chunks, embeddings)):
+            fp_raw = f"{source_url}::{chunk.strip().lower()}".encode("utf-8", errors="ignore")
+            fingerprint = hashlib.sha1(fp_raw).hexdigest()
+            if fingerprint in self._seen_fingerprints:
+                self._skipped_duplicates += 1
+                continue
+
+            self._seen_fingerprints.add(fingerprint)
             points.append(
                 models.PointStruct(
                     id=str(uuid.uuid4()),
@@ -73,14 +85,19 @@ class ResearchIndex:
                         "source_title": item.get("title"),
                         "source_url": item.get("url"),
                         "source_year": item.get("year"),
+                        "chunk_fingerprint": fingerprint,
                     }
                 )
             )
-            
+
+        if not points:
+            return
+
         self.client.upsert(
             collection_name=self.collection_name,
             points=points
         )
+        self._inserted_points += len(points)
 
     def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         query_vector = self._get_embeddings([query])[0]
@@ -92,3 +109,10 @@ class ResearchIndex:
         )
         
         return [hit.payload for hit in results.points if hit.payload]
+
+    def get_stats(self) -> Dict[str, int]:
+        return {
+            "inserted_points": self._inserted_points,
+            "skipped_duplicates": self._skipped_duplicates,
+            "unique_fingerprints": len(self._seen_fingerprints),
+        }
