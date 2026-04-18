@@ -1,13 +1,25 @@
-from __future__ import annotations
+import os
 
+from research_agent.config import load_settings
+from research_agent.models import generate_json_with_nvidia
+from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 
 
 def critic_node(state: GraphState) -> dict:
+    publish_progress(
+        agent="Critic",
+        status="running",
+        detail="Scoring evidence confidence",
+        message="Reviewing evidence quality",
+    )
     section_confidence: dict[str, float] = {}
     notes: list[str] = []
+    tasks = [dict(t) for t in state["tasks"]]
+    iteration_index = state["iteration_index"] + 1
 
-    for task in state["tasks"]:
+    low_confidence_tasks = []
+    for task in tasks:
         task_id = str(task["task_id"])
         findings = state["task_findings"].get(task_id, {})
 
@@ -24,12 +36,60 @@ def critic_node(state: GraphState) -> dict:
         section_confidence[task_id] = round(confidence, 3)
         if confidence < 0.35:
             notes.append(f"Low evidence confidence for {task_id}")
+            low_confidence_tasks.append(task)
 
     if not notes:
         notes.append("Evidence confidence is acceptable for initial v1 synthesis")
+    
+    # If we have low confidence and capacity for more iterations, generate new tasks
+    if low_confidence_tasks and iteration_index < state["max_iterations"]:
+        publish_progress(
+            agent="Critic",
+            status="running",
+            detail="Generating follow-up tasks",
+            message="Planning iteration loop",
+        )
+        settings = load_settings()
+        model_name = os.getenv("NVIDIA_MODEL") or settings.models.strong_model
+        
+        low_conf_str = "\n".join([f"- {t['title']}: {t['objective']}" for t in low_confidence_tasks])
+        prompt = (
+            f"The following research tasks for the topic '{state['topic']}' had low evidence quality:\n"
+            f"{low_conf_str}\n\n"
+            "Generate 1-3 specific follow-up research tasks to address these gaps. "
+            "Each task must have a 'task_id' (unique, e.g. f1, f2), 'title', 'objective', and 'depends_on' (list).\n"
+            "Return a JSON object with a 'tasks' key."
+        )
+        
+        llm_followup = generate_json_with_nvidia(model=model_name, prompt=prompt)
+        new_tasks = []
+        if llm_followup and isinstance(llm_followup, dict) and "tasks" in llm_followup:
+            new_tasks = llm_followup["tasks"]
+        else:
+            # Fallback follow-up tasks
+            new_tasks = [
+                {
+                    "task_id": f"f{iteration_index}",
+                    "title": "Deep evidence recovery",
+                    "objective": f"Recover missing evidence for: {state['topic']}",
+                    "depends_on": [],
+                }
+            ]
 
+        for t in new_tasks:
+            t["status"] = "pending"
+            tasks.append(t)
+
+    publish_progress(
+        agent="Critic",
+        status="complete",
+        detail="Confidence scoring done",
+        message="Critic completed",
+    )
     return {
         "section_confidence": section_confidence,
         "critic_notes": notes,
         "phase": "critic_scored",
+        "tasks": tasks,
+        "iteration_index": iteration_index,
     }

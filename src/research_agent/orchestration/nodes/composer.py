@@ -4,6 +4,7 @@ import os
 
 from research_agent.config import load_settings
 from research_agent.models import generate_with_nvidia
+from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output.latex import build_bibtex, render_main_tex
 
@@ -61,6 +62,12 @@ def _build_nvidia_prompt(state: GraphState, fallback_body: str) -> str:
 
 
 def composer_node(state: GraphState) -> dict:
+    publish_progress(
+        agent="Composer",
+        status="running",
+        detail="Generating LaTeX output",
+        message="Composing final document",
+    )
     avg_confidence = 0.0
     if state["section_confidence"]:
         avg_confidence = sum(state["section_confidence"].values()) / len(state["section_confidence"])
@@ -98,6 +105,12 @@ def composer_node(state: GraphState) -> dict:
 
     bibtex = build_bibtex(state["citations"])
 
+    publish_progress(
+        agent="Composer",
+        status="complete",
+        detail="LaTeX content generated",
+        message="Composer complete",
+    )
     return {
         "latex_main": main_tex,
         "bibtex": bibtex,

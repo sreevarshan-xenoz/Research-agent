@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 
 
@@ -14,6 +15,12 @@ def _first_author(item: dict[str, Any]) -> str:
 
 
 def citation_verifier_node(state: GraphState) -> dict:
+    publish_progress(
+        agent="Citation Verifier",
+        status="running",
+        detail="Extracting source records",
+        message="Collecting citations",
+    )
     citations: list[dict[str, str]] = []
     run_warnings = list(state["run_warnings"])
 
@@ -49,6 +56,12 @@ def citation_verifier_node(state: GraphState) -> dict:
     if not citations:
         run_warnings.append("citation_verifier:no_citations_collected")
 
+    publish_progress(
+        agent="Citation Verifier",
+        status="complete",
+        detail=f"Collected {len(citations)} citations",
+        message="Citation pass complete",
+    )
     return {
         "citations": citations,
         "run_warnings": run_warnings,
