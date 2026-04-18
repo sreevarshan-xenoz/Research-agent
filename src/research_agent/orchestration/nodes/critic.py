@@ -3,6 +3,7 @@ import os
 from research_agent.config import load_settings
 from research_agent.models import generate_json_with_nvidia
 from research_agent.observability import publish_progress
+from research_agent.orchestration.nodes.indexing import get_contradiction_links
 from research_agent.orchestration.state import GraphState
 
 
@@ -19,6 +20,7 @@ def critic_node(state: GraphState) -> dict:
     metadata_penalty = float(settings.retrieval.metadata_fallback_confidence_penalty)
     tasks = [dict(t) for t in state["tasks"]]
     iteration_index = state["iteration_index"] + 1
+    contradiction_links = get_contradiction_links(state["run_id"])
 
     low_confidence_tasks = []
     for task in tasks:
@@ -32,6 +34,12 @@ def critic_node(state: GraphState) -> dict:
         metadata_only_count = sum(
             int(provider_data.get("metadata_only_count", 0)) for provider_data in findings.values()
         )
+        contradiction_count = sum(
+            1
+            for link in contradiction_links
+            if task_id in {link.get("task_a", ""), link.get("task_b", "")}
+        )
+        contradiction_penalty = min(0.2, contradiction_count * 0.05)
 
         if item_count == 0:
             confidence = 0.1
@@ -43,6 +51,7 @@ def critic_node(state: GraphState) -> dict:
                     (item_count / 8.0)
                     - (warning_count * 0.04)
                     - (metadata_only_count * metadata_penalty),
+                    - contradiction_penalty
                 ),
             )
 
@@ -52,6 +61,11 @@ def critic_node(state: GraphState) -> dict:
             low_confidence_tasks.append(task)
         if metadata_only_count > 0:
             notes.append(f"Metadata fallback penalty applied for {task_id} ({metadata_only_count} items)")
+        if contradiction_count > 0:
+            notes.append(
+                f"Contradiction penalty applied for {task_id} "
+                f"({contradiction_count} conflicting links)"
+            )
 
     if not notes:
         notes.append("Evidence confidence is acceptable for initial v1 synthesis")

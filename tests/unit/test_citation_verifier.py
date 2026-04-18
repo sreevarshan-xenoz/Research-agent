@@ -121,3 +121,47 @@ def test_citation_verifier_keeps_supported_sections() -> None:
         warning.startswith("citation_verifier:unsupported_section_claims")
         for warning in result["run_warnings"]
     )
+
+
+def test_citation_verifier_rejects_section_with_only_unsupported_claims() -> None:
+    state = _base_state()
+    state["combined_sections"][0]["content"] = (
+        "Objective: Has evidence\n"
+        "Evidence (Deep RAG):\n"
+        "This paragraph claims a dramatic latency collapse in production systems.\n"
+        "Confidence score: 0.80."
+    )
+
+    result = citation_verifier_node(state)
+
+    assert len(result["combined_sections"]) == 0
+    assert any(
+        warning.startswith("citation_verifier:unsupported_section_claims:t1")
+        for warning in result["run_warnings"]
+    )
+    assert any(
+        warning.startswith("citation_verifier:unsupported_claims:t1:")
+        for warning in result["run_warnings"]
+    )
+
+
+def test_citation_verifier_flags_partial_unsupported_claims_without_rejecting() -> None:
+    state = _base_state()
+    state["task_findings"]["t1"]["fake"]["items"][0]["snippet"] = (
+        "Useful content supports supported section claims with evidence overlap."
+    )
+    state["combined_sections"][0]["content"] = (
+        "Objective: Has evidence\n"
+        "Evidence (Deep RAG):\n"
+        "Useful content supports supported section claims with evidence overlap. "
+        "Another unrelated sentence introduces a novel unsupported assertion.\n"
+        "Confidence score: 0.80."
+    )
+
+    result = citation_verifier_node(state)
+
+    assert any(section["task_id"] == "t1" for section in result["combined_sections"])
+    assert any(
+        warning.startswith("citation_verifier:unsupported_claims:t1:")
+        for warning in result["run_warnings"]
+    )

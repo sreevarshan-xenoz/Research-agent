@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from research_agent.observability import publish_progress
@@ -22,9 +23,82 @@ def _task_has_support(task_id: str, task_findings: dict[str, dict[str, dict[str,
     return item_count > 0
 
 
-def _find_unsupported_sections(state: GraphState) -> tuple[list[dict[str, str]], set[str]]:
+def _tokenize(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-zA-Z]{4,}", text.lower())
+        if token
+        not in {
+            "with",
+            "from",
+            "that",
+            "this",
+            "these",
+            "those",
+            "their",
+            "there",
+            "objective",
+            "evidence",
+            "confidence",
+            "score",
+            "deep",
+            "rag",
+        }
+    }
+
+
+def _task_evidence_tokens(task_id: str, state: GraphState) -> set[str]:
+    findings = state["task_findings"].get(task_id, {})
+    token_bag: set[str] = set()
+    for provider_data in findings.values():
+        items = provider_data.get("items", [])
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            text = " ".join(
+                [
+                    str(item.get("title") or ""),
+                    str(item.get("snippet") or ""),
+                    str(item.get("content") or ""),
+                ]
+            )
+            token_bag.update(_tokenize(text))
+    return token_bag
+
+
+def _extract_claim_sentences(section_content: str) -> list[str]:
+    claims: list[str] = []
+    for raw_line in section_content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("Objective:"):
+            continue
+        if line.startswith("Evidence (Deep RAG):"):
+            continue
+        if line.startswith("Confidence score:"):
+            continue
+        if line.startswith("Contradictions detected:"):
+            continue
+        if line.startswith("["):
+            continue
+        parts = re.split(r"(?<=[.!?])\s+", line)
+        for part in parts:
+            sentence = part.strip()
+            if len(sentence.split()) < 6:
+                continue
+            claims.append(sentence)
+    return claims
+
+
+def _find_unsupported_sections(
+    state: GraphState,
+) -> tuple[list[dict[str, str]], set[str], dict[str, int]]:
     filtered_sections: list[dict[str, str]] = []
     unsupported_task_ids: set[str] = set()
+    unsupported_claim_counts: dict[str, int] = {}
 
     for section in state["combined_sections"]:
         task_id = str(section.get("task_id", "")).strip()
@@ -35,13 +109,31 @@ def _find_unsupported_sections(state: GraphState) -> tuple[list[dict[str, str]],
 
         no_evidence_text = "No specific evidence chunks found." in content
         has_support = _task_has_support(task_id, state["task_findings"])
+        evidence_tokens = _task_evidence_tokens(task_id, state)
+        claim_sentences = _extract_claim_sentences(content)
+
+        supported_claims = 0
+        unsupported_claims = 0
+        for sentence in claim_sentences:
+            overlap = _tokenize(sentence).intersection(evidence_tokens)
+            if len(overlap) >= 3:
+                supported_claims += 1
+            else:
+                unsupported_claims += 1
+
         if no_evidence_text or not has_support:
             unsupported_task_ids.add(task_id)
             continue
+        if claim_sentences and supported_claims == 0:
+            unsupported_task_ids.add(task_id)
+            unsupported_claim_counts[task_id] = unsupported_claims
+            continue
+        if unsupported_claims > 0:
+            unsupported_claim_counts[task_id] = unsupported_claims
 
         filtered_sections.append(section)
 
-    return filtered_sections, unsupported_task_ids
+    return filtered_sections, unsupported_task_ids, unsupported_claim_counts
 
 
 def citation_verifier_node(state: GraphState) -> dict:
@@ -54,10 +146,12 @@ def citation_verifier_node(state: GraphState) -> dict:
     citations: list[dict[str, str]] = []
     run_warnings = list(state["run_warnings"])
 
-    filtered_sections, unsupported_task_ids = _find_unsupported_sections(state)
+    filtered_sections, unsupported_task_ids, unsupported_claim_counts = _find_unsupported_sections(state)
     if unsupported_task_ids:
         joined = ",".join(sorted(unsupported_task_ids))
         run_warnings.append(f"citation_verifier:unsupported_section_claims:{joined}")
+    for task_id, claim_count in sorted(unsupported_claim_counts.items()):
+        run_warnings.append(f"citation_verifier:unsupported_claims:{task_id}:{claim_count}")
 
     for task in state["tasks"]:
         task_id = str(task["task_id"])

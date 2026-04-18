@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.rag.indexer import ResearchIndex
@@ -8,6 +10,33 @@ from research_agent.rag.indexer import ResearchIndex
 # We'll use a simple global cache for the index object in v1 
 # to avoid serializing the Qdrant client, which isn't possible.
 _INDEX_CACHE: dict[str, ResearchIndex] = {}
+_CONTRADICTION_CACHE: dict[str, list[dict[str, str]]] = {}
+
+_NEGATIVE_TERMS = {
+    "not",
+    "no",
+    "never",
+    "fails",
+    "failed",
+    "cannot",
+    "worse",
+    "reduces",
+    "ineffective",
+    "risk",
+}
+
+_POSITIVE_TERMS = {
+    "improves",
+    "improved",
+    "increase",
+    "effective",
+    "benefit",
+    "better",
+    "outperform",
+    "supports",
+    "reliable",
+    "success",
+}
 
 
 def get_or_create_index(run_id: str) -> ResearchIndex:
@@ -16,9 +45,90 @@ def get_or_create_index(run_id: str) -> ResearchIndex:
     return _INDEX_CACHE[run_id]
 
 
+def get_contradiction_links(run_id: str) -> list[dict[str, str]]:
+    return list(_CONTRADICTION_CACHE.get(run_id, []))
+
+
+def _tokenize(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-zA-Z]{4,}", text.lower())
+        if token not in {"with", "from", "that", "this", "these", "those", "their", "there"}
+    }
+
+
+def _stance_score(text: str) -> int:
+    lower = text.lower()
+    positive_hits = sum(1 for term in _POSITIVE_TERMS if re.search(rf"\b{re.escape(term)}\b", lower))
+    negative_hits = sum(1 for term in _NEGATIVE_TERMS if re.search(rf"\b{re.escape(term)}\b", lower))
+    return positive_hits - negative_hits
+
+
+def _collect_claim_records(findings: dict[str, dict[str, dict[str, object]]]) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for task_id, provider_map in findings.items():
+        for provider, result in provider_map.items():
+            items = result.get("items", [])
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                text = str(item.get("snippet") or item.get("content") or item.get("title") or "").strip()
+                if not text:
+                    continue
+                records.append(
+                    {
+                        "task_id": str(task_id),
+                        "provider": str(provider),
+                        "source": str(item.get("title") or item.get("url") or "source"),
+                        "text": text,
+                    }
+                )
+    return records
+
+
+def _detect_contradictions(records: list[dict[str, str]]) -> list[dict[str, str]]:
+    links: list[dict[str, str]] = []
+    max_links = 50
+    for i in range(len(records)):
+        a = records[i]
+        a_tokens = _tokenize(a["text"])
+        if len(a_tokens) < 4:
+            continue
+        a_stance = _stance_score(a["text"])
+        if a_stance == 0:
+            continue
+
+        for j in range(i + 1, len(records)):
+            b = records[j]
+            b_stance = _stance_score(b["text"])
+            if b_stance == 0 or (a_stance > 0) == (b_stance > 0):
+                continue
+
+            b_tokens = _tokenize(b["text"])
+            overlap = a_tokens.intersection(b_tokens)
+            if len(overlap) < 3:
+                continue
+
+            links.append(
+                {
+                    "task_a": a["task_id"],
+                    "task_b": b["task_id"],
+                    "source_a": a["source"],
+                    "source_b": b["source"],
+                    "overlap_terms": ",".join(sorted(list(overlap))[:6]),
+                }
+            )
+            if len(links) >= max_links:
+                return links
+    return links
+
+
 def indexing_node(state: GraphState) -> dict:
     run_id = state["run_id"]
     findings = state["task_findings"]
+    run_warnings = list(state["run_warnings"])
     
     publish_progress(
         agent="Indexer",
@@ -36,6 +146,16 @@ def indexing_node(state: GraphState) -> dict:
             items = result.get("items", [])
             for item in items:
                 index.add_finding(task_id, provider, item)
+
+    contradiction_links = _detect_contradictions(_collect_claim_records(findings))
+    _CONTRADICTION_CACHE[run_id] = contradiction_links
+    if contradiction_links:
+        run_warnings.append(f"indexing:contradiction_links:{len(contradiction_links)}")
+        for idx, link in enumerate(contradiction_links[:5], start=1):
+            run_warnings.append(
+                "contradiction_link:"
+                f"{idx}:{link['task_a']}:{link['task_b']}:{link['overlap_terms']}"
+            )
                 
     publish_progress(
         agent="Indexer",
@@ -43,9 +163,13 @@ def indexing_node(state: GraphState) -> dict:
         detail=(
             "Indexing complete "
             f"(inserted={index.get_stats().get('inserted_points', 0)}, "
-            f"deduped={index.get_stats().get('skipped_duplicates', 0)})"
+            f"deduped={index.get_stats().get('skipped_duplicates', 0)}, "
+            f"contradictions={len(contradiction_links)})"
         ),
         message="Deep RAG index updated",
     )
     
-    return {"phase": "indexed"}
+    return {
+        "phase": "indexed",
+        "run_warnings": run_warnings,
+    }

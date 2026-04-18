@@ -1,5 +1,5 @@
 from research_agent.observability import publish_progress
-from research_agent.orchestration.nodes.indexing import get_or_create_index
+from research_agent.orchestration.nodes.indexing import get_contradiction_links, get_or_create_index
 from research_agent.orchestration.state import GraphState
 
 
@@ -12,6 +12,7 @@ def combiner_node(state: GraphState) -> dict:
     )
     sections: list[dict[str, str]] = []
     index = get_or_create_index(state["run_id"])
+    contradiction_links = get_contradiction_links(state["run_id"])
 
     for task in state["tasks"]:
         task_id = str(task["task_id"])
@@ -27,10 +28,27 @@ def combiner_node(state: GraphState) -> dict:
             evidence_parts.append(f"[{source}]: {hit['text']}")
 
         evidence_text = "\n".join(evidence_parts) if evidence_parts else "No specific evidence chunks found."
+        task_contradictions = [
+            link
+            for link in contradiction_links
+            if task_id in {link.get("task_a", ""), link.get("task_b", "")}
+        ]
+
+        contradiction_text = ""
+        if task_contradictions:
+            lines = [
+                (
+                    f"- {link.get('source_a', 'source A')} vs {link.get('source_b', 'source B')} "
+                    f"(overlap: {link.get('overlap_terms', '')})"
+                )
+                for link in task_contradictions[:3]
+            ]
+            contradiction_text = "\nContradictions detected:\n" + "\n".join(lines)
 
         content = (
             f"Objective: {task['objective']}\n"
             f"Evidence (Deep RAG):\n{evidence_text}\n"
+            f"{contradiction_text}\n"
             f"Confidence score: {confidence:.2f}."
         )
 
