@@ -75,6 +75,7 @@ def test_webapp_session_and_clarification_flow() -> None:
     payload = second_chat.json()
     assert payload["kind"] == "result"
     assert payload["run_id"] is not None
+    assert "section_evidence" in payload
 
 
 def test_webapp_index_and_health() -> None:

@@ -74,6 +74,7 @@ class ChatResponse(BaseModel):
     task_statuses: list[TaskStatus] = Field(default_factory=list)
     artifact_urls: dict[str, str] = Field(default_factory=dict)
     agent_activity: list[AgentActivity] = Field(default_factory=list)
+    section_evidence: list[dict[str, object]] = Field(default_factory=list)
     latex_text: str = ""
     doc_preview_html: str = ""
     overleaf_urls: dict[str, str] = Field(default_factory=dict)
@@ -127,6 +128,39 @@ def _build_result_message(state: WorkflowState) -> str:
         f"Template: {state.template}\n"
         f"Artifacts: {state.artifact_dir}"
     )
+
+
+def _build_section_evidence(state: WorkflowState) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    findings = state.task_findings
+
+    for section in state.combined_sections:
+        task_id = str(section.get("task_id", "")).strip()
+        section_name = str(section.get("heading", "Section"))
+        confidence = float(state.section_confidence.get(task_id, 0.0))
+
+        sources: list[str] = []
+        for provider_data in findings.get(task_id, {}).values():
+            items = provider_data.get("items", [])
+            if not isinstance(items, list):
+                continue
+            for item in items[:3]:
+                if not isinstance(item, dict):
+                    continue
+                label = str(item.get("title") or item.get("url") or "source").strip()
+                if label:
+                    sources.append(label)
+
+        rows.append(
+            {
+                "task_id": task_id,
+                "section": section_name,
+                "confidence": confidence,
+                "sources": sources,
+            }
+        )
+
+    return rows
 
 
 def _latex_to_doc_html(latex_text: str) -> str:
@@ -437,6 +471,7 @@ def create_app(
             ],
             artifact_urls=artifact_urls,
             agent_activity=_build_agent_activity(updated),
+            section_evidence=_build_section_evidence(updated),
             latex_text=updated.latex_main,
             doc_preview_html=_latex_to_doc_html(updated.latex_main),
             overleaf_urls=overleaf_urls,
@@ -662,6 +697,7 @@ def create_app(
                 ],
                 artifact_urls=artifact_urls,
                 agent_activity=_build_agent_activity(updated),
+                section_evidence=_build_section_evidence(updated),
                 latex_text=latex_text,
                 doc_preview_html=_latex_to_doc_html(latex_text),
                 overleaf_urls=_build_overleaf_urls(updated),
@@ -726,6 +762,7 @@ def create_app(
             ],
             artifact_urls=artifact_urls,
             agent_activity=_build_agent_activity(restored),
+            section_evidence=_build_section_evidence(restored),
             latex_text=restored.latex_main,
             doc_preview_html=_latex_to_doc_html(restored.latex_main),
             overleaf_urls=_build_overleaf_urls(restored),

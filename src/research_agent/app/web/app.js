@@ -22,6 +22,7 @@ const newOverleafLinkEl = document.getElementById("newOverleafLink");
 const bundleLinkEl = document.getElementById("bundleLink");
 const workbenchStatusEl = document.getElementById("workbenchStatus");
 const discoveryFeedEl = document.getElementById("discoveryFeed");
+const evidenceExplorerEl = document.getElementById("evidenceExplorer");
 
 // Initialize Quill Editor (if element exists)
 let quill = null;
@@ -79,6 +80,9 @@ function resetWorkbench() {
   if (discoveryFeedEl) {
     discoveryFeedEl.innerHTML = '<p class="small muted">Findings will stream here...</p>';
   }
+  if (evidenceExplorerEl) {
+    evidenceExplorerEl.innerHTML = '<p class="small muted">Section evidence links will appear after generation...</p>';
+  }
   if (newOverleafLinkEl) newOverleafLinkEl.href = "https://www.overleaf.com/project/new";
   if (bundleLinkEl) {
     bundleLinkEl.href = "#";
@@ -86,6 +90,40 @@ function resetWorkbench() {
   }
   setWorkbenchStatus("idle", "idle");
   switchWorkbenchTab("doc");
+}
+
+function renderEvidenceExplorer(sectionEvidence) {
+  if (!evidenceExplorerEl) return;
+
+  const rows = Array.isArray(sectionEvidence) ? sectionEvidence : [];
+  if (!rows.length) {
+    evidenceExplorerEl.innerHTML = '<p class="small muted">No section evidence available for this run.</p>';
+    return;
+  }
+
+  evidenceExplorerEl.innerHTML = "";
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "discovery-item fade-in";
+
+    const title = document.createElement("span");
+    title.className = "source";
+    title.textContent = row.section || "Section";
+    item.appendChild(title);
+
+    const details = document.createElement("div");
+    const confidence = Number.isFinite(row.confidence) ? row.confidence.toFixed(2) : "n/a";
+    details.textContent = `confidence: ${confidence}`;
+    item.appendChild(details);
+
+    const refs = document.createElement("div");
+    refs.className = "small";
+    const labels = Array.isArray(row.sources) ? row.sources.slice(0, 4).join(" | ") : "no sources";
+    refs.textContent = labels || "no sources";
+    item.appendChild(refs);
+
+    evidenceExplorerEl.appendChild(item);
+  });
 }
 
 function appendLatexChunk(chunk) {
@@ -484,6 +522,7 @@ chatForm?.addEventListener("submit", async (event) => {
       }
       renderDocPreview(payload.doc_preview_html || "");
       applyOverleafUrls(payload.overleaf_urls || {});
+      renderEvidenceExplorer(payload.section_evidence || []);
       
       // FINISH RUN UI
       setWorkbenchStatus("ready", "success");
