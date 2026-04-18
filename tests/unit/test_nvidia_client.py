@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import types
 
-from research_agent.models.nvidia_client import _normalize_model_name, generate_with_nvidia
+from research_agent.models.nvidia_client import _normalize_model_name, generate_with_nvidia, nvidia_stream_callback
 
 
 def test_normalize_model_name_supports_prefixed_value() -> None:
@@ -45,3 +45,32 @@ def test_generate_with_nvidia_uses_streaming_client(monkeypatch) -> None:
         prompt="Generate",
     )
     assert value == "hello world"
+
+
+def test_generate_with_nvidia_emits_chunk_callback(monkeypatch) -> None:
+    class FakeChunk:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+    class FakeChatNVIDIA:
+        def __init__(self, **kwargs) -> None:  # noqa: ANN003
+            self.kwargs = kwargs
+
+        def stream(self, messages):  # noqa: ANN001, ANN201
+            assert messages[0]["role"] == "user"
+            yield FakeChunk("a")
+            yield FakeChunk("b")
+
+    fake_module = types.SimpleNamespace(ChatNVIDIA=FakeChatNVIDIA)
+    monkeypatch.setitem(__import__("sys").modules, "langchain_nvidia_ai_endpoints", fake_module)
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-key")
+
+    captured: list[str] = []
+    with nvidia_stream_callback(captured.append):
+        value = generate_with_nvidia(
+            model="qwen/qwen3-coder-480b-a35b-instruct",
+            prompt="Generate",
+        )
+
+    assert value == "ab"
+    assert captured == ["a", "b"]
