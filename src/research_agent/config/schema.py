@@ -20,6 +20,8 @@ class RuntimeSettings(BaseModel):
 class ModelSettings(BaseModel):
     worker_model: str
     strong_model: str
+    head_model: str = ""  # Local orchestrator (e.g. "ollama/gemma4:e4b")
+    subagent_model: str = ""  # Cloud model for heavy tasks (e.g. "openrouter/openrouter/free")
 
 
 class OutputSettings(BaseModel):

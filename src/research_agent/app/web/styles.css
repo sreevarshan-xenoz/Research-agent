@@ -177,6 +177,12 @@ button.secondary:hover {
   box-shadow: var(--shadow-sm);
 }
 
+.doc-panel, .latex-panel {
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .doc-editor {
   flex: 1;
   background: white;
@@ -184,6 +190,7 @@ button.secondary:hover {
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   font-size: 1.05rem;
   line-height: 1.6;
+  overflow-y: auto;
 }
 
 .ql-toolbar.ql-snow {

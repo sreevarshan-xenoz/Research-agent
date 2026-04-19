@@ -90,8 +90,10 @@ def test_citation_verifier_rejects_unsupported_sections() -> None:
 
     result = citation_verifier_node(state)
 
-    assert len(result["combined_sections"]) == 1
+    # Sections are kept (not dropped) but unsupported ones are flagged via warnings
+    assert len(result["combined_sections"]) == 2
     assert result["combined_sections"][0]["task_id"] == "t1"
+    assert result["combined_sections"][1]["task_id"] == "t2"
     assert result["citations"]
     assert all(c["key"].startswith("t1_") for c in result["citations"])
     assert any(
@@ -134,7 +136,8 @@ def test_citation_verifier_rejects_section_with_only_unsupported_claims() -> Non
 
     result = citation_verifier_node(state)
 
-    assert len(result["combined_sections"]) == 0
+    # Sections are kept but flagged via warnings (not dropped)
+    assert len(result["combined_sections"]) == 2
     assert any(
         warning.startswith("citation_verifier:unsupported_section_claims:t1")
         for warning in result["run_warnings"]

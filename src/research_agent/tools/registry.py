@@ -61,6 +61,7 @@ def run_multi_source_search(
             except Exception as e:
                 # Return an empty result with warning on failure
                 results[provider_name] = ToolResult(
+                    provider=provider_name,
                     items=[],
                     warnings=[f"Parallel search failed: {str(e)}"]
                 )

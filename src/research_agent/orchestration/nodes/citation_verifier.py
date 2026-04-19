@@ -123,14 +123,13 @@ def _find_unsupported_sections(
 
         if no_evidence_text or not has_support:
             unsupported_task_ids.add(task_id)
-            continue
-        if claim_sentences and supported_claims == 0:
+        elif claim_sentences and supported_claims == 0:
             unsupported_task_ids.add(task_id)
             unsupported_claim_counts[task_id] = unsupported_claims
-            continue
-        if unsupported_claims > 0:
+        elif unsupported_claims > 0:
             unsupported_claim_counts[task_id] = unsupported_claims
 
+        # Always keep the section — warn instead of dropping
         filtered_sections.append(section)
 
     return filtered_sections, unsupported_task_ids, unsupported_claim_counts

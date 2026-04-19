@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
-
-from research_agent.config import load_settings
-from research_agent.models import generate_json_with_nvidia
+from research_agent.models import generate_json
 from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 
@@ -20,14 +17,13 @@ def clarifier_node(state: GraphState) -> dict:
         message="Analyzing topic ambiguity",
     )
 
+    # Fallback questions used when the head model is unavailable or fails
     questions = [
         "What exact scope should this research focus on?",
         "What depth do you want: overview, implementation detail, or publication-depth?",
         "Do you want the emphasis on methods, benchmarks, or real-world applications?",
     ]
 
-    settings = load_settings()
-    model_name = os.getenv("NVIDIA_MODEL") or settings.models.strong_model
     prompt = (
         f"The user wants to research the topic: '{topic}'.\n"
         "This topic is broad or ambiguous. Generate 2-4 targeted clarification questions "
@@ -35,9 +31,18 @@ def clarifier_node(state: GraphState) -> dict:
         "Return a JSON object with a 'questions' key containing a list of strings."
     )
 
-    llm_questions = generate_json_with_nvidia(model=model_name, prompt=prompt)
+    # Use the HEAD model (local Ollama) for orchestration tasks
+    llm_questions = generate_json(role="head", prompt=prompt)
     if llm_questions and isinstance(llm_questions, dict) and "questions" in llm_questions:
-        questions = llm_questions["questions"]
+        raw_questions = llm_questions["questions"]
+        if isinstance(raw_questions, list) and len(raw_questions) >= 2:
+            questions = [str(q) for q in raw_questions if isinstance(q, str) and q.strip()]
+            if len(questions) < 2:
+                questions = [
+                    "What exact scope should this research focus on?",
+                    "What depth do you want: overview, implementation detail, or publication-depth?",
+                    "Do you want the emphasis on methods, benchmarks, or real-world applications?",
+                ]
 
     return {
         "clarification_questions": questions,

@@ -20,7 +20,13 @@ class ArxivAdapter(BaseToolAdapter):
         client: httpx.Client | None = None,
     ) -> None:
         self._endpoint = endpoint
-        self._client = client or httpx.Client(timeout=20)
+        self._client = client or httpx.Client(
+            timeout=20,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "ResearchAgent/0.1 (research-agent; mailto:noreply@example.com)",
+            },
+        )
         if extract_pdf_text is None:
             extract_pdf_text = os.getenv("ARXIV_EXTRACT_PDF_TEXT", "false").strip().lower() in {
                 "1",

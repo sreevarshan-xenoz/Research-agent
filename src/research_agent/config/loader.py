@@ -40,6 +40,12 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("STRONG_MODEL"):
         models["strong_model"] = env["STRONG_MODEL"]
 
+    # Hybrid multi-model settings
+    if env.get("HEAD_MODEL"):
+        models["head_model"] = env["HEAD_MODEL"]
+    if env.get("SUBAGENT_MODEL"):
+        models["subagent_model"] = env["SUBAGENT_MODEL"]
+
     if env.get("DEFAULT_TEMPLATE"):
         output["default_template"] = env["DEFAULT_TEMPLATE"]
     if env.get("SUPPORTED_TEMPLATES"):

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import os
 
-from research_agent.config import load_settings
-from research_agent.models import generate_with_nvidia
+from research_agent.models import generate_text
 from research_agent.observability import publish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output.latex import build_bibtex, render_main_tex, escape_latex
@@ -36,12 +35,7 @@ def _build_body(state: GraphState) -> str:
     return "\n\n".join(sections)
 
 
-def _use_nvidia_model() -> bool:
-    value = os.getenv("ENABLE_NVIDIA_MODEL", "false").strip().lower()
-    return value in {"1", "true", "yes", "on"}
-
-
-def _build_nvidia_prompt(state: GraphState, fallback_body: str) -> str:
+def _build_subagent_prompt(state: GraphState, fallback_body: str) -> str:
     section_lines = []
     for section in state["combined_sections"]:
         heading = section.get("heading", "Section")
@@ -70,6 +64,22 @@ def _build_nvidia_prompt(state: GraphState, fallback_body: str) -> str:
     )
 
 
+def _use_subagent_model() -> bool:
+    """Check if a subagent model (cloud) is configured for composition."""
+    # Check if subagent model is explicitly set
+    subagent = os.getenv("SUBAGENT_MODEL", "").strip()
+    if subagent:
+        return True
+
+    # Fall back to checking for OpenRouter or NVIDIA keys
+    if os.getenv("OPENROUTER_API_KEY", "").strip():
+        return True
+    if os.getenv("NVIDIA_API_KEY", "").strip() or os.getenv("NVIDIA_NIMS_API_KEY", "").strip():
+        return True
+
+    return False
+
+
 def composer_node(state: GraphState) -> dict:
     publish_progress(
         agent="Composer",
@@ -89,20 +99,25 @@ def composer_node(state: GraphState) -> dict:
     body = _build_body(state)
     run_warnings = list(state["run_warnings"])
 
-    if _use_nvidia_model():
-        settings = load_settings()
-        model_name = os.getenv("NVIDIA_MODEL") or settings.models.strong_model
-        nvidia_text = generate_with_nvidia(
-            model=model_name,
-            prompt=_build_nvidia_prompt(state, body),
+    if _use_subagent_model():
+        publish_progress(
+            agent="Composer",
+            status="running",
+            detail="Generating content via cloud subagent",
+            message="Using cloud model for LaTeX body",
+        )
+        # Use the SUBAGENT model (cloud — OpenRouter free / NVIDIA NIMs)
+        subagent_text = generate_text(
+            role="subagent",
+            prompt=_build_subagent_prompt(state, body),
             temperature=0.7,
             top_p=0.8,
             max_tokens=4096,
         )
-        if nvidia_text:
-            body = nvidia_text
+        if subagent_text:
+            body = subagent_text
         else:
-            run_warnings.append("nvidia_generation:fallback_to_local_composer")
+            run_warnings.append("subagent_generation:fallback_to_local_composer")
 
     main_tex = render_main_tex(
         template_name=state["template"],

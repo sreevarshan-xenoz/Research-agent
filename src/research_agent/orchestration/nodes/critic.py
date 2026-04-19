@@ -1,7 +1,4 @@
-import os
-
-from research_agent.config import load_settings
-from research_agent.models import generate_json_with_nvidia
+from research_agent.models import generate_json
 from research_agent.observability import publish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links
 from research_agent.orchestration.state import GraphState
@@ -16,8 +13,11 @@ def critic_node(state: GraphState) -> dict:
     )
     section_confidence: dict[str, float] = {}
     notes: list[str] = []
+
+    from research_agent.config import load_settings
     settings = load_settings()
     metadata_penalty = float(settings.retrieval.metadata_fallback_confidence_penalty)
+
     tasks = [dict(t) for t in state["tasks"]]
     iteration_index = state["iteration_index"] + 1
     contradiction_links = get_contradiction_links(state["run_id"])
@@ -78,7 +78,6 @@ def critic_node(state: GraphState) -> dict:
             detail="Generating follow-up tasks",
             message="Planning iteration loop",
         )
-        model_name = os.getenv("NVIDIA_MODEL") or settings.models.strong_model
         
         low_conf_str = "\n".join([f"- {t['title']}: {t['objective']}" for t in low_confidence_tasks])
         prompt = (
@@ -89,11 +88,20 @@ def critic_node(state: GraphState) -> dict:
             "Return a JSON object with a 'tasks' key."
         )
         
-        llm_followup = generate_json_with_nvidia(model=model_name, prompt=prompt)
+        # Use the HEAD model (local Ollama) for follow-up task generation
+        llm_followup = generate_json(role="head", prompt=prompt)
         new_tasks = []
         if llm_followup and isinstance(llm_followup, dict) and "tasks" in llm_followup:
-            new_tasks = llm_followup["tasks"]
-        else:
+            raw_tasks = llm_followup["tasks"]
+            if isinstance(raw_tasks, list):
+                for t in raw_tasks:
+                    if isinstance(t, dict) and all(k in t for k in ("task_id", "title", "objective")):
+                        t["depends_on"] = t.get("depends_on", [])
+                        if not isinstance(t["depends_on"], list):
+                            t["depends_on"] = []
+                        new_tasks.append(t)
+
+        if not new_tasks:
             # Fallback follow-up tasks
             new_tasks = [
                 {

@@ -19,7 +19,13 @@ class SemanticScholarAdapter(BaseToolAdapter):
     ) -> None:
         self._api_key = api_key
         self._endpoint = endpoint
-        self._client = client or httpx.Client(timeout=20)
+        self._client = client or httpx.Client(
+            timeout=20,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "ResearchAgent/0.1 (research-agent; mailto:noreply@example.com)",
+            },
+        )
 
     def search(self, query: str, limit: int = 5) -> ToolResult:
         normalized_limit = safe_limit(limit)

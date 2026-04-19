@@ -35,7 +35,9 @@ class ResearchIndex:
         # OR we check if NVIDIA_API_KEY is available for real embeddings
         
         api_key = os.getenv("NVIDIA_API_KEY")
-        if api_key:
+        enable_nvidia = os.getenv("ENABLE_NVIDIA_MODEL", "true").lower() not in ("0", "false")
+        
+        if api_key and enable_nvidia:
             try:
                 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
                 embedder = NVIDIAEmbeddings(api_key=api_key)

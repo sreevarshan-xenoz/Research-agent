@@ -7,6 +7,8 @@ runtime:
 models:
   worker_model: local/fallback-worker
   strong_model: local/fallback-strong
+  head_model: ollama/gemma4:e4b
+  subagent_model: openrouter/openrouter/free
 
 output:
   default_template: ieee
