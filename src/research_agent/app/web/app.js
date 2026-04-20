@@ -23,6 +23,9 @@ const bundleLinkEl = document.getElementById("bundleLink");
 const workbenchStatusEl = document.getElementById("workbenchStatus");
 const discoveryFeedEl = document.getElementById("discoveryFeed");
 const evidenceExplorerEl = document.getElementById("evidenceExplorer");
+const docStatusEl = document.getElementById("docStatusEl");
+const docProgressBarEl = document.getElementById("docProgressBar");
+const copyDocBtn = document.getElementById("copyDocBtn");
 
 // Initialize Quill Editor (if element exists)
 let quill = null;
@@ -53,18 +56,68 @@ function switchWorkbenchTab(tab) {
   if (latexWorkbenchEl) latexWorkbenchEl.classList.toggle("active", !isDoc);
 }
 
+function setDocStatus(status, text) {
+  if (!docStatusEl) return;
+  const dot = docStatusEl.querySelector(".status-dot");
+  const statusText = docStatusEl.querySelector(".status-text");
+  if (dot) {
+    dot.className = "status-dot " + status;
+  }
+  if (statusText && text) {
+    statusText.textContent = text;
+  }
+}
+
+function setDocProgress(percent) {
+  if (!docProgressBarEl) return;
+  const fill = docProgressBarEl.querySelector(".doc-progress-fill");
+  if (percent > 0) {
+    docProgressBarEl.classList.add("active");
+    if (fill) {
+      fill.style.width = Math.min(100, percent) + "%";
+    }
+  } else {
+    docProgressBarEl.classList.remove("active");
+    if (fill) {
+      fill.style.width = "0%";
+    }
+  }
+}
+
+async function copyDocumentToClipboard() {
+  if (!quill) return;
+  const text = quill.getText();
+  try {
+    await navigator.clipboard.writeText(text);
+    if (copyDocBtn) {
+      const originalHTML = copyDocBtn.innerHTML;
+      copyDocBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+      setTimeout(() => {
+        copyDocBtn.innerHTML = originalHTML;
+      }, 2000);
+    }
+  } catch (err) {
+    console.error("Failed to copy:", err);
+  }
+}
+
 function setWorkbenchStatus(status, label) {
   if (!workbenchStatusEl) return;
   const normalized = String(status || "idle").toLowerCase();
   workbenchStatusEl.className = "workbench-status";
   if (["running", "generating", "active"].includes(normalized)) {
     workbenchStatusEl.classList.add("running");
+    setDocStatus("running", "Generating content...");
   } else if (["ready", "complete", "completed", "done", "success"].includes(normalized)) {
     workbenchStatusEl.classList.add("ready");
+    setDocStatus("complete", "Content complete");
+    setDocProgress(100);
   } else if (["error", "failed", "blocked"].includes(normalized)) {
     workbenchStatusEl.classList.add("error");
+    setDocStatus("idle", "Error");
   } else {
     workbenchStatusEl.classList.add("idle");
+    setDocStatus("idle", label || normalized);
   }
   workbenchStatusEl.textContent = label || normalized;
 }
@@ -134,9 +187,16 @@ function appendLatexChunk(chunk) {
     latexStreamEl.textContent.startsWith("Waiting")
   ) {
     latexStreamEl.textContent = "";
+    latexStreamEl.classList.add("typing-active");
   }
   latexStreamEl.textContent += chunk;
   latexStreamEl.scrollTop = latexStreamEl.scrollHeight;
+}
+
+function finishLatexChunk() {
+  if (latexStreamEl) {
+    latexStreamEl.classList.remove("typing-active");
+  }
 }
 
 function renderDocPreview(htmlContent) {
@@ -327,6 +387,8 @@ function startGeneratingUI() {
     latexStreamEl.textContent = "Waiting for agent stream...";
     latexStreamEl.classList.add("streaming");
   }
+  setDocStatus("running", "Orchestrating research...");
+  setDocProgress(5);
   setWorkbenchStatus("running", "running");
   switchWorkbenchTab("latex");
   startLoadingActivity();
@@ -336,6 +398,7 @@ function stopGeneratingUI() {
   if (sendBtn) sendBtn.disabled = false;
   if (messageInput) messageInput.disabled = false;
   stopLoadingActivity();
+  finishLatexChunk();
   if (loadingMessageNode && loadingMessageNode.parentElement) {
     loadingMessageNode.parentElement.removeChild(loadingMessageNode);
   }
@@ -577,6 +640,7 @@ stopRunBtn?.addEventListener("click", async () => {
 
 latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));
 docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
+copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
 
 appendMessage("assistant", "Welcome. I am your Research Agent. Enter a topic to start.");
 renderAgentActivity([]);

@@ -1,32 +1,59 @@
 from __future__ import annotations
 
 import os
+import re
 
-from research_agent.models import generate_text
-from research_agent.observability import publish_progress
+from research_agent.models import agenerate_text
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output.latex import build_bibtex, render_main_tex, escape_latex
 
 
 def _build_body(state: GraphState) -> str:
-    citation_keys = [citation["key"] for citation in state["citations"][:12] if "key" in citation]
-    
     sections: list[str] = []
     for section in state["combined_sections"]:
         heading = escape_latex(section.get("heading", "Section"))
-        # Only escape the content if it's not already structured LaTeX (e.g. from LLM)
-        # However, for v1, we assume findings need escaping.
-        raw_content = section.get("content", "No synthesized content available.")
-        content = escape_latex(raw_content)
-        
-        # Add citations if available
-        if citation_keys:
-            # Simple heuristic: add citations at the end of sections for now
-            import random
-            # Pick 1-3 random citations for this section to make it look grounded
-            subset = random.sample(citation_keys, min(len(citation_keys), 3))
-            joined = ",".join(subset)
-            content += f" \\cite{{{joined}}}"
+        content = section.get("content", "No synthesized content available.")
+
+        # Use the citation_map from the section if available
+        citation_map = section.get("citation_map", {})
+
+        # Replace [REF1], [REF2], etc. with proper cite keys
+        ref_matches = re.findall(r"\[REF(\d+)\]", content)
+        for ref_num in ref_matches:
+            idx = int(ref_num)
+            ref_key = f"REF{idx}"
+
+            # Get the source info from the citation_map
+            source_info = citation_map.get(ref_key)
+            if source_info:
+                # Find a matching citation in state['citations']
+                source_title = source_info.get("title", "")
+                source_url = source_info.get("url", "")
+                found_key = None
+                for cit in state["citations"]:
+                    cit_title = cit.get("title", "")
+                    cit_url = cit.get("url", "")
+                    if source_title in cit_title or source_url in cit_url:
+                        found_key = cit["key"]
+                        break
+
+                if found_key:
+                    content = content.replace(f"[REF{ref_num}]", f"\\cite{{{found_key}}}")
+                else:
+                    content = content.replace(f"[REF{ref_num}]", f"[{ref_num}] (source: {source_title})")
+            else:
+                # Fallback: find any available citation for this task_id
+                task_id = section.get("task_id", "")
+                found_key = None
+                for cit in state["citations"]:
+                    if cit["key"].startswith(f"{task_id}_"):
+                        found_key = cit["key"]
+                        break
+                if found_key:
+                    content = content.replace(f"[REF{ref_num}]", f"\\cite{{{found_key}}}")
+                else:
+                    content = content.replace(f"[REF{ref_num}]", f"[{ref_num}]")
 
         sections.append(f"\\section{{{heading}}}\n{content}")
 
@@ -59,7 +86,7 @@ def _build_subagent_prompt(state: GraphState, fallback_body: str) -> str:
         f"{section_block}\n\n"
         "Available citations:\n"
         f"{citation_block}\n\n"
-        "Fallback draft body to improve:\n"
+        "Draft body to improve (ensure all \\cite commands are preserved):\n"
         f"{fallback_body}\n"
     )
 
@@ -80,8 +107,8 @@ def _use_subagent_model() -> bool:
     return False
 
 
-def composer_node(state: GraphState) -> dict:
-    publish_progress(
+async def composer_node(state: GraphState) -> dict:
+    await apublish_progress(
         agent="Composer",
         status="running",
         detail="Generating LaTeX output",
@@ -100,14 +127,14 @@ def composer_node(state: GraphState) -> dict:
     run_warnings = list(state["run_warnings"])
 
     if _use_subagent_model():
-        publish_progress(
+        await apublish_progress(
             agent="Composer",
             status="running",
             detail="Generating content via cloud subagent",
             message="Using cloud model for LaTeX body",
         )
         # Use the SUBAGENT model (cloud — OpenRouter free / NVIDIA NIMs)
-        subagent_text = generate_text(
+        subagent_text = await agenerate_text(
             role="subagent",
             prompt=_build_subagent_prompt(state, body),
             temperature=0.7,
@@ -129,7 +156,7 @@ def composer_node(state: GraphState) -> dict:
 
     bibtex = build_bibtex(state["citations"])
 
-    publish_progress(
+    await apublish_progress(
         agent="Composer",
         status="complete",
         detail="LaTeX content generated",

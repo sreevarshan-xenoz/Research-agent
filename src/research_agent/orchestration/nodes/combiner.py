@@ -1,10 +1,11 @@
-from research_agent.observability import publish_progress
+from research_agent.models import agenerate_text
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links, get_or_create_index
 from research_agent.orchestration.state import GraphState
 
 
-def combiner_node(state: GraphState) -> dict:
-    publish_progress(
+async def combiner_node(state: GraphState) -> dict:
+    await apublish_progress(
         agent="Combiner",
         status="running",
         detail="Synthesizing section drafts via Deep RAG",
@@ -20,14 +21,17 @@ def combiner_node(state: GraphState) -> dict:
 
         # Retrieve relevant chunks from the Deep RAG index
         query = f"{task['title']} {task['objective']}"
-        hits = index.search(query, limit=6)
+        hits = await index.asearch(query, limit=10)
 
         evidence_parts = []
-        for hit in hits:
+        for i, hit in enumerate(hits):
             source = hit.get("source_title") or hit.get("source_url") or "Source"
-            evidence_parts.append(f"[{source}]: {hit['text']}")
+            # Provide a stable reference key for the LLM to use
+            ref_key = f"REF{i+1}"
+            evidence_parts.append(f"[{ref_key}] ({source}): {hit['text']}")
 
         evidence_text = "\n".join(evidence_parts) if evidence_parts else "No specific evidence chunks found."
+        
         task_contradictions = [
             link
             for link in contradiction_links
@@ -43,24 +47,51 @@ def combiner_node(state: GraphState) -> dict:
                 )
                 for link in task_contradictions[:3]
             ]
-            contradiction_text = "\nContradictions detected:\n" + "\n".join(lines)
+            contradiction_text = "\nContradictions to address:\n" + "\n".join(lines)
 
-        content = (
-            f"Objective: {task['objective']}\n"
-            f"Evidence (Deep RAG):\n{evidence_text}\n"
-            f"{contradiction_text}\n"
-            f"Confidence score: {confidence:.2f}."
+        # Grounded synthesis prompt
+        prompt = (
+            f"You are a research synthesizer. Write a technical section for the topic: '{state['topic']}'.\n\n"
+            f"Section Title: {task['title']}\n"
+            f"Objective: {task['objective']}\n\n"
+            "Use the following evidence retrieved via Deep RAG. "
+            "IMPORTANT: Use the reference keys like [REF1], [REF2] exactly as provided to cite your claims.\n\n"
+            f"Evidence:\n{evidence_text}\n"
+            f"{contradiction_text}\n\n"
+            "Write 2-3 detailed paragraphs. Be objective and technical. "
+            "If contradictions are present, acknowledge the differing viewpoints."
         )
+
+        content = await agenerate_text(role="subagent", prompt=prompt)
+        if not content:
+            # Fallback to crude synthesis
+            content = (
+                f"Objective: {task['objective']}\n"
+                f"Evidence Summary:\n{evidence_text[:500]}...\n"
+                f"Confidence: {confidence:.2f}"
+            )
+
+        # Build citation map: REF number -> source info for composer to use
+        citation_map = {}
+        for i, hit in enumerate(hits):
+            ref_key = f"REF{i+1}"
+            citation_map[ref_key] = {
+                "title": hit.get("source_title") or hit.get("source_url") or "Source",
+                "url": hit.get("source_url") or "",
+                "provider": hit.get("source_type") or "web",
+            }
 
         sections.append(
             {
                 "task_id": task_id,
                 "heading": str(task["title"]),
                 "content": content,
+                "raw_evidence": evidence_text,
+                "citation_map": citation_map,  # Proper mapping for composer
             }
         )
 
-    publish_progress(
+    await apublish_progress(
         agent="Combiner",
         status="complete",
         detail=f"Synthesized {len(sections)} sections",

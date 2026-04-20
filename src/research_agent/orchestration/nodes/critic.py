@@ -1,11 +1,11 @@
-from research_agent.models import generate_json
-from research_agent.observability import publish_progress
+from research_agent.models import agenerate_json
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links
 from research_agent.orchestration.state import GraphState
 
 
-def critic_node(state: GraphState) -> dict:
-    publish_progress(
+async def critic_node(state: GraphState) -> dict:
+    await apublish_progress(
         agent="Critic",
         status="running",
         detail="Scoring evidence confidence",
@@ -72,7 +72,7 @@ def critic_node(state: GraphState) -> dict:
     
     # If we have low confidence and capacity for more iterations, generate new tasks
     if low_confidence_tasks and iteration_index < state["max_iterations"]:
-        publish_progress(
+        await apublish_progress(
             agent="Critic",
             status="running",
             detail="Generating follow-up tasks",
@@ -89,7 +89,7 @@ def critic_node(state: GraphState) -> dict:
         )
         
         # Use the HEAD model (local Ollama) for follow-up task generation
-        llm_followup = generate_json(role="head", prompt=prompt)
+        llm_followup = await agenerate_json(role="head", prompt=prompt)
         new_tasks = []
         if llm_followup and isinstance(llm_followup, dict) and "tasks" in llm_followup:
             raw_tasks = llm_followup["tasks"]
@@ -102,13 +102,14 @@ def critic_node(state: GraphState) -> dict:
                         new_tasks.append(t)
 
         if not new_tasks:
-            # Fallback follow-up tasks
+            # Fallback: create follow-up tasks that depend on the original low-confidence tasks
+            depends_on_originals = [str(t["task_id"]) for t in low_confidence_tasks]
             new_tasks = [
                 {
                     "task_id": f"f{iteration_index}",
                     "title": "Deep evidence recovery",
                     "objective": f"Recover missing evidence for: {state['topic']}",
-                    "depends_on": [],
+                    "depends_on": depends_on_originals,  # Proper dependency on originals
                 }
             ]
 
@@ -116,7 +117,7 @@ def critic_node(state: GraphState) -> dict:
             t["status"] = "pending"
             tasks.append(t)
 
-    publish_progress(
+    await apublish_progress(
         agent="Critic",
         status="complete",
         detail="Confidence scoring done",

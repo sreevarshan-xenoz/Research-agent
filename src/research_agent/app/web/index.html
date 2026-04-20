@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles_premium.css" />
   <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 </head>
 <body>
@@ -102,17 +102,34 @@
       </header>
 
       <section id="docWorkbench" class="panel doc-panel active">
+        <div class="doc-header">
+          <span class="doc-label">Document Preview</span>
+          <div class="doc-status" id="docStatusEl">
+            <span class="status-dot idle"></span>
+            <span class="status-text">Ready for content</span>
+          </div>
+        </div>
+        <div class="doc-progress-bar" id="docProgressBar">
+          <div class="doc-progress-fill"></div>
+        </div>
         <div id="editorToolbar"></div>
         <div id="docEditor" class="doc-editor"></div>
-        <div class="overleaf-actions" style="display: flex; gap: 12px; margin-top: 16px;">
-          <a id="newOverleafLink" href="https://www.overleaf.com/project/new" target="_blank" rel="noopener noreferrer" class="btn-link">Open Overleaf Project</a>
-          <a id="bundleLink" href="#" target="_blank" rel="noopener noreferrer" class="btn-link hidden">Download Overleaf Bundle</a>
+        <div class="doc-actions">
+          <button id="copyDocBtn" class="btn-icon" title="Copy to clipboard">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copy
+          </button>
+          <a id="newOverleafLink" href="https://www.overleaf.com/project/new" target="_blank" rel="noopener noreferrer" class="btn-link">Open Overleaf</a>
+          <a id="bundleLink" href="#" target="_blank" rel="noopener noreferrer" class="btn-link hidden">Download Bundle</a>
         </div>
       </section>
 
       <section id="latexWorkbench" class="panel latex-panel" aria-live="polite">
         <div class="panel-head" style="margin-bottom: 12px;">
-          <span class="badge">Live stream</span>
+          <span class="badge live-badge">
+            <span class="live-dot"></span>
+            Live stream
+          </span>
         </div>
         <pre id="latexStream" class="latex-stream">No generation yet.</pre>
       </section>
