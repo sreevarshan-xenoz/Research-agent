@@ -1,0 +1,76 @@
+# Research Agent v2 Configuration
+# Version 2.0
+
+runtime:
+  mode: parallel           # api_only | parallel | async
+  max_iterations: 4
+  max_runtime_minutes: 25
+  max_cost_usd: 5.0
+  parallel_workers: 4      # NEW: max concurrent subagent workers
+
+models:
+  # Orchestrator: local model for planning, clarification, critic
+  orchestrator_model: qwen3:8b
+  orchestrator_provider: ollama
+
+  # Subagent: primary model for section synthesis
+  subagent_provider: auto         # auto | ollama | openrouter | puter
+  subagent_local: deepseek-r1:8b  # Local Ollama model
+  subagent_cloud: openrouter/free # OpenRouter free tier (auto-selected if no local)
+
+  # Provider priority order (list)
+  # Options: ollama, openrouter, puter
+  provider_priority:
+    - ollama
+    - openrouter
+    - puter
+
+output:
+  # v2 template names
+  default_template: ieee-2col    # ieee-1col, ieee-2col, acm, springer
+  supported_templates:
+    - ieee-1col
+    - ieee-2col
+    - acm
+    - springer
+  default_columns: 2            # 1 or 2 column layout
+
+retrieval:
+  web_provider: hybrid          # duckduckgo | tavily | browser_use | hybrid
+  web_search_depth: advanced    # fast | balanced | advanced
+  paper_providers:
+    - arxiv
+    - semantic_scholar
+    - openalex
+  max_papers_per_section: 15
+  chunk_size: 1024
+  chunk_overlap: 128
+  allow_metadata_fallback: true
+  metadata_fallback_confidence_penalty: 0.15
+  enable_fuzzy_dedup: true       # SHA1 fingerprint dedup across runs
+
+# NEW v2 feature flags
+features:
+  parallel_subagents: true       # Enable parallel worker execution
+  cite_autofix: true             # Auto-fix broken citations
+  session_persistence: localStorage  # localStorage | redis | none
+  pdf_export: false              # Direct PDF generation (requires tectonic)
+  multi_language: false          # Multi-language template support
+
+# Ollama configuration (used if provider includes ollama)
+ollama:
+  api_base: http://localhost:11434
+  num_parallel: 4                # Concurrent requests per model
+  max_loaded_models: 2          # Max models resident in VRAM
+  timeout_seconds: 120
+
+# OpenRouter configuration (free tier)
+openrouter:
+  api_key: ""                    # Set OPENROUTER_API_KEY env var
+  timeout_seconds: 60
+
+# Monitoring & observability
+observability:
+  enable_tracing: false
+  enable_metrics: true
+  log_level: INFO

@@ -22,6 +22,8 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     models = data.setdefault("models", {})
     output = data.setdefault("output", {})
     retrieval = data.setdefault("retrieval", {})
+    ollama = data.setdefault("ollama", {})
+    openrouter = data.setdefault("openrouter", {})
 
     if env.get("MAX_ITERATIONS"):
         runtime["max_iterations"] = int(env["MAX_ITERATIONS"])
@@ -29,22 +31,36 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
         runtime["max_runtime_minutes"] = int(env["MAX_RUNTIME_MINUTES"])
     if env.get("MAX_COST_USD"):
         runtime["max_cost_usd"] = float(env["MAX_COST_USD"])
+    if env.get("PARALLEL_WORKERS"):
+        runtime["parallel_workers"] = int(env["PARALLEL_WORKERS"])
 
-    if env.get("LITELLM_DEFAULT_MODEL"):
-        models["worker_model"] = env["LITELLM_DEFAULT_MODEL"]
-    if env.get("WORKER_MODEL"):
-        models["worker_model"] = env["WORKER_MODEL"]
+    # v2 Model Routing
+    if env.get("ORCHESTRATOR_MODEL"):
+        models["orchestrator_model"] = env["ORCHESTRATOR_MODEL"]
+    if env.get("SUBAGENT_LOCAL_MODEL"):
+        models["subagent_local"] = env["SUBAGENT_LOCAL_MODEL"]
+    if env.get("SUBAGENT_CLOUD_MODEL"):
+        models["subagent_cloud"] = env["SUBAGENT_CLOUD_MODEL"]
+    if env.get("MODEL_PROVIDER_PRIORITY"):
+        models["provider_priority"] = _coerce_list(env["MODEL_PROVIDER_PRIORITY"])
 
-    if env.get("LITELLM_STRONG_MODEL"):
-        models["strong_model"] = env["LITELLM_STRONG_MODEL"]
-    if env.get("STRONG_MODEL"):
-        models["strong_model"] = env["STRONG_MODEL"]
+    # Ollama settings
+    if env.get("OLLAMA_API_BASE"):
+        ollama["api_base"] = env["OLLAMA_API_BASE"]
+    if env.get("OLLAMA_NUM_PARALLEL"):
+        ollama["num_parallel"] = int(env["OLLAMA_NUM_PARALLEL"])
 
-    # Hybrid multi-model settings
+    # OpenRouter settings
+    if env.get("OPENROUTER_API_KEY"):
+        openrouter["api_key"] = env["OPENROUTER_API_KEY"]
+
+    # Legacy aliases (deprecated)
     if env.get("HEAD_MODEL"):
         models["head_model"] = env["HEAD_MODEL"]
     if env.get("SUBAGENT_MODEL"):
         models["subagent_model"] = env["SUBAGENT_MODEL"]
+    if env.get("WORKER_MODEL"):
+        models["worker_model"] = env["WORKER_MODEL"]
 
     if env.get("DEFAULT_TEMPLATE"):
         output["default_template"] = env["DEFAULT_TEMPLATE"]
