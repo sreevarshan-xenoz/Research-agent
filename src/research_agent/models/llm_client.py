@@ -32,77 +32,59 @@ def stream_callback(callback: Callable[[str], None] | None) -> Iterator[None]:
         _STREAM_CALLBACK.reset(token)
 
 
-def _resolve_model(role: str) -> tuple[str, dict[str, Any]]:
-    """Resolve the litellm model string and extra kwargs for a given role.
+def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+    """Resolve the litellm model, extra kwargs, and fallbacks for a given role.
 
-    Role definitions (from centralized config):
-    - "head": Local orchestrator for planning/clarification/critic
-    - "subagent": Cloud model for section synthesis/LaTeX composition
-
-    Priority order per role:
-    - head: HEAD_MODEL env > default ollama/gemma4:e4b
-    - subagent: SUBAGENT_MODEL env > OPENROUTER_API_KEY > NVIDIA_API_KEY > fallback
+    v2 Implementation:
+    - Uses AppSettings for centralized configuration.
+    - Implements priority-based fallback (Ollama -> OpenRouter -> Puter).
     """
-    if role == "head":
-        model = os.getenv("HEAD_MODEL", "").strip()
-        if not model:
-            # Use config default or fallback
-            from research_agent.config import load_settings
-            try:
-                settings = load_settings()
-                model = settings.models.head_model or "ollama/gemma4:e4b"
-            except Exception:
-                model = "ollama/gemma4:e4b"
+    from research_agent.config import load_settings
+    settings = load_settings()
 
+    if role == "orchestrator" or role == "head":
+        model = settings.models.orchestrator_model
         extra: dict[str, Any] = {}
-        ollama_base = os.getenv("OLLAMA_API_BASE", "").strip()
-        if ollama_base:
-            extra["api_base"] = ollama_base
-        else:
-            # Try default local endpoint
-            extra["api_base"] = "http://localhost:11434"
+        if settings.models.orchestrator_provider == "ollama":
+            extra["api_base"] = settings.ollama.api_base
+        elif settings.models.orchestrator_provider == "openrouter":
+            extra["api_key"] = settings.openrouter.api_key or os.getenv("OPENROUTER_API_KEY", "")
+        
+        return model, extra, []
 
-        return model, extra
+    # Subagent role
+    priority = settings.models.provider_priority
+    model_list: list[tuple[str, dict[str, Any]]] = []
 
-    # role == "subagent"
-    model = os.getenv("SUBAGENT_MODEL", "").strip()
-    extra = {}
+    for provider in priority:
+        if provider == "ollama":
+            model_list.append((
+                f"ollama/{settings.models.subagent_local}",
+                {"api_base": settings.ollama.api_base}
+            ))
+        elif provider == "openrouter":
+            api_key = settings.openrouter.api_key or os.getenv("OPENROUTER_API_KEY", "")
+            if api_key:
+                model_list.append((
+                    settings.models.subagent_cloud,
+                    {"api_key": api_key}
+                ))
+        elif provider == "puter":
+            model_list.append((
+                "puter/ai21/jamba-large-1.7",
+                {}
+            ))
 
-    if not model:
-        # Auto-select from available API keys (priority order)
-        openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-        if openrouter_key:
-            model = "openrouter/openrouter/free"
-            extra["api_key"] = openrouter_key
-        else:
-            nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip() or os.getenv(
-                "NVIDIA_NIMS_API_KEY", ""
-            ).strip()
-            if nvidia_key:
-                model = "nvidia_nim/" + (
-                    os.getenv("NVIDIA_MODEL", "").strip()
-                    or "qwen/qwen3-coder-480b-a35b-instruct"
-                )
-                extra["api_key"] = nvidia_key
-            else:
-                # No cloud model available - use deterministic fallback
-                return "", {}
+    if not model_list:
+        return "gpt-4o-mini", {}, []
 
-    # Inject provider-specific credentials if not already set
-    if model.startswith("openrouter/") and "api_key" not in extra:
-        key = os.getenv("OPENROUTER_API_KEY", "").strip()
-        if key:
-            extra["api_key"] = key
+    primary_model, primary_extra = model_list[0]
+    fallbacks = [
+        {"model": m, **kwargs} 
+        for m, kwargs in model_list[1:]
+    ]
 
-    if model.startswith("nvidia_nim/") and "api_key" not in extra:
-        key = (
-            os.getenv("NVIDIA_API_KEY", "").strip()
-            or os.getenv("NVIDIA_NIMS_API_KEY", "").strip()
-        )
-        if key:
-            extra["api_key"] = key
-
-    return model, extra
+    return primary_model, primary_extra, fallbacks
 
 
 def _extract_json(text: str) -> str:
@@ -136,14 +118,14 @@ def _extract_json(text: str) -> str:
 
 async def agenerate_json(
     *,
-    role: str = "head",
+    role: str = "orchestrator",
     prompt: str,
     system_prompt: str = "You are a research assistant that only outputs valid JSON. No markdown, no explanation, just the JSON object.",
     temperature: float = 0.1,
     max_tokens: int = 4096,
 ) -> dict | list | None:
-    """Async version of generate_json."""
-    model, extra_kwargs = _resolve_model(role)
+    """Async version of generate_json with v2 fallback support."""
+    model, extra_kwargs, fallbacks = _resolve_model(role)
     if not model:
         return None
 
@@ -160,6 +142,7 @@ async def agenerate_json(
             ],
             temperature=temperature,
             max_tokens=max_tokens,
+            fallbacks=fallbacks,
             **extra_kwargs,
         )
 
@@ -183,8 +166,8 @@ async def agenerate_text(
     max_tokens: int = 4096,
     on_chunk: Callable[[str], None] | None = None,
 ) -> str | None:
-    """Async version of generate_text with streaming support."""
-    model, extra_kwargs = _resolve_model(role)
+    """Async version of generate_text with streaming and v2 fallback support."""
+    model, extra_kwargs, fallbacks = _resolve_model(role)
     if not model:
         return None
 
@@ -208,6 +191,7 @@ async def agenerate_text(
                 top_p=top_p,
                 max_tokens=max_tokens,
                 stream=True,
+                fallbacks=fallbacks,
                 **extra_kwargs,
             )
 
@@ -233,6 +217,7 @@ async def agenerate_text(
                 temperature=temperature,
                 top_p=top_p,
                 max_tokens=max_tokens,
+                fallbacks=fallbacks,
                 **extra_kwargs,
             )
 
@@ -244,7 +229,7 @@ async def agenerate_text(
 
 def generate_json(
     *,
-    role: str = "head",
+    role: str = "orchestrator",
     prompt: str,
     system_prompt: str = "You are a research assistant that only outputs valid JSON. No markdown, no explanation, just the JSON object.",
     temperature: float = 0.1,
@@ -252,17 +237,9 @@ def generate_json(
 ) -> dict | list | None:
     """Generate structured JSON using the model assigned to the given role.
 
-    Args:
-        role: "head" for local orchestrator, "subagent" for cloud model.
-        prompt: The user prompt to send.
-        system_prompt: System instruction for JSON output.
-        temperature: Sampling temperature.
-        max_tokens: Maximum tokens to generate.
-
-    Returns:
-        Parsed JSON (dict or list) on success, None on failure.
+    v2: Includes multi-provider fallback support.
     """
-    model, extra_kwargs = _resolve_model(role)
+    model, extra_kwargs, fallbacks = _resolve_model(role)
     if not model:
         return None
 
@@ -279,6 +256,7 @@ def generate_json(
             ],
             temperature=temperature,
             max_tokens=max_tokens,
+            fallbacks=fallbacks,
             **extra_kwargs,
         )
 
@@ -304,21 +282,9 @@ def generate_text(
 ) -> str | None:
     """Generate text using the model assigned to the given role.
 
-    Supports streaming for real-time UI updates via on_chunk callback.
-
-    Args:
-        role: "head" for local orchestrator, "subagent" for cloud model.
-        prompt: The user prompt to send.
-        system_prompt: Optional system instruction.
-        temperature: Sampling temperature.
-        top_p: Top-p sampling.
-        max_tokens: Maximum tokens to generate.
-        on_chunk: Optional callback for streaming chunks.
-
-    Returns:
-        Generated text on success, None on failure.
+    Supports streaming and v2 fallback support.
     """
-    model, extra_kwargs = _resolve_model(role)
+    model, extra_kwargs, fallbacks = _resolve_model(role)
     if not model:
         return None
 
@@ -343,6 +309,7 @@ def generate_text(
                 top_p=top_p,
                 max_tokens=max_tokens,
                 stream=True,
+                fallbacks=fallbacks,
                 **extra_kwargs,
             )
 
@@ -366,6 +333,7 @@ def generate_text(
                 temperature=temperature,
                 top_p=top_p,
                 max_tokens=max_tokens,
+                fallbacks=fallbacks,
                 **extra_kwargs,
             )
 
