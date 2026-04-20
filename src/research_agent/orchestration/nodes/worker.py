@@ -108,38 +108,45 @@ async def _emit_progress(
     await apublish_progress(agent=agent, status=status, detail=detail, message=message)
 
 
-def make_worker_node(registry: dict[str, BaseToolAdapter]):
-    registry_provider_count = max(len(registry), 1)
+class WorkerPool:
+    """Manages parallel execution of research tasks with concurrency control."""
 
-    async def worker_node(state: GraphState) -> dict:
-        tasks = [dict(task) for task in state["tasks"]]
-        if not tasks:
-            return {"phase": "workers_idle"}
+    def __init__(self, max_workers: int = 4):
+        self.semaphore = asyncio.Semaphore(max_workers)
 
-        ready_task_ids = get_ready_task_ids(tasks)
-        if not ready_task_ids:
-            return {"phase": "workers_idle"}
-
-        findings = dict(state["task_findings"])
-        run_warnings = list(state["run_warnings"])
-        estimated_cost_usd = float(state.get("estimated_cost_usd", 0.0) or 0.0)
-        progress_handler = get_progress_callback()
-
-        async def execute_single_task(task: dict[str, object]) -> tuple[str, dict[str, object], list[str]]:
+    async def execute_task(
+        self, 
+        task: dict[str, object], 
+        registry: dict[str, BaseToolAdapter],
+        progress_handler: ProgressCallback | None = None
+    ) -> tuple[str, dict[str, object], list[str]]:
+        async with self.semaphore:
             task_id = str(task["task_id"])
             task["status"] = "running"
+            
             await _emit_progress(
                 progress_handler,
-                agent=f"SubResearch {task_id}",
+                agent=f"Worker {task_id}",
                 status="running",
                 detail=str(task["title"]),
-                message=f"Running {task_id}",
+                message=f"Processing {task_id}",
             )
+
             query = str(task["objective"])
             providers = task.get("providers")
-            result_map = await arun_multi_source_search(query, registry, limit=4, providers=providers)
+            
+            # Execute multi-source search
+            result_map = await arun_multi_source_search(
+                query, 
+                registry, 
+                limit=4, 
+                providers=providers
+            )
+            
+            # Enrich results with page content
             await _enrich_web_results_with_page_content(result_map, registry)
             
+            # Format findings
             task_finding = {
                 provider: {
                     "item_count": len(result.items),
@@ -164,19 +171,47 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
             task["status"] = "complete"
             await _emit_progress(
                 progress_handler,
-                agent=f"SubResearch {task_id}",
+                agent=f"Worker {task_id}",
                 status="complete",
                 detail=f"{task['title']} ({sum(len(result.items) for result in result_map.values())} items)",
                 message=f"Completed {task_id}",
             )
             return task_id, task_finding, task_warnings
 
-        # Execute all ready tasks in parallel
+
+def make_worker_node(registry: dict[str, BaseToolAdapter]):
+    from research_agent.config import load_settings
+    settings = load_settings()
+    max_workers = settings.runtime.parallel_workers
+    pool = WorkerPool(max_workers=max_workers)
+    
+    registry_provider_count = max(len(registry), 1)
+
+    async def worker_node(state: GraphState) -> dict:
+        tasks = [dict(task) for task in state["tasks"]]
+        if not tasks:
+            return {"phase": "workers_idle"}
+
+        ready_task_ids = get_ready_task_ids(tasks)
+        if not ready_task_ids:
+            return {"phase": "workers_idle"}
+
+        findings = dict(state["task_findings"])
+        run_warnings = list(state["run_warnings"])
+        estimated_cost_usd = float(state.get("estimated_cost_usd", 0.0) or 0.0)
+        progress_handler = get_progress_callback()
+
+        # Execute all ready tasks in parallel via the WorkerPool
         ready_tasks = [t for t in tasks if str(t["task_id"]) in ready_task_ids]
         
-        results = await asyncio.gather(*(execute_single_task(t) for t in ready_tasks))
+        execution_tasks = [
+            pool.execute_task(t, registry, progress_handler) 
+            for t in ready_tasks
+        ]
+        
+        results = await asyncio.gather(*execution_tasks)
 
-        # Rough cost estimator for provider API usage in v1.
+        # Rough cost estimator
         estimated_cost_usd += len(ready_tasks) * registry_provider_count * 0.01
             
         for task_id, task_finding, task_warnings in results:
