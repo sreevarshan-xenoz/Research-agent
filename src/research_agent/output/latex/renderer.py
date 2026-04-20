@@ -31,11 +31,19 @@ def escape_latex(value: str) -> str:
     return escaped
 
 
-def _template_path(template_name: str) -> Path:
-    root = Path(__file__).resolve().parent / "templates" / template_name / "main.tex.j2"
-    if not root.exists():
-        raise FileNotFoundError(f"Template not found: {template_name}")
-    return root
+def _get_jinja_env() -> "jinja2.Environment":
+    import jinja2
+    template_dir = Path(__file__).resolve().parent / "templates"
+    return jinja2.Environment(
+        loader=jinja2.FileSystemLoader(template_dir),
+        autoescape=False,  # LaTeX is not HTML
+        block_start_string='{%',
+        block_end_string='%}',
+        variable_start_string='{{',
+        variable_end_string='}}',
+        comment_start_string='{#',
+        comment_end_string='#}',
+    )
 
 
 def render_main_tex(
@@ -46,13 +54,27 @@ def render_main_tex(
     abstract: str,
     body: str,
 ) -> str:
-    template = _template_path(template_name).read_text(encoding="utf-8")
-    rendered = template
-    rendered = rendered.replace("{{ title }}", escape_latex(title))
-    rendered = rendered.replace("{{ author_block }}", escape_latex(author_block))
-    rendered = rendered.replace("{{ abstract }}", escape_latex(abstract))
-    rendered = rendered.replace("{{ body }}", body)
-    return rendered
+    """Renders the main.tex file using Jinja2 templates."""
+    # Map friendly names to actual folder/file structure if needed
+    # v2 uses ieee-1col, ieee-2col, acm, springer
+    base_template = template_name
+    if template_name.startswith("ieee"):
+        base_template = "ieee"
+    
+    env = _get_jinja_env()
+    try:
+        template = env.get_template(f"{base_template}/main.tex.j2")
+    except Exception:
+        # Fallback to direct path for custom templates
+        raise FileNotFoundError(f"Template not found for: {template_name}")
+
+    return template.render(
+        title=escape_latex(title),
+        author_block=escape_latex(author_block),
+        abstract=escape_latex(abstract),
+        body=body,
+        columns=2 if "2col" in template_name else 1
+    )
 
 
 def build_bibtex(citations: Iterable[dict[str, str]]) -> str:
@@ -125,9 +147,9 @@ def validate_latex_package(
     if "\\section{" not in normalized:
         errors.append("missing_required_section")
 
-    if template_name == "ieee" and "IEEEtran" not in normalized:
+    if template_name.startswith("ieee") and "IEEEtran" not in normalized:
         errors.append("template_structure_invalid:ieee")
-    if template_name == "acm" and "acmart" not in normalized:
+    if template_name.startswith("acm") and "acmart" not in normalized:
         errors.append("template_structure_invalid:acm")
 
     cite_keys: set[str] = set()
