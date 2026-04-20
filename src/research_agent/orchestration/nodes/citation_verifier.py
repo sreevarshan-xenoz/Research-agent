@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import re
 from typing import Any
+import httpx
 
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
+from research_agent.tools.open_alex import OpenAlexAdapter
+from research_agent.config import load_settings
 
 
 def _first_author(item: dict[str, Any]) -> str:
@@ -135,7 +138,50 @@ def _find_unsupported_sections(
     return filtered_sections, unsupported_task_ids, unsupported_claim_counts
 
 
+async def _autofix_citations(
+    citations: list[dict[str, str]], 
+    mailto: str = "noreply@example.com"
+) -> tuple[list[dict[str, str]], int]:
+    """Attempts to repair incomplete citations using OpenAlex."""
+    repaired_count = 0
+    adapter = OpenAlexAdapter(mailto=mailto)
+    
+    fixed_citations: list[dict[str, str]] = []
+    
+    for cite in citations:
+        needs_fix = (
+            cite.get("author") == "Unknown" or 
+            not cite.get("url") or 
+            len(cite.get("title", "")) < 10
+        )
+        
+        if needs_fix and cite.get("title"):
+            try:
+                # Search for the exact title to get better metadata
+                search_res = adapter.search(cite["title"], limit=1)
+                if search_res.items:
+                    best_match = search_res.items[0]
+                    # Only update if we found something meaningful
+                    if best_match.get("title"):
+                        cite["title"] = str(best_match["title"])
+                        if best_match.get("authors"):
+                            cite["author"] = str(best_match["authors"][0])
+                        if best_match.get("url"):
+                            cite["url"] = str(best_match["url"])
+                        if best_match.get("year"):
+                            cite["year"] = str(best_match["year"])
+                        repaired_count += 1
+            except Exception:
+                pass
+        
+        fixed_citations.append(cite)
+        
+    return fixed_citations, repaired_count
+
+
 async def citation_verifier_node(state: GraphState) -> dict:
+    settings = load_settings()
+    
     await apublish_progress(
         agent="Citation Verifier",
         status="running",
@@ -183,17 +229,30 @@ async def citation_verifier_node(state: GraphState) -> dict:
                     }
                 )
 
+    # v2: Citation Auto-Fix
+    repaired_count = 0
+    if settings.features.cite_autofix and citations:
+        await apublish_progress(
+            agent="Citation Verifier",
+            status="running",
+            detail=f"Auto-fixing {len(citations)} citations",
+            message="Repairing metadata",
+        )
+        citations, repaired_count = await _autofix_citations(citations)
+
     if not citations:
         run_warnings.append("citation_verifier:no_citations_collected")
+
+    detail_msg = f"Collected {len(citations)} citations"
+    if repaired_count > 0:
+        detail_msg += f" ({repaired_count} repaired)"
+    if unsupported_task_ids:
+        detail_msg += f", rejected {len(unsupported_task_ids)} unsupported sections"
 
     await apublish_progress(
         agent="Citation Verifier",
         status="complete",
-        detail=(
-            f"Collected {len(citations)} citations"
-            if not unsupported_task_ids
-            else f"Collected {len(citations)} citations, rejected {len(unsupported_task_ids)} unsupported sections"
-        ),
+        detail=detail_msg,
         message="Citation pass complete",
     )
     return {
