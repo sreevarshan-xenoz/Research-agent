@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
+
+try:
+    # Try the new package name first
+    from ddgs import DDGS
+except Exception:
+    try:
+        # Fall back to the old package name
+        from duckduckgo_search import DDGS
+    except Exception:  # pragma: no cover - exercised only when optional package is absent
+        DDGS = None  # type: ignore[assignment]
 
 from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
 
 
 class WebSearchAdapter(BaseToolAdapter):
-    provider_name = "web_search"
+    """Tavily-based web search adapter."""
+    provider_name = "tavily"
 
     def __init__(
         self,
@@ -62,4 +74,62 @@ class WebSearchAdapter(BaseToolAdapter):
             "snippet": row.get("content", ""),
             "score": row.get("score"),
             "source_type": "web",
+        }
+
+
+class DuckDuckGoAdapter(BaseToolAdapter):
+    """DuckDuckGo-based web search adapter (free)."""
+    provider_name = "duckduckgo"
+
+    def __init__(self, *, region: str = "wt-wt", safesearch: str = "moderate", time: str | None = None) -> None:
+        self.region = region
+        self.safesearch = safesearch
+        self.time = time
+
+    def search(self, query: str, limit: int = 5) -> ToolResult:
+        normalized_limit = safe_limit(limit)
+        if DDGS is None:
+            return ToolResult(
+                provider=self.provider_name,
+                warnings=["duckduckgo_dependency_missing"],
+                metadata={"query": query, "limit": normalized_limit},
+            )
+
+        try:
+            with DDGS() as ddgs:
+                results = list(
+                    ddgs.text(
+                        query,
+                        region=self.region,
+                        safesearch=self.safesearch,
+                        timelimit=self.time,
+                        max_results=normalized_limit,
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001
+            return ToolResult(
+                provider=self.provider_name,
+                warnings=[f"duckduckgo_error:{type(exc).__name__}"],
+                metadata={"query": query, "limit": normalized_limit},
+            )
+
+        items = [self._normalize_item(row) for row in results]
+        return ToolResult(
+            provider=self.provider_name,
+            items=items,
+            metadata={"query": query, "limit": normalized_limit, "raw_count": len(items)},
+        )
+
+    async def asearch(self, query: str, limit: int = 5) -> ToolResult:
+        # DDGS has no native async, but we can wrap it
+        return await asyncio.to_thread(self.search, query, limit)
+
+    @staticmethod
+    def _normalize_item(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "title": row.get("title", ""),
+            "url": row.get("href", ""),
+            "snippet": row.get("body", ""),
+            "source_type": "web",
+            "provider": "duckduckgo",
         }
