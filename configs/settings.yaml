@@ -54,6 +54,7 @@ features:
   parallel_subagents: true       # Enable parallel worker execution
   cite_autofix: true             # Auto-fix broken citations
   session_persistence: localStorage  # localStorage | redis | none
+  enable_session_persistence: true  # v2 simple session persistence
   pdf_export: false              # Direct PDF generation (requires tectonic)
   multi_language: false          # Multi-language template support
 

@@ -135,6 +135,7 @@ class FeatureFlags(BaseModel):
     parallel_subagents: bool = True
     cite_autofix: bool = True
     session_persistence: Literal["localStorage", "redis", "none"] = "localStorage"
+    enable_session_persistence: bool = True
     pdf_export: bool = False
     multi_language: bool = False
 

@@ -35,7 +35,7 @@ def _serialize_state(state: WorkflowState) -> dict[str, Any]:
         "max_cost_usd": state.max_cost_usd,
         "estimated_cost_usd": state.estimated_cost_usd,
         "started_at": state.started_at,
-        "interrupt_signal": None,
+        "interrupted": bool(state.interrupted),
         "stop_reason": state.stop_reason,
         "tasks": [
             {
@@ -77,7 +77,7 @@ def _deserialize_state(payload: dict[str, Any]) -> WorkflowState:
         max_cost_usd=float(payload.get("max_cost_usd", 5.0)),
         estimated_cost_usd=float(payload.get("estimated_cost_usd", 0.0)),
         started_at=float(payload.get("started_at", time.time())),
-        interrupt_signal=None,
+        interrupted=bool(payload.get("interrupted", False)),
         stop_reason=payload.get("stop_reason"),
         tasks=tasks,
         section_confidence=dict(payload.get("section_confidence", {})),
@@ -129,6 +129,20 @@ def load_latest_checkpoint(run_id: str) -> WorkflowState | None:
         return None
 
     return _deserialize_state(state_payload)
+
+
+def save_session_id(run_id: str) -> None:
+    """Saves the current run_id to a session file for recovery."""
+    session_file = _checkpoint_root() / "last_session.txt"
+    session_file.write_text(run_id, encoding="utf-8")
+
+
+def load_session_id() -> str | None:
+    """Loads the last saved run_id."""
+    session_file = _checkpoint_root() / "last_session.txt"
+    if session_file.exists():
+        return session_file.read_text(encoding="utf-8").strip()
+    return None
 
 
 def append_run_event(*, run_id: str, event: str, payload: dict[str, Any]) -> Path:
