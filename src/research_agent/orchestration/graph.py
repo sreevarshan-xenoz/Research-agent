@@ -14,6 +14,7 @@ from research_agent.orchestration.nodes import (
     critic_node,
     dependency_blocked_node,
     exporter_node,
+    figure_generator_node,
     get_pending_task_ids,
     get_ready_task_ids,
     indexing_node,
@@ -97,6 +98,7 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_node("indexing", indexing_node)
     graph.add_node("critic", critic_node)
     graph.add_node("combiner", combiner_node)
+    graph.add_node("figure_generator", figure_generator_node)
     graph.add_node("citation_verifier", citation_verifier_node)
     graph.add_node("composer", composer_node)
     graph.add_node("exporter", exporter_node)
@@ -139,7 +141,8 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
 
     graph.add_edge("stopped", "combiner")
     
-    graph.add_edge("combiner", "citation_verifier")
+    graph.add_edge("combiner", "figure_generator")
+    graph.add_edge("figure_generator", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
     graph.add_edge("composer", "exporter")
     graph.add_edge("exporter", END)

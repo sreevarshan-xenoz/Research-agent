@@ -36,6 +36,7 @@ class GraphState(TypedDict):
     critic_notes: list[str]
     combined_sections: list[dict[str, str]]
     citations: list[dict[str, str]]
+    figures: list[dict[str, str]]
     latex_main: str
     bibtex: str
     artifact_root: str
@@ -76,6 +77,7 @@ class WorkflowState:
     critic_notes: List[str] = field(default_factory=list)
     combined_sections: List[Dict[str, str]] = field(default_factory=list)
     citations: List[Dict[str, str]] = field(default_factory=list)
+    figures: List[Dict[str, str]] = field(default_factory=list)
     latex_main: str = ""
     bibtex: str = ""
     artifact_root: str = ".runtime/artifacts"
@@ -116,6 +118,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "critic_notes": state.critic_notes,
         "combined_sections": state.combined_sections,
         "citations": state.citations,
+        "figures": state.figures,
         "latex_main": state.latex_main,
         "bibtex": state.bibtex,
         "artifact_root": state.artifact_root,
@@ -157,6 +160,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         critic_notes=state["critic_notes"],
         combined_sections=state["combined_sections"],
         citations=state["citations"],
+        figures=state.get("figures", []),
         latex_main=state["latex_main"],
         bibtex=state["bibtex"],
         artifact_root=state["artifact_root"],
