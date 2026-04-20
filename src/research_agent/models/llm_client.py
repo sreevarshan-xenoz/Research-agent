@@ -8,6 +8,7 @@ Uses litellm as the unified backend for all providers.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from contextlib import contextmanager
@@ -34,18 +35,32 @@ def stream_callback(callback: Callable[[str], None] | None) -> Iterator[None]:
 def _resolve_model(role: str) -> tuple[str, dict[str, Any]]:
     """Resolve the litellm model string and extra kwargs for a given role.
 
-    Returns (model_string, extra_kwargs) where extra_kwargs may contain
-    api_key, api_base, etc.
+    Role definitions (from centralized config):
+    - "head": Local orchestrator for planning/clarification/critic
+    - "subagent": Cloud model for section synthesis/LaTeX composition
+
+    Priority order per role:
+    - head: HEAD_MODEL env > default ollama/gemma4:e4b
+    - subagent: SUBAGENT_MODEL env > OPENROUTER_API_KEY > NVIDIA_API_KEY > fallback
     """
     if role == "head":
         model = os.getenv("HEAD_MODEL", "").strip()
         if not model:
-            model = "ollama/gemma4:e4b"
+            # Use config default or fallback
+            from research_agent.config import load_settings
+            try:
+                settings = load_settings()
+                model = settings.models.head_model or "ollama/gemma4:e4b"
+            except Exception:
+                model = "ollama/gemma4:e4b"
 
         extra: dict[str, Any] = {}
         ollama_base = os.getenv("OLLAMA_API_BASE", "").strip()
         if ollama_base:
             extra["api_base"] = ollama_base
+        else:
+            # Try default local endpoint
+            extra["api_base"] = "http://localhost:11434"
 
         return model, extra
 
@@ -54,7 +69,7 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any]]:
     extra = {}
 
     if not model:
-        # Try OpenRouter first, then NVIDIA NIMs
+        # Auto-select from available API keys (priority order)
         openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
         if openrouter_key:
             model = "openrouter/openrouter/free"
@@ -70,7 +85,8 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any]]:
                 )
                 extra["api_key"] = nvidia_key
             else:
-                return "", {}  # No model available
+                # No cloud model available - use deterministic fallback
+                return "", {}
 
     # Inject provider-specific credentials if not already set
     if model.startswith("openrouter/") and "api_key" not in extra:
@@ -116,6 +132,114 @@ def _extract_json(text: str) -> str:
                 pass
 
     return text
+
+
+async def agenerate_json(
+    *,
+    role: str = "head",
+    prompt: str,
+    system_prompt: str = "You are a research assistant that only outputs valid JSON. No markdown, no explanation, just the JSON object.",
+    temperature: float = 0.1,
+    max_tokens: int = 4096,
+) -> dict | list | None:
+    """Async version of generate_json."""
+    model, extra_kwargs = _resolve_model(role)
+    if not model:
+        return None
+
+    try:
+        import litellm
+
+        litellm.drop_params = True
+
+        response = await litellm.acompletion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **extra_kwargs,
+        )
+
+        text = response.choices[0].message.content or ""
+        text = _extract_json(text)
+        if not text:
+            return None
+
+        return json.loads(text)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def agenerate_text(
+    *,
+    role: str = "subagent",
+    prompt: str,
+    system_prompt: str = "",
+    temperature: float = 0.7,
+    top_p: float = 0.8,
+    max_tokens: int = 4096,
+    on_chunk: Callable[[str], None] | None = None,
+) -> str | None:
+    """Async version of generate_text with streaming support."""
+    model, extra_kwargs = _resolve_model(role)
+    if not model:
+        return None
+
+    chunk_handler = on_chunk or _STREAM_CALLBACK.get()
+
+    try:
+        import litellm
+
+        litellm.drop_params = True
+
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        if chunk_handler:
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                stream=True,
+                **extra_kwargs,
+            )
+
+            chunks: list[str] = []
+            async for part in response:
+                delta = part.choices[0].delta.content or ""
+                if delta:
+                    chunks.append(delta)
+                    try:
+                        if asyncio.iscoroutinefunction(chunk_handler):
+                            await chunk_handler(delta)
+                        else:
+                            chunk_handler(delta)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            text = "".join(chunks).strip()
+            return text or None
+        else:
+            response = await litellm.acompletion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                **extra_kwargs,
+            )
+
+            text = (response.choices[0].message.content or "").strip()
+            return text or None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def generate_json(

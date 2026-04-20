@@ -18,10 +18,18 @@ class RuntimeSettings(BaseModel):
 
 
 class ModelSettings(BaseModel):
-    worker_model: str
-    strong_model: str
-    head_model: str = ""  # Local orchestrator (e.g. "ollama/gemma4:e4b")
-    subagent_model: str = ""  # Cloud model for heavy tasks (e.g. "openrouter/openrouter/free")
+    """Model configuration with clear role mappings.
+
+    Role definitions:
+    - head: Local model for orchestration (planning, clarification, critic). Default: ollama/gemma4:e4b
+    - subagent: Cloud model for heavy generation (section synthesis, LaTeX composition). Default: auto-select from OPENROUTER/NVIDIA keys
+    - worker_model: Legacy alias for backward compatibility
+    - strong_model: Legacy alias for backward compatibility
+    """
+    head_model: str = "ollama/gemma4:e4b"  # Local orchestrator
+    subagent_model: str = ""  # Cloud model for heavy tasks (auto-select if empty)
+    worker_model: str = ""  # Legacy alias
+    strong_model: str = ""  # Legacy alias
 
 
 class OutputSettings(BaseModel):
@@ -36,8 +44,8 @@ class OutputSettings(BaseModel):
 
 
 class RetrievalSettings(BaseModel):
-    web_provider: str = "scrape"
-    paper_providers: list[str] = Field(default_factory=lambda: ["arxiv", "semantic_scholar"])
+    web_provider: str = "duckduckgo"
+    paper_providers: list[str] = Field(default_factory=lambda: ["arxiv", "semantic_scholar", "openalex"])
     allow_metadata_fallback: bool = True
     metadata_fallback_confidence_penalty: float = Field(default=0.15, ge=0, le=1)
 
@@ -46,12 +54,16 @@ class RetrievalSettings(BaseModel):
     def validate_paper_providers(cls, value: list[str]) -> list[str]:
         if not value:
             raise ValueError("paper_providers cannot be empty")
+        supported = {"arxiv", "semantic_scholar", "openalex"}
+        for p in value:
+            if p not in supported:
+                raise ValueError(f"Unsupported paper provider: {p}. Supported: {sorted(supported)}")
         return value
 
     @field_validator("web_provider")
     @classmethod
     def validate_web_provider(cls, value: str) -> str:
-        supported = {"tavily", "browser_use", "hybrid", "scrape"}
+        supported = {"tavily", "duckduckgo", "browser_use", "hybrid", "scrape"}
         if value not in supported:
             raise ValueError(f"web_provider must be one of: {sorted(supported)}")
         return value

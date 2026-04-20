@@ -28,7 +28,7 @@ class ResearchIndex:
             ),
         )
 
-    def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
+    async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
         # For v1, we use a simple deterministic "embedding" if no real model is available
         # In a real scenario, we'd use sentence-transformers or NVIDIA's embedding API
         # To keep it "free first" and low-dep, we use a hash-based pseudo-embedding
@@ -41,8 +41,9 @@ class ResearchIndex:
             try:
                 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
                 embedder = NVIDIAEmbeddings(api_key=api_key)
-                # Note: This is a synchronous call in v1 for simplicity
-                return embedder.embed_documents(texts)
+                # Now using async call if available or running in thread
+                import asyncio
+                return await asyncio.to_thread(embedder.embed_documents, texts)
             except Exception:
                 pass
         
@@ -55,7 +56,7 @@ class ResearchIndex:
             
         return [mock_embed(t) for t in texts]
 
-    def add_finding(self, task_id: str, provider: str, item: Dict[str, Any]):
+    async def aadd_finding(self, task_id: str, provider: str, item: Dict[str, Any]):
         text = item.get("snippet") or item.get("content") or item.get("title") or ""
         if not text:
             return
@@ -64,7 +65,7 @@ class ResearchIndex:
         if not chunks:
             return
             
-        embeddings = self._get_embeddings(chunks)
+        embeddings = await self._get_embeddings(chunks)
         
         source_url = str(item.get("url") or "")
         points = []
@@ -101,8 +102,9 @@ class ResearchIndex:
         )
         self._inserted_points += len(points)
 
-    def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        query_vector = self._get_embeddings([query])[0]
+    async def asearch(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        query_vectors = await self._get_embeddings([query])
+        query_vector = query_vectors[0]
         
         results = self.client.query_points(
             collection_name=self.collection_name,
