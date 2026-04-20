@@ -14,22 +14,35 @@ SETTINGS = load_settings()
 TOOL_REGISTRY = build_tool_registry(SETTINGS)
 
 
-def run_research(topic: str, template: str) -> str:
+async def run_research(topic: str, template: str) -> str:
     topic = (topic or "").strip()
     if not topic:
-        return "Please provide a research topic."
+        return "⚠️ Please provide a research topic."
+
+    # v2 uses load_settings() to get current provider info
+    settings = load_settings()
+    provider_info = f"Orchestrator: {settings.models.orchestrator_provider} ({settings.models.orchestrator_model})"
+    worker_info = f"Workers: {settings.runtime.parallel_workers} (Parallel)"
 
     initial_state = WorkflowState(
         run_id=f"run-{uuid.uuid4().hex[:8]}",
         topic=topic,
         template=template,
     )
-    updated = run_graph(initial_state, registry=TOOL_REGISTRY)
+    
+    try:
+        updated = await run_graph(initial_state, registry=TOOL_REGISTRY)
+    except Exception as e:
+        return f"❌ Error during execution: {str(e)}"
+
+    header = f"🚀 {provider_info} | {worker_info}\n"
+    header += "=" * 60 + "\n"
 
     if updated.phase == "awaiting_user_clarification":
-        questions = "\n".join(f"- {q}" for q in updated.clarification_questions)
+        questions = "\n".join(f"❓ {q}" for q in updated.clarification_questions)
         return (
-            "Clarification required before planning.\n"
+            header +
+            "🔍 Clarification required before planning.\n"
             f"Topic: {updated.topic}\n"
             f"Template: {updated.template}\n\n"
             f"Questions:\n{questions}"
@@ -38,44 +51,63 @@ def run_research(topic: str, template: str) -> str:
     task_lines = "\n".join(
         f"- {task.task_id}: {task.title} ({task.status})" for task in updated.tasks
     )
-    note_lines = "\n".join(f"- {note}" for note in updated.critic_notes)
-    warning_lines = "\n".join(f"- {warning}" for warning in updated.run_warnings[:10])
+    
+    # Format warnings with emoji
+    warning_lines = ""
+    if updated.run_warnings:
+        warning_lines = "\n⚠️ Warnings:\n" + "\n".join(f"  • {w}" for w in updated.run_warnings[:10])
+    
+    note_lines = "\n".join(f"📝 {note}" for note in updated.critic_notes)
     section_lines = "\n".join(
-        f"- {section.get('heading', 'Section')}: {section.get('content', '')[:120]}..."
+        f"📄 {section.get('heading', 'Section')}: {len(section.get('content', ''))} chars"
         for section in updated.combined_sections
     )
-    note_lines = note_lines or "- none"
-    warning_lines = warning_lines or "- none"
-    section_lines = section_lines or "- none"
+    
+    note_lines = note_lines or "📝 No critic notes."
+    section_lines = section_lines or "📄 No sections generated."
+
+    status_msg = "✅ Research run completed successfully."
+    if updated.stop_reason and updated.stop_reason != "completed":
+        status_msg = f"🛑 Run stopped: {updated.stop_reason}"
 
     return (
-        "Research run completed.\n"
+        header +
+        f"{status_msg}\n"
         f"Topic: {updated.topic}\n"
-        f"Template: {updated.template}\n"
         f"Phase: {updated.phase}\n\n"
-        f"Runtime mode: {SETTINGS.runtime.mode}\n"
-        f"Worker model: {SETTINGS.models.worker_model}\n"
-        f"Strong model: {SETTINGS.models.strong_model}\n"
-        f"Artifact directory: {updated.artifact_dir}\n\n"
-        f"Tasks:\n{task_lines}\n\n"
-        f"Critic notes:\n{note_lines}\n\n"
-        f"Warnings:\n{warning_lines}\n\n"
+        f"📂 Artifacts: {updated.artifact_dir}\n"
+        f"⏱️ Elapsed: {round(time.time() - updated.started_at, 1)}s\n\n"
+        f"Tasks:\n{task_lines}\n"
+        f"{warning_lines}\n\n"
+        f"Critic Notes:\n{note_lines}\n\n"
         f"Sections:\n{section_lines}\n\n"
-        "Generated files: main.tex, references.bib, compile_instructions.md, summary.json"
+        "✨ Files generated: main.tex, references.bib, compile_instructions.md"
     )
 
 
 def build_app() -> gr.Blocks:
-    with gr.Blocks(title="Research Agent v1") as demo:
-        gr.Markdown("# Research Agent v1")
-        topic = gr.Textbox(label="Research topic", lines=3)
-        template = gr.Dropdown(
-            choices=SETTINGS.output.supported_templates,
-            value=SETTINGS.output.default_template,
-            label="Template",
-        )
-        run_btn = gr.Button("Start")
-        output = gr.Textbox(label="Status", lines=8)
+    settings = load_settings()
+    with gr.Blocks(title="Research Agent v2", theme=gr.themes.Soft()) as demo:
+        gr.Markdown(f"# 🔬 Research Agent v2")
+        gr.Markdown(f"**Mode:** {settings.runtime.mode} | **Parallel Workers:** {settings.runtime.parallel_workers}")
+        
+        with gr.Row():
+            with gr.Column(scale=1):
+                topic = gr.Textbox(
+                    label="Research Topic / Question", 
+                    placeholder="e.g., Comparing CRISPR-Cas9 efficiency in therapeutic applications",
+                    lines=5
+                )
+                template = gr.Dropdown(
+                    choices=settings.output.supported_templates,
+                    value=settings.output.default_template,
+                    label="LaTeX Template",
+                )
+                run_btn = gr.Button("🚀 Start Research", variant="primary")
+            
+            with gr.Column(scale=2):
+                output = gr.Textbox(label="Execution Workbench", lines=25, interactive=False)
+        
         run_btn.click(fn=run_research, inputs=[topic, template], outputs=[output])
     return demo
 
