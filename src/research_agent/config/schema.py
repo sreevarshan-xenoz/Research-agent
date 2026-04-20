@@ -67,6 +67,7 @@ class OutputSettings(BaseModel):
         default_factory=lambda: ["ieee-1col", "ieee-2col", "acm", "springer"]
     )
     default_columns: Literal[1, 2] = 2
+    language: str = "en"
 
     @model_validator(mode="after")
     def validate_template_config(self) -> "OutputSettings":

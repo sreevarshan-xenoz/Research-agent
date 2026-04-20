@@ -53,6 +53,7 @@ def render_main_tex(
     author_block: str,
     abstract: str,
     body: str,
+    language: str = "en",
 ) -> str:
     """Renders the main.tex file using Jinja2 templates."""
     # Map friendly names to actual folder/file structure if needed
@@ -75,7 +76,8 @@ def render_main_tex(
         author_block=escape_latex(author_block),
         abstract=escape_latex(abstract),
         body=body,
-        columns=2 if "2col" in template_name else 1
+        columns=2 if "2col" in template_name else 1,
+        language=language
     )
 
 

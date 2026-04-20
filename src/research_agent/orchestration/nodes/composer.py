@@ -108,6 +108,9 @@ def _use_subagent_model() -> bool:
 
 
 async def composer_node(state: GraphState) -> dict:
+    from research_agent.config import load_settings
+    settings = load_settings()
+    
     await apublish_progress(
         agent="Composer",
         status="running",
@@ -133,7 +136,6 @@ async def composer_node(state: GraphState) -> dict:
             detail="Generating content via cloud subagent",
             message="Using cloud model for LaTeX body",
         )
-        # Use the SUBAGENT model (cloud — OpenRouter free / NVIDIA NIMs)
         subagent_text = await agenerate_text(
             role="subagent",
             prompt=_build_subagent_prompt(state, body),
@@ -146,12 +148,14 @@ async def composer_node(state: GraphState) -> dict:
         else:
             run_warnings.append("subagent_generation:fallback_to_local_composer")
 
+    # Use render_main_tex with the language from settings
     main_tex = render_main_tex(
         template_name=state["template"],
         title=f"Research Synthesis: {state['topic']}",
         author_block="Research Agent",
         abstract=abstract,
         body=body,
+        language=settings.output.language
     )
 
     bibtex = build_bibtex(state["citations"])

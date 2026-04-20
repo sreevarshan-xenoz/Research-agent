@@ -1,4 +1,7 @@
 \documentclass[conference,twocolumn]{IEEEtran}
+{% if language and language != 'en' %}
+\usepackage[{{ language }}]{babel}
+{% endif %}
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
