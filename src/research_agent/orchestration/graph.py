@@ -65,13 +65,8 @@ def _route_after_critic(state: GraphState) -> str:
 
 
 def _stop_reason(state: GraphState) -> str | None:
-    interrupt_signal = state.get("interrupt_signal")
-    if interrupt_signal is not None and hasattr(interrupt_signal, "is_set"):
-        try:
-            if interrupt_signal.is_set():
-                return "user_interrupt"
-        except Exception:
-            pass
+    if state.get("interrupted"):
+        return "user_interrupt"
 
     started_at = float(state.get("started_at", time.time()))
     max_runtime_minutes = int(state.get("max_runtime_minutes", 0) or 0)

@@ -26,7 +26,7 @@ class GraphState(TypedDict):
     max_cost_usd: float
     estimated_cost_usd: float
     started_at: float
-    interrupt_signal: object | None
+    interrupted: bool
     stop_reason: str | None
     tasks: list[GraphTask]
     section_confidence: dict[str, float]
@@ -66,7 +66,7 @@ class WorkflowState:
     max_cost_usd: float = 5.0
     estimated_cost_usd: float = 0.0
     started_at: float = field(default_factory=time.time)
-    interrupt_signal: object | None = None
+    interrupted: bool = False
     stop_reason: Optional[str] = None
     tasks: List[SubtopicTask] = field(default_factory=list)
     section_confidence: Dict[str, float] = field(default_factory=dict)
@@ -97,7 +97,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "max_cost_usd": state.max_cost_usd,
         "estimated_cost_usd": state.estimated_cost_usd,
         "started_at": state.started_at,
-        "interrupt_signal": state.interrupt_signal,
+        "interrupted": state.interrupted,
         "stop_reason": state.stop_reason,
         "tasks": [
             {
@@ -138,7 +138,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         max_cost_usd=state.get("max_cost_usd", 5.0),
         estimated_cost_usd=state.get("estimated_cost_usd", 0.0),
         started_at=state.get("started_at", time.time()),
-        interrupt_signal=state.get("interrupt_signal"),
+        interrupted=state.get("interrupted", False),
         stop_reason=state["stop_reason"],
         tasks=[
             SubtopicTask(

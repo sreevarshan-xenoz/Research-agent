@@ -13,7 +13,9 @@ from research_agent.config import load_settings
 from research_agent.tools import build_tool_registry
 
 
-def main():
+import asyncio
+
+async def main():
     print("=" * 60)
     print("  Research Agent -- Full Flow Test")
     print("=" * 60)
@@ -27,17 +29,17 @@ def main():
     state1 = WorkflowState(
         run_id="test-clarify-001",
         topic="AI",
-        template="ieee",
+        template="ieee-2col",
         depth="quick",
         autonomy_mode="hybrid",
         max_runtime_minutes=5,
         max_cost_usd=1.0,
         max_iterations=1,
         started_at=time.time(),
-        interrupt_signal=interrupt_signal,
+        interrupted=False,
         artifact_root="./artifacts",
     )
-    result1 = run_graph(state1, registry=tool_registry)
+    result1 = await run_graph(state1, registry=tool_registry)
     print(f"  Phase: {result1.phase}")
     print(f"  Needs clarification: {result1.needs_clarification}")
     print(f"  Questions: {result1.clarification_questions}")
@@ -53,18 +55,18 @@ def main():
     state2 = WorkflowState(
         run_id="test-full-001",
         topic=topic,
-        template="ieee",
+        template="ieee-2col",
         depth="quick",
         autonomy_mode="hybrid",
         max_runtime_minutes=5,
         max_cost_usd=1.0,
         max_iterations=1,
         started_at=time.time(),
-        interrupt_signal=threading.Event(),
+        interrupted=False,
         artifact_root="./artifacts",
     )
     t0 = time.time()
-    result2 = run_graph(state2, registry=tool_registry)
+    result2 = await run_graph(state2, registry=tool_registry)
     elapsed = time.time() - t0
 
     print(f"  Phase: {result2.phase}")
@@ -152,4 +154,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
