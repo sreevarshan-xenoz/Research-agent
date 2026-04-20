@@ -9,6 +9,7 @@ from research_agent.orchestration.nodes.dependency import (
 	workers_complete_node,
 )
 from research_agent.orchestration.nodes.exporter import exporter_node
+from research_agent.orchestration.nodes.figure_generator import figure_generator_node
 from research_agent.orchestration.nodes.indexing import indexing_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
@@ -32,6 +33,7 @@ __all__ = [
 	"indexing_node",
 	"critic_node",
 	"combiner_node",
+	"figure_generator_node",
 	"citation_verifier_node",
 	"composer_node",
 	"exporter_node",

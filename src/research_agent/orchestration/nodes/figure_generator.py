@@ -48,15 +48,17 @@ async def figure_generator_node(state: GraphState) -> dict:
     )
 
     figures = []
-    if mermaid_code and "graph" in mermaid_code.lower() or "diagram" in mermaid_code.lower():
-        # Clean up any potential markdown residue
-        clean_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
-        if clean_code != "NO_DIAGRAM":
-            figures.append({
-                "type": "mermaid",
-                "content": clean_code,
-                "caption": f"Conceptual diagram for {state['topic']}"
-            })
+    if mermaid_code:
+        code_lower = mermaid_code.lower()
+        if "graph" in code_lower or "diagram" in code_lower:
+            # Clean up any potential markdown residue
+            clean_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
+            if clean_code != "NO_DIAGRAM":
+                figures.append({
+                    "type": "mermaid",
+                    "content": clean_code,
+                    "caption": f"Conceptual diagram for {state['topic']}"
+                })
 
     await apublish_progress(
         agent="Figure Generator",
