@@ -72,8 +72,14 @@ async def planner_node(state: GraphState) -> dict:
     # Topic-adaptive fallback tasks (used when head model unavailable or fails)
     tasks = _build_adaptive_fallback_tasks(topic)
 
+    # Use depth to determine task count
+    depth = state.get("depth", "balanced")
+    task_counts = {"quick": 3, "balanced": 4, "deep": 6}
+    num_tasks = task_counts.get(depth, 4)
+
     prompt = (
-        f"Decompose the following research topic into 4-6 specific sub-research tasks: '{topic}'.\n"
+        f"Decompose the following research topic into {num_tasks} specific sub-research tasks: '{topic}'.\n"
+        f"Depth: {depth} (quick=3, balanced=4, deep=6 tasks).\n"
         "Each task must have a 'task_id' (e.g. t1, t2), 'title', 'objective', 'depends_on' (a list of other task_ids), "
         "and 'providers' (a list of recommended providers from: duckduckgo, arxiv, semantic_scholar, openalex).\n"
         "Ensure the tasks form a valid Directed Acyclic Graph (DAG).\n"

@@ -12,6 +12,10 @@ from research_agent.rag.chunker import chunk_text
 
 # Global fingerprint cache for cross-run deduplication
 # Key: fingerprint, Value: run_id when first seen
+#
+# NOTE: This is an in-memory cache only. For multi-worker deployments
+# (separate processes), use Redis-backed cache or DB-level dedup.
+# Current approach works for single-worker deployments (dev/small scale).
 _GLOBAL_FINGERPRINT_CACHE: dict[str, str] = {}
 
 

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from research_agent.observability import publish_progress
+import asyncio
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output import export_run_artifacts
 from research_agent.output.latex import validate_latex_package
 
 
-def exporter_node(state: GraphState) -> dict:
-    publish_progress(
+async def exporter_node(state: GraphState) -> dict:
+    await apublish_progress(
         agent="Exporter",
         status="running",
         detail="Writing artifacts",
@@ -21,7 +22,7 @@ def exporter_node(state: GraphState) -> dict:
     )
     if validation_errors:
         run_warnings.extend([f"export_validation:{error}" for error in validation_errors])
-        publish_progress(
+        await apublish_progress(
             agent="Exporter",
             status="error",
             detail="Validation failed",
@@ -44,7 +45,8 @@ def exporter_node(state: GraphState) -> dict:
         "warning_count": len(run_warnings),
     }
 
-    artifact_dir = export_run_artifacts(
+    artifact_dir = await asyncio.to_thread(
+        export_run_artifacts,
         artifact_root=state["artifact_root"],
         run_id=state["run_id"],
         main_tex=state["latex_main"],
@@ -53,7 +55,7 @@ def exporter_node(state: GraphState) -> dict:
         template_name=state["template"],
     )
 
-    publish_progress(
+    await apublish_progress(
         agent="Exporter",
         status="complete",
         detail="Artifacts written",

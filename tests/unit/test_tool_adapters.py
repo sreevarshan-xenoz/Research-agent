@@ -5,8 +5,9 @@ import types
 
 from research_agent.tools.arxiv import ArxivAdapter
 from research_agent.tools.browser_use import BrowserUseAdapter
+from research_agent.tools.open_alex import OpenAlexAdapter
 from research_agent.tools.semantic_scholar import SemanticScholarAdapter
-from research_agent.tools.web_search import WebSearchAdapter
+from research_agent.tools.web_search import DuckDuckGoAdapter, WebSearchAdapter
 
 
 def test_web_search_missing_key_returns_warning() -> None:
@@ -14,6 +15,40 @@ def test_web_search_missing_key_returns_warning() -> None:
     result = adapter.search("agentic ai", limit=3)
     assert not result.items
     assert "missing_tavily_api_key" in result.warnings
+
+
+def test_duckduckgo_adapter_normalizes_results(monkeypatch) -> None:
+    class FakeDDGS:
+        def __enter__(self):  # noqa: ANN204
+            return self
+
+        def __exit__(self, *args) -> None:  # noqa: ANN002
+            return None
+
+        def text(self, query, **kwargs):  # noqa: ANN001, ANN201
+            assert query == "agentic ai"
+            assert kwargs["max_results"] == 2
+            return [
+                {
+                    "title": "Result A",
+                    "href": "https://example.com/a",
+                    "body": "Snippet A",
+                }
+            ]
+
+    monkeypatch.setattr("research_agent.tools.web_search.DDGS", FakeDDGS)
+    adapter = DuckDuckGoAdapter(region="in-en", time="y")
+    result = adapter.search("agentic ai", limit=2)
+
+    assert result.provider == "duckduckgo"
+    assert result.metadata["raw_count"] == 1
+    assert result.items[0] == {
+        "title": "Result A",
+        "url": "https://example.com/a",
+        "snippet": "Snippet A",
+        "source_type": "web",
+        "provider": "duckduckgo",
+    }
 
 
 def test_arxiv_adapter_parses_atom_feed() -> None:
@@ -67,6 +102,42 @@ def test_semantic_scholar_normalizes_data() -> None:
     assert len(result.items) == 1
     assert result.items[0]["paper_id"] == "abc123"
     assert result.items[0]["authors"] == ["Author One", "Author Two"]
+
+
+def test_openalex_adapter_decodes_abstract_and_metadata() -> None:
+    payload = {
+        "results": [
+            {
+                "display_name": "Open Research Paper",
+                "doi": "https://doi.org/10.123/example",
+                "publication_year": 2024,
+                "cited_by_count": 12,
+                "abstract_inverted_index": {
+                    "This": [0],
+                    "is": [1],
+                    "open": [2],
+                    "metadata.": [3],
+                },
+                "authorships": [
+                    {"author": {"display_name": "Author One"}},
+                    {"author": {"display_name": "Author Two"}},
+                ],
+            }
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: ARG001
+        return httpx.Response(200, json=payload)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter = OpenAlexAdapter(client=client)
+    result = adapter.search("open research", limit=1)
+
+    assert len(result.items) == 1
+    assert result.items[0]["title"] == "Open Research Paper"
+    assert result.items[0]["snippet"] == "This is open metadata."
+    assert result.items[0]["authors"] == ["Author One", "Author Two"]
+    assert result.items[0]["provider"] == "openalex"
 
 
 def test_browser_use_falls_back_to_web_scraping_when_playwright_missing(monkeypatch) -> None:

@@ -23,7 +23,7 @@ def _is_ambiguous_topic(topic: str) -> bool:
     return any(marker in normalized for marker in broad_markers)
 
 
-def intake_node(state: GraphState) -> dict:
+async def intake_node(state: GraphState) -> dict:
     normalized_topic = state["topic"].strip()
     needs_clarification = _is_ambiguous_topic(normalized_topic)
     return {

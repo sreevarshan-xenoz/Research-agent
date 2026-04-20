@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from research_agent.models import generate_json
-from research_agent.observability import publish_progress
+from research_agent.models import agenerate_json
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 
 
-def clarifier_node(state: GraphState) -> dict:
+async def clarifier_node(state: GraphState) -> dict:
     if not state["needs_clarification"]:
         return {"clarification_questions": [], "phase": "clarified"}
 
     topic = state["topic"]
-    publish_progress(
+    await apublish_progress(
         agent="Clarifier",
         status="running",
         detail="Generating clarification questions",
@@ -32,7 +32,7 @@ def clarifier_node(state: GraphState) -> dict:
     )
 
     # Use the HEAD model (local Ollama) for orchestration tasks
-    llm_questions = generate_json(role="head", prompt=prompt)
+    llm_questions = await agenerate_json(role="head", prompt=prompt)
     if llm_questions and isinstance(llm_questions, dict) and "questions" in llm_questions:
         raw_questions = llm_questions["questions"]
         if isinstance(raw_questions, list) and len(raw_questions) >= 2:
@@ -50,8 +50,8 @@ def clarifier_node(state: GraphState) -> dict:
     }
 
 
-def awaiting_user_node(state: GraphState) -> dict:
-    publish_progress(
+async def awaiting_user_node(state: GraphState) -> dict:
+    await apublish_progress(
         agent="Clarifier",
         status="waiting",
         detail="Awaiting user scope details",

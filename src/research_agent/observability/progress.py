@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Callable, Iterator
+from typing import Callable, Iterator, Awaitable, Union
 
 
-ProgressCallback = Callable[[dict[str, str]], None]
+ProgressCallback = Union[Callable[[dict[str, str]], None], Callable[[dict[str, str]], Awaitable[None]]]
 
 _PROGRESS_CALLBACK: ContextVar[ProgressCallback | None] = ContextVar(
     "research_agent_progress_callback",
@@ -24,6 +25,40 @@ def progress_callback(callback: ProgressCallback | None) -> Iterator[None]:
 
 def get_progress_callback() -> ProgressCallback | None:
     return _PROGRESS_CALLBACK.get()
+
+
+async def apublish_progress(
+    *,
+    agent: str,
+    status: str,
+    detail: str = "",
+    message: str = "",
+) -> None:
+    callback = _PROGRESS_CALLBACK.get()
+    if callback is None:
+        return
+
+    try:
+        if asyncio.iscoroutinefunction(callback):
+            await callback(
+                {
+                    "agent": agent,
+                    "status": status,
+                    "detail": detail,
+                    "message": message,
+                }
+            )
+        else:
+            callback(
+                {
+                    "agent": agent,
+                    "status": status,
+                    "detail": detail,
+                    "message": message,
+                }
+            )
+    except Exception:
+        return
 
 
 def publish_progress(

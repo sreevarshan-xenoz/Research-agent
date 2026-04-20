@@ -14,6 +14,8 @@ def test_load_settings_reads_example_values() -> None:
     settings = load_settings()
     assert settings.runtime.mode == "api_only"
     assert settings.output.default_template in settings.output.supported_templates
+    assert settings.retrieval.web_provider == "duckduckgo"
+    assert settings.retrieval.paper_providers == ["arxiv", "semantic_scholar", "openalex"]
 
 
 def test_load_settings_env_overrides(tmp_path: Path) -> None:

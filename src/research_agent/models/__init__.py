@@ -1,4 +1,6 @@
 from research_agent.models.llm_client import (
+    agenerate_json,
+    agenerate_text,
     generate_json,
     generate_text,
     stream_callback,
@@ -10,6 +12,8 @@ from research_agent.models.nvidia_client import (
 )
 
 __all__ = [
+    "agenerate_json",
+    "agenerate_text",
     "generate_json",
     "generate_text",
     "stream_callback",

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from research_agent.observability import publish_progress
+import asyncio
+
+from research_agent.observability import apublish_progress
 from research_agent.observability.progress import ProgressCallback, get_progress_callback
 from research_agent.orchestration.state import GraphState
 from research_agent.tools.base import BaseToolAdapter
-from research_agent.tools.registry import run_multi_source_search
+from research_agent.tools.registry import arun_multi_source_search
+
+WEB_SOURCE_TYPES = {"web", "web_scrape", "browser"}
 
 
 def get_ready_task_ids(tasks: list[dict[str, object]]) -> list[str]:
@@ -25,10 +29,51 @@ def get_pending_task_ids(tasks: list[dict[str, object]]) -> list[str]:
     return [str(task["task_id"]) for task in tasks if str(task["status"]) == "pending"]
 
 
-from concurrent.futures import ThreadPoolExecutor
+async def _enrich_web_results_with_page_content(
+    result_map: dict[str, object],
+    registry: dict[str, BaseToolAdapter],
+    *,
+    max_pages_per_provider: int = 2,
+) -> None:
+    page_fetcher = registry.get("page_fetcher")
+    if page_fetcher is None:
+        return
+
+    async def fetch_item(item: dict[str, object]) -> None:
+        url = str(item.get("url") or "").strip()
+        if not url or item.get("content"):
+            return
+        fetched = await page_fetcher.asearch(url, limit=1)
+        if fetched.items:
+            page = fetched.items[0]
+            if page.get("content"):
+                item["content"] = page["content"]
+            if not item.get("title") and page.get("title"):
+                item["title"] = page["title"]
+        if fetched.warnings:
+            existing = item.setdefault("fetch_warnings", [])
+            if isinstance(existing, list):
+                existing.extend(fetched.warnings)
+
+    tasks = []
+    for result in result_map.values():
+        items = getattr(result, "items", [])
+        queued_for_provider = 0
+        for item in items:
+            if queued_for_provider >= max_pages_per_provider:
+                break
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("source_type") or "") not in WEB_SOURCE_TYPES:
+                continue
+            tasks.append(fetch_item(item))
+            queued_for_provider += 1
+
+    if tasks:
+        await asyncio.gather(*tasks)
 
 
-def _emit_progress(
+async def _emit_progress(
     callback: ProgressCallback | None,
     *,
     agent: str,
@@ -38,25 +83,35 @@ def _emit_progress(
 ) -> None:
     if callback is not None:
         try:
-            callback(
-                {
-                    "agent": agent,
-                    "status": status,
-                    "detail": detail,
-                    "message": message,
-                }
-            )
+            if asyncio.iscoroutinefunction(callback):
+                await callback(
+                    {
+                        "agent": agent,
+                        "status": status,
+                        "detail": detail,
+                        "message": message,
+                    }
+                )
+            else:
+                callback(
+                    {
+                        "agent": agent,
+                        "status": status,
+                        "detail": detail,
+                        "message": message,
+                    }
+                )
             return
         except Exception:
             pass
 
-    publish_progress(agent=agent, status=status, detail=detail, message=message)
+    await apublish_progress(agent=agent, status=status, detail=detail, message=message)
 
 
 def make_worker_node(registry: dict[str, BaseToolAdapter]):
     registry_provider_count = max(len(registry), 1)
 
-    def worker_node(state: GraphState) -> dict:
+    async def worker_node(state: GraphState) -> dict:
         tasks = [dict(task) for task in state["tasks"]]
         if not tasks:
             return {"phase": "workers_idle"}
@@ -70,10 +125,10 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
         estimated_cost_usd = float(state.get("estimated_cost_usd", 0.0) or 0.0)
         progress_handler = get_progress_callback()
 
-        def execute_single_task(task: dict[str, object]) -> tuple[str, dict[str, object], list[str]]:
+        async def execute_single_task(task: dict[str, object]) -> tuple[str, dict[str, object], list[str]]:
             task_id = str(task["task_id"])
             task["status"] = "running"
-            _emit_progress(
+            await _emit_progress(
                 progress_handler,
                 agent=f"SubResearch {task_id}",
                 status="running",
@@ -81,7 +136,9 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
                 message=f"Running {task_id}",
             )
             query = str(task["objective"])
-            result_map = run_multi_source_search(query, registry, limit=4)
+            providers = task.get("providers")
+            result_map = await arun_multi_source_search(query, registry, limit=4, providers=providers)
+            await _enrich_web_results_with_page_content(result_map, registry)
             
             task_finding = {
                 provider: {
@@ -105,7 +162,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
                     task_warnings.append(f"{provider}:{warning}")
             
             task["status"] = "complete"
-            _emit_progress(
+            await _emit_progress(
                 progress_handler,
                 agent=f"SubResearch {task_id}",
                 status="complete",
@@ -117,8 +174,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
         # Execute all ready tasks in parallel
         ready_tasks = [t for t in tasks if str(t["task_id"]) in ready_task_ids]
         
-        with ThreadPoolExecutor(max_workers=len(ready_tasks) or 1) as executor:
-            results = list(executor.map(execute_single_task, ready_tasks))
+        results = await asyncio.gather(*(execute_single_task(t) for t in ready_tasks))
 
         # Rough cost estimator for provider API usage in v1.
         estimated_cost_usd += len(ready_tasks) * registry_provider_count * 0.01

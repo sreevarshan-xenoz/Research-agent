@@ -15,10 +15,16 @@ class ToolResult:
 
 class BaseToolAdapter(ABC):
     provider_name: str
+    is_searcher: bool = True
 
     @abstractmethod
     def search(self, query: str, limit: int = 5) -> ToolResult:
         """Execute provider search and return normalized result."""
+
+    async def asearch(self, query: str, limit: int = 5) -> ToolResult:
+        """Async version of search. Defaults to running search in a thread."""
+        import asyncio
+        return await asyncio.to_thread(self.search, query, limit=limit)
 
 
 def safe_limit(limit: int, *, default: int = 5, minimum: int = 1, maximum: int = 25) -> int:

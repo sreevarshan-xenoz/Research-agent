@@ -55,8 +55,10 @@ The default setup uses free web retrieval and local composition.
 Set in `.env`:
 
 - `WEB_PROVIDER=scrape` for free DuckDuckGo HTML scraping
+- `WEB_PROVIDER=duckduckgo` for free DuckDuckGo package-backed search
 - `WEB_PROVIDER=browser_use` for browser-first mode
-- `WEB_PROVIDER=hybrid` to run both browser use and Tavily in worker searches
+- `WEB_PROVIDER=hybrid` to run both browser use and DuckDuckGo in worker searches
+- `PAPER_PROVIDERS=arxiv,semantic_scholar,openalex` for free paper metadata search
 - `BROWSER_USE_API_KEY=...` to use official Browser Use hosted model path (`ChatBrowserUse`)
 - optional `BROWSER_USE_MODEL=bu-2-0`
 - optional `BROWSER_USE_OPENAI_MODEL=...` when using OpenAI/OpenRouter-backed `ChatOpenAI`

@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.checkpoint.memory import MemorySaver
 
 from research_agent.orchestration.nodes import (
     awaiting_user_node,
@@ -131,7 +132,6 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_edge("workers_blocked", "indexing")
     graph.add_edge("indexing", "critic")
 
-    
     graph.add_conditional_edges(
         "critic",
         _route_after_critic,
@@ -148,13 +148,16 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_edge("citation_verifier", "composer")
     graph.add_edge("composer", "exporter")
     graph.add_edge("exporter", END)
-    return graph.compile()
+    
+    return graph.compile(checkpointer=MemorySaver())
 
 
-def run_graph(
+async def run_graph(
     state: WorkflowState,
     registry: dict[str, BaseToolAdapter] | None = None,
+    thread_id: str | None = None,
 ) -> WorkflowState:
     compiled = build_graph(registry=registry)
-    result = compiled.invoke(to_graph_state(state))
+    config = {"configurable": {"thread_id": thread_id or state.run_id}}
+    result = await compiled.ainvoke(to_graph_state(state), config=config)
     return from_graph_state(result)

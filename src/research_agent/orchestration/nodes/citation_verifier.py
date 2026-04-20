@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from research_agent.observability import publish_progress
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 
 
@@ -135,8 +135,8 @@ def _find_unsupported_sections(
     return filtered_sections, unsupported_task_ids, unsupported_claim_counts
 
 
-def citation_verifier_node(state: GraphState) -> dict:
-    publish_progress(
+async def citation_verifier_node(state: GraphState) -> dict:
+    await apublish_progress(
         agent="Citation Verifier",
         status="running",
         detail="Extracting source records",
@@ -186,7 +186,7 @@ def citation_verifier_node(state: GraphState) -> dict:
     if not citations:
         run_warnings.append("citation_verifier:no_citations_collected")
 
-    publish_progress(
+    await apublish_progress(
         agent="Citation Verifier",
         status="complete",
         detail=(

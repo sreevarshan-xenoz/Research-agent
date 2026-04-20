@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from research_agent.config import load_settings
-from research_agent.models import nvidia_stream_callback
+from research_agent.models import stream_callback
 from research_agent.observability import append_run_event, load_latest_checkpoint, progress_callback, save_checkpoint
 from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
@@ -357,15 +357,15 @@ def create_app(
     app.mount("/artifacts", StaticFiles(directory=ARTIFACT_DIR), name="artifacts")
 
     @app.get("/")
-    def index() -> FileResponse:
+    async def index() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
 
     @app.get("/api/health")
-    def health() -> dict[str, str]:
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/api/session", response_model=SessionCreateResponse)
-    def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
+    async def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
         template = request.template or settings.output.default_template
         if template not in settings.output.supported_templates:
             raise HTTPException(status_code=400, detail="Unsupported template")
@@ -375,7 +375,7 @@ def create_app(
         return SessionCreateResponse(session_id=session_id, template=template)
 
     @app.post("/api/chat", response_model=ChatResponse)
-    def chat(request: ChatRequest) -> ChatResponse:
+    async def chat(request: ChatRequest) -> ChatResponse:
         session = sessions.get(request.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -431,7 +431,7 @@ def create_app(
         )
         save_checkpoint(state, label="start")
         try:
-            updated = graph_runner(state, registry=tool_registry)
+            updated = await graph_runner(state, registry=tool_registry)
         finally:
             run_interrupt_signals.pop(run_id, None)
             if session_active_runs.get(request.session_id) == run_id:
@@ -548,19 +548,18 @@ def create_app(
             progress_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
             activity_entries = _seed_activity_entries()
 
-            def on_latex_chunk(chunk: str) -> None:
+            async def on_latex_chunk(chunk: str) -> None:
                 event_loop.call_soon_threadsafe(latex_queue.put_nowait, chunk)
 
-            def on_progress(payload: dict[str, str]) -> None:
+            async def on_progress(payload: dict[str, str]) -> None:
                 event_loop.call_soon_threadsafe(progress_queue.put_nowait, payload)
 
-            def run_graph_with_stream_hook() -> WorkflowState:
+            async def run_graph_task():
                 with progress_callback(on_progress):
-                    with nvidia_stream_callback(on_latex_chunk):
+                    with stream_callback(on_latex_chunk):
                         try:
-                            return graph_runner(state, registry=tool_registry)
+                            return await graph_runner(state, registry=tool_registry)
                         except Exception as e:
-                            # Re-raise to be caught by the task handler
                             raise RuntimeError(f"Graph execution failed: {str(e)}") from e
 
             yield emit(
@@ -571,34 +570,19 @@ def create_app(
                 },
             )
 
-            run_task = asyncio.create_task(asyncio.to_thread(run_graph_with_stream_hook))
+            run_task = asyncio.create_task(run_graph_task())
             streamed_latex = False
-            last_heartbeat = asyncio.get_event_loop().time()
+            last_heartbeat = time.time()
 
-            while True:
-                current_time = asyncio.get_event_loop().time()
+            while not run_task.done() or not latex_queue.empty() or not progress_queue.empty():
+                current_time = time.time()
                 
-                # Heartbeat every 15 seconds to keep connection alive
+                # Heartbeat
                 if current_time - last_heartbeat > 15:
                     yield emit("ping", {"time": current_time})
                     last_heartbeat = current_time
 
-                # Check for errors in the background task
-                if run_task.done():
-                    try:
-                        # This will raise if the task failed
-                        run_task.result()
-                    except Exception as e:
-                        yield emit("error", {"message": str(e)})
-                        run_interrupt_signals.pop(run_id, None)
-                        if session_active_runs.get(request.session_id) == run_id:
-                            session_active_runs.pop(request.session_id, None)
-                        return
-
-                if run_task.done() and latex_queue.empty() and progress_queue.empty():
-                    break
-
-                # Process all available progress updates at once to stay responsive
+                # Check for updates
                 has_updates = False
                 while not progress_queue.empty():
                     progress_payload = await progress_queue.get()
@@ -620,9 +604,8 @@ def create_app(
                         },
                     )
 
-                try:
-                    # Shorter timeout for faster iteration
-                    chunk = await asyncio.wait_for(latex_queue.get(), timeout=0.04)
+                while not latex_queue.empty():
+                    chunk = await latex_queue.get()
                     if chunk:
                         if not streamed_latex:
                             streamed_latex = True
@@ -639,70 +622,74 @@ def create_app(
                                 },
                             )
                         yield emit("latex_chunk", {"chunk": chunk})
-                except asyncio.TimeoutError:
-                    pass
                 
-                await asyncio.sleep(0.01)
+                if run_task.done():
+                    # Check for exceptions
+                    try:
+                        if run_task.exception():
+                            yield emit("error", {"message": str(run_task.exception())})
+                            break
+                    except asyncio.CancelledError:
+                        break
 
-            updated = await run_task
-            save_checkpoint(updated, label=updated.phase)
+                await asyncio.sleep(0.05)
 
-            if updated.phase == "awaiting_user_clarification":
-                session.awaiting_clarification = True
-                session.pending_questions = list(updated.clarification_questions)
-                clarification = ChatResponse(
-                    kind="clarification",
-                    assistant_message="I need a few details before I run deep research.",
-                    run_id=updated.run_id,
-                    questions=session.pending_questions,
-                    agent_activity=_build_agent_activity(updated),
-                )
-                yield emit("clarification", clarification.model_dump())
-                run_interrupt_signals.pop(run_id, None)
-                if session_active_runs.get(request.session_id) == run_id:
-                    session_active_runs.pop(request.session_id, None)
-                return
+            if run_task.done() and not run_task.exception():
+                updated = run_task.result()
+                save_checkpoint(updated, label=updated.phase)
 
-            session.awaiting_clarification = False
-            session.pending_questions = []
-            session.clarification_answers = []
+                if updated.phase == "awaiting_user_clarification":
+                    session.awaiting_clarification = True
+                    session.pending_questions = list(updated.clarification_questions)
+                    clarification = ChatResponse(
+                        kind="clarification",
+                        assistant_message="I need a few details before I run deep research.",
+                        run_id=updated.run_id,
+                        questions=session.pending_questions,
+                        agent_activity=_build_agent_activity(updated),
+                    )
+                    yield emit("clarification", clarification.model_dump())
+                else:
+                    session.awaiting_clarification = False
+                    session.pending_questions = []
+                    session.clarification_answers = []
 
-            yield emit(
-                "status",
-                {
-                    "message": "Generating LaTeX workbench output",
-                    "agent_activity": _build_agent_activity(updated),
-                },
-            )
+                    yield emit(
+                        "status",
+                        {
+                            "message": "Generating LaTeX workbench output",
+                            "agent_activity": _build_agent_activity(updated),
+                        },
+                    )
 
-            latex_text = updated.latex_main or ""
-            if not streamed_latex:
-                chunk_size = 120
-                for idx in range(0, len(latex_text), chunk_size):
-                    yield emit("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
-                    await asyncio.sleep(0.01)
+                    latex_text = updated.latex_main or ""
+                    if not streamed_latex:
+                        chunk_size = 120
+                        for idx in range(0, len(latex_text), chunk_size):
+                            yield emit("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
+                            await asyncio.sleep(0.01)
 
-            artifact_urls = _build_artifact_urls(updated.run_id)
+                    artifact_urls = _build_artifact_urls(updated.run_id)
 
-            result = ChatResponse(
-                kind="result",
-                assistant_message=_build_result_message(updated),
-                run_id=updated.run_id,
-                critic_notes=updated.critic_notes,
-                warnings=updated.run_warnings,
-                section_confidence=updated.section_confidence,
-                task_statuses=[
-                    TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
-                    for task in updated.tasks
-                ],
-                artifact_urls=artifact_urls,
-                agent_activity=_build_agent_activity(updated),
-                section_evidence=_build_section_evidence(updated),
-                latex_text=latex_text,
-                doc_preview_html=_latex_to_doc_html(latex_text),
-                overleaf_urls=_build_overleaf_urls(updated),
-            )
-            yield emit("result", result.model_dump())
+                    result = ChatResponse(
+                        kind="result",
+                        assistant_message=_build_result_message(updated),
+                        run_id=updated.run_id,
+                        critic_notes=updated.critic_notes,
+                        warnings=updated.run_warnings,
+                        section_confidence=updated.section_confidence,
+                        task_statuses=[
+                            TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
+                            for task in updated.tasks
+                        ],
+                        artifact_urls=artifact_urls,
+                        agent_activity=_build_agent_activity(updated),
+                        section_evidence=_build_section_evidence(updated),
+                        latex_text=latex_text,
+                        doc_preview_html=_latex_to_doc_html(latex_text),
+                        overleaf_urls=_build_overleaf_urls(updated),
+                    )
+                    yield emit("result", result.model_dump())
 
             run_interrupt_signals.pop(run_id, None)
             if session_active_runs.get(request.session_id) == run_id:
@@ -711,7 +698,7 @@ def create_app(
         return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
     @app.post("/api/session/{session_id}/stop", response_model=StopResponse)
-    def stop_session_run(session_id: str) -> StopResponse:
+    async def stop_session_run(session_id: str) -> StopResponse:
         run_id = session_active_runs.get(session_id)
         if not run_id:
             return StopResponse(ok=False, detail="No active run for session")
@@ -724,7 +711,7 @@ def create_app(
         return StopResponse(ok=True, detail=f"Stop requested for {run_id}")
 
     @app.post("/api/session/{session_id}/resume", response_model=ChatResponse)
-    def resume_session_run(session_id: str) -> ChatResponse:
+    async def resume_session_run(session_id: str) -> ChatResponse:
         session = sessions.get(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
