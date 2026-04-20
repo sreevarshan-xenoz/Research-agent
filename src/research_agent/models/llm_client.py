@@ -71,7 +71,7 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
                 ))
         elif provider == "puter":
             model_list.append((
-                "puter/ai21/jamba-large-1.7",
+                "openrouter/ai21/jamba-large-1.7",
                 {}
             ))
 
