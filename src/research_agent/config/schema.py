@@ -37,6 +37,12 @@ class OutputSettings(BaseModel):
     supported_templates: list[str] = Field(default_factory=lambda: ["ieee", "acm"])
 
     @model_validator(mode="after")
+    def validate_default_in_supported(self) -> "OutputSettings":
+        if self.default_template not in self.supported_templates:
+            raise ValueError(f"default_template '{self.default_template}' must be in supported_templates")
+        return self
+
+    @model_validator(mode="after")
     def validate_default_template(self) -> "OutputSettings":
         if self.default_template not in self.supported_templates:
             raise ValueError("default_template must exist in supported_templates")

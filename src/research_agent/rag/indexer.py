@@ -10,16 +10,21 @@ from qdrant_client.http import models
 
 from research_agent.rag.chunker import chunk_text
 
+# Global fingerprint cache for cross-run deduplication
+# Key: fingerprint, Value: run_id when first seen
+_GLOBAL_FINGERPRINT_CACHE: dict[str, str] = {}
+
 
 class ResearchIndex:
-    def __init__(self, collection_name: str = "research_v1"):
+    def __init__(self, collection_name: str = "research_v1", run_id: str = ""):
         self.client = QdrantClient(":memory:")
         self.collection_name = collection_name
+        self.run_id = run_id
         self.vector_size = 384  # Default for many small local models
         self._seen_fingerprints: set[str] = set()
         self._inserted_points = 0
         self._skipped_duplicates = 0
-        
+
         self.client.create_collection(
             collection_name=self.collection_name,
             vectors_config=models.VectorParams(
@@ -66,17 +71,20 @@ class ResearchIndex:
             return
             
         embeddings = await self._get_embeddings(chunks)
-        
+
         source_url = str(item.get("url") or "")
         points = []
         for i, (chunk, vector) in enumerate(zip(chunks, embeddings)):
             fp_raw = f"{source_url}::{chunk.strip().lower()}".encode("utf-8", errors="ignore")
             fingerprint = hashlib.sha1(fp_raw).hexdigest()
-            if fingerprint in self._seen_fingerprints:
+
+            # Check both local instance cache and global cross-run cache
+            if fingerprint in self._seen_fingerprints or fingerprint in _GLOBAL_FINGERPRINT_CACHE:
                 self._skipped_duplicates += 1
                 continue
 
             self._seen_fingerprints.add(fingerprint)
+            _GLOBAL_FINGERPRINT_CACHE[fingerprint] = self.run_id or "unknown"
             points.append(
                 models.PointStruct(
                     id=str(uuid.uuid4()),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from research_agent.observability import publish_progress
+from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.rag.indexer import ResearchIndex
 
@@ -11,6 +11,7 @@ from research_agent.rag.indexer import ResearchIndex
 # to avoid serializing the Qdrant client, which isn't possible.
 _INDEX_CACHE: dict[str, ResearchIndex] = {}
 _CONTRADICTION_CACHE: dict[str, list[dict[str, str]]] = {}
+_INDEXED_TASKS_CACHE: dict[str, set[str]] = {}
 
 _NEGATIVE_TERMS = {
     "not",
@@ -41,7 +42,7 @@ _POSITIVE_TERMS = {
 
 def get_or_create_index(run_id: str) -> ResearchIndex:
     if run_id not in _INDEX_CACHE:
-        _INDEX_CACHE[run_id] = ResearchIndex(collection_name=f"run_{run_id}")
+        _INDEX_CACHE[run_id] = ResearchIndex(collection_name=f"run_{run_id}", run_id=run_id)
     return _INDEX_CACHE[run_id]
 
 
@@ -125,12 +126,12 @@ def _detect_contradictions(records: list[dict[str, str]]) -> list[dict[str, str]
     return links
 
 
-def indexing_node(state: GraphState) -> dict:
+async def indexing_node(state: GraphState) -> dict:
     run_id = state["run_id"]
     findings = state["task_findings"]
     run_warnings = list(state["run_warnings"])
     
-    publish_progress(
+    await apublish_progress(
         agent="Indexer",
         status="running",
         detail="Indexing new findings",
@@ -138,14 +139,25 @@ def indexing_node(state: GraphState) -> dict:
     )
     
     index = get_or_create_index(run_id)
+    indexed_task_ids = _INDEXED_TASKS_CACHE.get(run_id, set())
     
-    # Simple logic: index findings from the latest tasks that were just completed
-    # For v1, we just re-index everything to be safe, or we could track indexed tasks.
+    new_points_before = index.get_stats().get("inserted_points", 0)
+    
+    # Only index tasks that haven't been indexed yet
     for task_id, provider_map in findings.items():
+        if task_id in indexed_task_ids:
+            continue
+            
         for provider, result in provider_map.items():
             items = result.get("items", [])
             for item in items:
-                index.add_finding(task_id, provider, item)
+                await index.aadd_finding(task_id, provider, item)
+        
+        indexed_task_ids.add(task_id)
+
+    _INDEXED_TASKS_CACHE[run_id] = indexed_task_ids
+    new_points_after = index.get_stats().get("inserted_points", 0)
+    inserted_this_run = new_points_after - new_points_before
 
     contradiction_links = _detect_contradictions(_collect_claim_records(findings))
     _CONTRADICTION_CACHE[run_id] = contradiction_links
@@ -157,12 +169,11 @@ def indexing_node(state: GraphState) -> dict:
                 f"{idx}:{link['task_a']}:{link['task_b']}:{link['overlap_terms']}"
             )
                 
-    publish_progress(
+    await apublish_progress(
         agent="Indexer",
         status="complete",
         detail=(
-            "Indexing complete "
-            f"(inserted={index.get_stats().get('inserted_points', 0)}, "
+            f"Indexing complete (new={inserted_this_run}, total={new_points_after}, "
             f"deduped={index.get_stats().get('skipped_duplicates', 0)}, "
             f"contradictions={len(contradiction_links)})"
         ),
