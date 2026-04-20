@@ -64,9 +64,11 @@ def render_main_tex(
     env = _get_jinja_env()
     try:
         template = env.get_template(f"{base_template}/main.tex.j2")
-    except Exception:
+    except Exception as e:
         # Fallback to direct path for custom templates
-        raise FileNotFoundError(f"Template not found for: {template_name}")
+        if "TemplateNotFound" in str(type(e)):
+             raise FileNotFoundError(f"Template not found for: {template_name} (path: {base_template}/main.tex.j2)")
+        raise e
 
     return template.render(
         title=escape_latex(title),

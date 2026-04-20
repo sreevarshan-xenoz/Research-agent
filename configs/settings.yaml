@@ -10,8 +10,8 @@ runtime:
 
 models:
   # Orchestrator: local model for planning, clarification, critic
-  orchestrator_model: qwen3:8b
-  orchestrator_provider: ollama
+  orchestrator_model: openrouter/google/gemini-2.0-flash-lite:free
+  orchestrator_provider: openrouter
 
   # Subagent: primary model for section synthesis
   subagent_provider: auto         # auto | ollama | openrouter | puter
