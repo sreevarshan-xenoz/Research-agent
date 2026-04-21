@@ -35,13 +35,14 @@ class ModelSettings(BaseModel):
     orchestrator_provider: Literal["ollama", "openrouter"] = "ollama"
 
     # Subagent model settings
-    subagent_provider: Literal["auto", "ollama", "openrouter", "puter"] = "auto"
+    subagent_provider: Literal["auto", "ollama", "openrouter", "puter", "nvidia"] = "auto"
     subagent_local: str = "deepseek-r1:8b"
     subagent_cloud: str = "openrouter/free"
+    subagent_nvidia: str = "nvidia/meta/llama-3.1-405b-instruct"
 
     # Provider priority
     provider_priority: list[str] = Field(
-        default_factory=lambda: ["ollama", "openrouter", "puter"]
+        default_factory=lambda: ["ollama", "openrouter", "puter", "nvidia"]
     )
 
     # Legacy aliases (deprecated, for backward compatibility)
@@ -65,7 +66,7 @@ class ModelSettings(BaseModel):
     @field_validator("provider_priority")
     @classmethod
     def validate_provider_priority(cls, value: list[str]) -> list[str]:
-        supported = {"ollama", "openrouter", "puter"}
+        supported = {"ollama", "openrouter", "puter", "nvidia"}
         for p in value:
             if p not in supported:
                 raise ValueError(f"Invalid provider in priority: {p}. Supported: {sorted(supported)}")

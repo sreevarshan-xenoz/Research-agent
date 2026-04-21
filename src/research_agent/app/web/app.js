@@ -50,16 +50,25 @@ let loadingTickerId = null;
 
 function switchWorkbenchTab(tab) {
   const isDoc = tab === "doc";
+  
+  // Update Buttons
   if (docTabBtn) docTabBtn.classList.toggle("active", isDoc);
   if (latexTabBtn) latexTabBtn.classList.toggle("active", !isDoc);
-  if (docWorkbenchEl) docWorkbenchEl.classList.toggle("active", isDoc);
-  if (latexWorkbenchEl) latexWorkbenchEl.classList.toggle("active", !isDoc);
+  
+  // Update Panels (Using class-based selection for robustness)
+  const docPanel = document.querySelector(".doc-panel");
+  const latexPanel = document.querySelector(".latex-panel");
+  
+  if (docPanel) docPanel.classList.toggle("active", isDoc);
+  if (latexPanel) latexPanel.classList.toggle("active", !isDoc);
+  
+  console.log("Switched to tab:", tab, "isDoc:", isDoc);
 }
 
 function setDocStatus(status, text) {
   if (!docStatusEl) return;
   const dot = docStatusEl.querySelector(".status-dot");
-  const statusText = docStatusEl.querySelector(".status-text");
+  const statusText = docStatusEl.querySelector(".status-text") || docStatusEl.parentElement?.querySelector(".status-text");
   if (dot) {
     dot.className = "status-dot " + status;
   }
@@ -506,12 +515,14 @@ async function sendMessageStream(text, onEvent) {
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
+      let event;
       try {
-        const event = JSON.parse(trimmed);
-        onEvent(event);
+        event = JSON.parse(trimmed);
       } catch (e) {
         console.error("Stream parse error", e);
+        continue;
       }
+      onEvent(event);
     }
   }
 
@@ -519,7 +530,9 @@ async function sendMessageStream(text, onEvent) {
     try {
       const event = JSON.parse(pending.trim());
       onEvent(event);
-    } catch (e) {}
+    } catch (e) {
+      console.error("Stream parse error", e);
+    }
   }
 }
 

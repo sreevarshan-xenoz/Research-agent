@@ -76,69 +76,60 @@ body::after {
 .app-shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 340px 1fr 420px;
+  grid-template-columns: 320px 1fr 380px;
   position: relative;
   z-index: 1;
-}
-
-/* Glassmorphism Panels */
-.sidebar, .chat-area, .panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-glass);
-}
-
-/* Sidebar */
-.sidebar {
-  border-right: 1px solid var(--glass-border);
-  padding: 28px 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.sidebar h1 {
-  margin: 0;
-  font-size: 1.75rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  background: linear-gradient(to right, #fff, #a1a1aa);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.tagline {
-  font-size: 0.875rem;
-  color: var(--muted);
-  line-height: 1.5;
-  margin-top: 4px;
-}
-
-/* Panels */
-.panel {
-  border-radius: var(--radius-md);
-  padding: 20px;
-  position: relative;
   overflow: hidden;
 }
 
-.panel::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--glass-glow), transparent);
+/* Sidebar & Chat Layout Fixes */
+.sidebar {
+  border-right: 1px solid var(--glass-border);
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100vh;
+}
+
+.chat-area {
+  border-left: 1px solid var(--glass-border);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.messages {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scrollbar-width: thin;
+}
+
+/* Sidebar Scrollbar */
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); }
+
+/* Panel Refinements */
+.panel {
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
 }
 
 .panel h2 {
-  margin: 0 0 16px;
-  font-size: 0.75rem;
-  font-weight: 700;
+  margin: 0 0 12px;
+  font-size: 0.65rem;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--muted);
+  color: #71717a;
 }
 
 .panel-header {
@@ -222,38 +213,47 @@ button:active {
 
 /* Workbench (Center) */
 .workbench {
-  padding: 32px;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 24px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100vh;
   overflow: hidden;
 }
 
 .workbench-tabs {
   display: flex;
-  gap: 8px;
-  padding: 6px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 999px;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
   border: 1px solid var(--glass-border);
   width: fit-content;
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
 }
 
 .tab-btn {
   width: auto;
-  padding: 8px 20px;
-  border-radius: 999px;
-  font-size: 0.875rem;
+  padding: 8px 24px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
   background: transparent;
   border: none;
   color: var(--muted);
-  transition: all 0.3s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tab-btn:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .tab-btn.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--gradient-btn);
   color: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 .tab-btn.pulse {
@@ -267,10 +267,17 @@ button:active {
 }
 
 .doc-panel, .latex-panel {
-  display: flex !important;
+  display: none;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.2);
+  flex: 1;
+}
+
+.doc-panel.active, .latex-panel.active {
+  display: flex;
 }
 
 .doc-editor {
@@ -638,24 +645,47 @@ button:active {
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
 
-.composer {
-  padding: 24px;
+.sidebar-header {
+  margin-bottom: 8px;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #71717a;
+  margin-bottom: 4px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.composer-actions {
+  margin-top: 12px;
+}
+
+/* Sidebar Footer */
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0;
   border-top: 1px solid var(--glass-border);
-  background: rgba(0,0,0,0.2);
 }
 
-.composer textarea {
-  border-radius: var(--radius-lg);
-  margin-bottom: 16px;
+.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
 }
 
-.workbench-status {
-  font-size: 0.65rem;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .workbench-status.success {

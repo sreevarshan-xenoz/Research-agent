@@ -14,39 +14,48 @@
   <div class="app-shell">
     <!-- LEFT SIDEBAR: CONFIG & AGENTS -->
     <aside class="sidebar">
-      <h1>Research Agent</h1>
-      <p class="tagline">Autonomous multi-agent research.</p>
-
-      <div class="panel">
-        <label for="templateSelect">Template</label>
-        <select id="templateSelect">
-          <option value="ieee-2col">IEEE (2-column)</option>
-          <option value="ieee-1col">IEEE (1-column)</option>
-          <option value="acm">ACM</option>
-          <option value="springer">Springer</option>
-        </select>
+      <div class="sidebar-header">
+        <h1>Research Agent</h1>
+        <p class="tagline">Autonomous multi-agent research.</p>
       </div>
 
-      <div class="panel">
-        <label for="depthSelect">Depth</label>
-        <select id="depthSelect">
-          <option value="quick">Quick</option>
-          <option value="balanced" selected>Balanced</option>
-          <option value="deep">Deep</option>
-        </select>
-
-        <label for="autonomySelect" style="margin-top: 10px; display: block;">Autonomy</label>
-        <select id="autonomySelect">
-          <option value="guided">Guided</option>
-          <option value="hybrid" selected>Hybrid</option>
-          <option value="autonomous">Autonomous</option>
-        </select>
-
-        <label for="runtimeCapInput" style="margin-top: 10px; display: block;">Runtime cap (min)</label>
-        <input id="runtimeCapInput" type="number" min="1" step="1" value="25" />
-
-        <label for="costCapInput" style="margin-top: 10px; display: block;">Cost cap (USD)</label>
-        <input id="costCapInput" type="number" min="0" step="0.1" value="5.0" />
+      <div class="panel config-panel">
+        <h2>Configuration</h2>
+        <div class="field">
+          <label for="templateSelect">Template</label>
+          <select id="templateSelect">
+            <option value="ieee-2col">IEEE (2-column)</option>
+            <option value="ieee-1col">IEEE (1-column)</option>
+            <option value="acm">ACM</option>
+            <option value="springer">Springer</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="depthSelect">Depth</label>
+          <select id="depthSelect">
+            <option value="quick">Quick</option>
+            <option value="balanced" selected>Balanced</option>
+            <option value="deep">Deep</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="autonomySelect">Autonomy</label>
+          <select id="autonomySelect">
+            <option value="guided">Guided</option>
+            <option value="hybrid" selected>Hybrid</option>
+            <option value="autonomous">Autonomous</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="runtimeCapInput">Limit (min)</label>
+            <input id="runtimeCapInput" type="number" min="1" step="1" value="25" />
+          </div>
+          <div class="field">
+            <label for="costCapInput">Budget ($)</label>
+            <input id="costCapInput" type="number" min="0" step="0.1" value="5.0" />
+          </div>
+        </div>
       </div>
 
       <div class="panel status-panel">
@@ -54,20 +63,16 @@
           <h2>Agent Activity</h2>
           <span id="workbenchStatus" class="workbench-status idle">idle</span>
         </header>
-        <div id="agentPanel" class="agent-panel">
-          <div class="agent-row idle">
-            <div class="agent-row-top" style="display: flex; justify-content: space-between; align-items: center;">
-              <span class="agent-name">No active run</span>
-              <span class="agent-pill idle">idle</span>
-            </div>
-          </div>
-        </div>
+        <div id="agentPanel" class="agent-panel"></div>
       </div>
 
       <div class="panel status-panel">
         <header class="panel-header">
           <h2>Discovery Feed</h2>
-          <span class="badge small">Live</span>
+          <div class="live-badge">
+             <span class="live-dot"></span>
+             <span class="badge small">Live</span>
+          </div>
         </header>
         <div id="discoveryFeed" class="discovery-feed">
           <p class="small muted">Findings will stream here...</p>
@@ -76,23 +81,22 @@
 
       <div class="panel status-panel">
         <h2>Run Insights</h2>
-        <pre id="insightBox" class="small mono" style="white-space: pre-wrap; margin: 0;"></pre>
+        <pre id="insightBox" class="small mono" style="white-space: pre-wrap; margin: 0; max-height: 120px; overflow: auto;"></pre>
       </div>
 
       <div class="panel status-panel">
         <header class="panel-header">
           <h2>Evidence Explorer</h2>
-          <span class="badge small">Section-level</span>
         </header>
-        <div id="evidenceExplorer" class="discovery-feed">
-          <p class="small muted">Section evidence links will appear after generation...</p>
+        <div id="evidenceExplorer" class="discovery-feed" style="max-height: 120px;">
+          <p class="small muted">Section evidence will appear here...</p>
         </div>
       </div>
 
-      <div class="panel">
+      <div class="sidebar-actions" style="margin-top: auto; padding-top: 16px;">
         <button id="newSessionBtn" class="secondary">New Session</button>
         <button id="stopRunBtn" class="secondary" style="margin-top: 8px;">Stop Run</button>
-        <div id="sessionInfo" class="mono small" style="margin-top: 8px;">Session: not initialized</div>
+        <div id="sessionInfo" class="mono small" style="margin-top: 12px; opacity: 0.5; text-align: center;">Session: not initialized</div>
       </div>
     </aside>
 

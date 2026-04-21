@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 import html
+import inspect
 import json
 import os
 from pathlib import Path
+import re
 import threading
 import time
 import uuid
@@ -119,6 +121,13 @@ def _compose_refined_topic(topic: str, questions: list[str], answers: list[str])
     return topic + "\n\nClarification context:\n" + "\n\n".join(context_parts)
 
 
+async def _call_graph_runner(graph_runner, state: WorkflowState, tool_registry: dict[str, BaseToolAdapter]) -> WorkflowState:  # noqa: ANN001
+    result = graph_runner(state, registry=tool_registry)
+    if inspect.isawaitable(result):
+        return await result
+    return result
+
+
 def _build_result_message(state: WorkflowState) -> str:
     completed = sum(1 for task in state.tasks if task.status == "complete")
     total = len(state.tasks)
@@ -170,22 +179,25 @@ def _latex_to_doc_html(latex_text: str) -> str:
     lines = latex_text.splitlines()
     html_parts: list[str] = []
     
-    # Extract Metadata
+    # Extract Metadata (Global search)
     title = ""
     author = ""
-    abstract = ""
     
     for line in lines:
-        l = line.strip()
-        if l.startswith("\\title{") and l.endswith("}"):
-            title = l[7:-1]
-        elif l.startswith("\\author{") and l.endswith("}"):
-            author = l[8:-1]
+        stripped_line = line.strip()
+        if "\\title{" in stripped_line:
+            match = re.search(r"\\title\{([^}]+)\}", stripped_line)
+            if match:
+                title = match.group(1)
+        elif "\\author{" in stripped_line:
+            match = re.search(r"\\author\{([^}]+)\}", stripped_line)
+            if match:
+                author = match.group(1)
             
     if title:
-        html_parts.append(f"<h1 style='text-align: center;'>{html.escape(title)}</h1>")
+        html_parts.append(f"<h1 style='text-align: center; color: white;'>{html.escape(title)}</h1>")
     if author:
-        html_parts.append(f"<p style='text-align: center; color: #64748b;'>{html.escape(author)}</p>")
+        html_parts.append(f"<p style='text-align: center; color: #a1a1aa; font-weight: 500;'>{html.escape(author)}</p>")
     
     # Process Body
     in_doc = False
@@ -194,53 +206,54 @@ def _latex_to_doc_html(latex_text: str) -> str:
     for raw_line in lines:
         line = raw_line.strip()
         if not in_doc:
-            if line.startswith("\\begin{document}"):
+            if "\\begin{document}" in line:
                 in_doc = True
             continue
 
-        if line.startswith("\\end{document}"):
+        if "\\end{document}" in line:
             break
             
-        if line.startswith("\\begin{abstract}"):
+        if "\\begin{abstract}" in line:
             in_abstract = True
-            html_parts.append("<h2>Abstract</h2>")
+            html_parts.append("<h2 style='text-transform: uppercase; letter-spacing: 0.1em; color: #8b5cf6;'>Abstract</h2>")
             continue
-        if line.startswith("\\end{abstract}"):
+        if "\\end{abstract}" in line:
             in_abstract = False
             continue
             
-        if not line:
+        if not line or line.startswith("%"):
             continue
 
-        if line.startswith("\\section{") and line.endswith("}"):
-            title_text = line[len("\\section{") : -1]
-            html_parts.append(f"<h2>{html.escape(title_text)}</h2>")
-            continue
-
-        if line.startswith("\\subsection{") and line.endswith("}"):
-            title_text = line[len("\\subsection{") : -1]
-            html_parts.append(f"<h3>{html.escape(title_text)}</h3>")
-            continue
-
-        # Skip commands
-        if line.startswith("\\") and not (in_abstract or any(line.startswith(p) for p in ["\\section", "\\subsection"])):
-            if "cite" in line:
-                # Simple regex-like cleanup for citations in preview
-                line = line.replace("\\cite{", "[").replace("}", "]")
-            else:
+        if "\\section{" in line:
+            match = re.search(r"\\section\{([^}]+)\}", line)
+            if match:
+                html_parts.append(f"<h2 style='color: #f4f4f5; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; margin-top: 32px;'>{html.escape(match.group(1))}</h2>")
                 continue
+
+        if "\\subsection{" in line:
+            match = re.search(r"\\subsection\{([^}]+)\}", line)
+            if match:
+                html_parts.append(f"<h3 style='color: #e4e4e7; margin-top: 24px;'>{html.escape(match.group(1))}</h3>")
+                continue
+
+        # Skip other commands
+        if line.startswith("\\") and not in_abstract:
+             # Basic inline citation replacement
+             line = re.sub(r"\\cite\{([^}]+)\}", r"[\1]", line)
+             if line.startswith("\\"):
+                 continue
 
         cleaned = html.escape(line)
         # Handle some basic LaTeX formatting in HTML
         cleaned = cleaned.replace("\\_", "_").replace("\\&", "&").replace("\\%", "%")
         
         if in_abstract:
-            html_parts.append(f"<p style='font-style: italic;'>{cleaned}</p>")
+            html_parts.append(f"<p style='font-style: italic; color: #d4d4d8; background: rgba(139, 92, 246, 0.05); padding: 12px; border-radius: 8px;'>{cleaned}</p>")
         else:
-            html_parts.append(f"<p>{cleaned}</p>")
+            html_parts.append(f"<p style='margin-bottom: 16px; line-height: 1.8;'>{cleaned}</p>")
 
-    if not html_parts:
-        return "<p>Document preview is not available.</p>"
+    if not html_parts or (not title and not any("<h2" in p for p in html_parts)):
+        return f"<div style='padding: 40px; text-align: center; color: #a1a1aa;'><p>Document preview is being prepared...</p><pre style='text-align: left; font-size: 11px; margin-top: 20px; opacity: 0.5;'>{html.escape(latex_text[:200])}...</pre></div>"
 
     return "\n".join(html_parts)
 
@@ -435,7 +448,7 @@ def create_app(
         )
         save_checkpoint(state, label="start")
         try:
-            updated = await graph_runner(state, registry=tool_registry)
+            updated = await _call_graph_runner(graph_runner, state, tool_registry)
         finally:
             run_interrupt_signals.pop(run_id, None)
             if session_active_runs.get(request.session_id) == run_id:
@@ -551,152 +564,164 @@ def create_app(
             progress_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
             activity_entries = _seed_activity_entries()
 
-            async def on_latex_chunk(chunk: str) -> None:
+            def on_latex_chunk(chunk: str) -> None:
                 event_loop.call_soon_threadsafe(latex_queue.put_nowait, chunk)
 
-            async def on_progress(payload: dict[str, str]) -> None:
+            def on_progress(payload: dict[str, str]) -> None:
                 event_loop.call_soon_threadsafe(progress_queue.put_nowait, payload)
 
             async def run_graph_task():
                 with progress_callback(on_progress):
                     with stream_callback(on_latex_chunk):
                         try:
-                            return await graph_runner(state, registry=tool_registry)
+                            return await _call_graph_runner(graph_runner, state, tool_registry)
                         except Exception as e:
+                            import traceback
+                            traceback.print_exc()
                             raise RuntimeError(f"Graph execution failed: {str(e)}") from e
 
-            yield emit(
-                "status",
-                {
-                    "message": "Run accepted",
-                    "agent_activity": activity_entries,
-                },
-            )
+            try:
+                yield emit(
+                    "status",
+                    {
+                        "message": "Run accepted",
+                        "agent_activity": activity_entries,
+                    },
+                )
 
-            run_task = asyncio.create_task(run_graph_task())
-            streamed_latex = False
-            last_heartbeat = time.time()
+                run_task = asyncio.create_task(run_graph_task())
+                streamed_latex = False
+                last_heartbeat = time.time()
 
-            while not run_task.done() or not latex_queue.empty() or not progress_queue.empty():
-                current_time = time.time()
-                
-                # Heartbeat
-                if current_time - last_heartbeat > 15:
-                    yield emit("ping", {"time": current_time})
-                    last_heartbeat = current_time
+                while not run_task.done() or not latex_queue.empty() or not progress_queue.empty():
+                    current_time = time.time()
+                    
+                    # Heartbeat
+                    if current_time - last_heartbeat > 15:
+                        yield emit("ping", {"time": current_time})
+                        last_heartbeat = current_time
 
-                # Check for updates
-                has_updates = False
-                while not progress_queue.empty():
-                    progress_payload = await progress_queue.get()
-                    agent_name = progress_payload.get("agent", "Agent")
-                    activity_entries = _merge_activity_update(
-                        activity_entries,
-                        agent=agent_name,
-                        status=progress_payload.get("status", "running"),
-                        detail=progress_payload.get("detail", ""),
-                    )
-                    has_updates = True
-                
-                if has_updates:
-                    yield emit(
-                        "status",
-                        {
-                            "message": "Research in progress",
-                            "agent_activity": activity_entries,
-                        },
-                    )
+                    # Check for updates
+                    has_updates = False
+                    while not progress_queue.empty():
+                        progress_payload = await progress_queue.get()
+                        agent_name = progress_payload.get("agent", "Agent")
+                        activity_entries = _merge_activity_update(
+                            activity_entries,
+                            agent=agent_name,
+                            status=progress_payload.get("status", "running"),
+                            detail=progress_payload.get("detail", ""),
+                        )
+                        has_updates = True
+                    
+                    if has_updates:
+                        yield emit(
+                            "status",
+                            {
+                                "message": "Research in progress",
+                                "agent_activity": activity_entries,
+                            },
+                        )
 
-                while not latex_queue.empty():
-                    chunk = await latex_queue.get()
-                    if chunk:
-                        if not streamed_latex:
-                            streamed_latex = True
-                            yield emit(
-                                "status",
-                                {
-                                    "message": "Streaming LaTeX generation",
-                                    "agent_activity": _merge_activity_update(
-                                        activity_entries,
-                                        agent="Composer",
-                                        status="running",
-                                        detail="Receiving model tokens",
-                                    ),
-                                },
-                            )
-                        yield emit("latex_chunk", {"chunk": chunk})
-                
-                if run_task.done():
-                    # Check for exceptions
-                    try:
-                        if run_task.exception():
-                            yield emit("error", {"message": str(run_task.exception())})
+                    while not latex_queue.empty():
+                        chunk = await latex_queue.get()
+                        if chunk:
+                            if not streamed_latex:
+                                streamed_latex = True
+                                yield emit(
+                                    "status",
+                                    {
+                                        "message": "Streaming LaTeX generation",
+                                        "agent_activity": _merge_activity_update(
+                                            activity_entries,
+                                            agent="Composer",
+                                            status="running",
+                                            detail="Receiving model tokens",
+                                        ),
+                                    },
+                                )
+                            yield emit("latex_chunk", {"chunk": chunk})
+                    
+                    if run_task.done():
+                        # Check for exceptions
+                        try:
+                            if run_task.exception():
+                                yield emit("error", {"message": str(run_task.exception())})
+                                break
+                        except asyncio.CancelledError:
                             break
-                    except asyncio.CancelledError:
-                        break
 
-                await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.05)
 
-            if run_task.done() and not run_task.exception():
-                updated = run_task.result()
-                save_checkpoint(updated, label=updated.phase)
+                run_error = run_task.exception() if run_task.done() else None
+                if run_error:
+                    yield emit("error", {"message": str(run_error)})
+                    return
 
-                if updated.phase == "awaiting_user_clarification":
-                    session.awaiting_clarification = True
-                    session.pending_questions = list(updated.clarification_questions)
-                    clarification = ChatResponse(
-                        kind="clarification",
-                        assistant_message="I need a few details before I run deep research.",
-                        run_id=updated.run_id,
-                        questions=session.pending_questions,
-                        agent_activity=_build_agent_activity(updated),
-                    )
-                    yield emit("clarification", clarification.model_dump())
-                else:
-                    session.awaiting_clarification = False
-                    session.pending_questions = []
-                    session.clarification_answers = []
+                if run_task.done():
+                    updated = run_task.result()
+                    save_checkpoint(updated, label=updated.phase)
 
-                    yield emit(
-                        "status",
-                        {
-                            "message": "Generating LaTeX workbench output",
-                            "agent_activity": _build_agent_activity(updated),
-                        },
-                    )
+                    if updated.phase == "awaiting_user_clarification":
+                        session.awaiting_clarification = True
+                        session.pending_questions = list(updated.clarification_questions)
+                        clarification = ChatResponse(
+                            kind="clarification",
+                            assistant_message="I need a few details before I run deep research.",
+                            run_id=updated.run_id,
+                            questions=session.pending_questions,
+                            agent_activity=_build_agent_activity(updated),
+                        )
+                        yield emit("clarification", clarification.model_dump())
+                    else:
+                        session.awaiting_clarification = False
+                        session.pending_questions = []
+                        session.clarification_answers = []
 
-                    latex_text = updated.latex_main or ""
-                    if not streamed_latex:
-                        chunk_size = 120
-                        for idx in range(0, len(latex_text), chunk_size):
-                            yield emit("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
-                            await asyncio.sleep(0.01)
+                        yield emit(
+                            "status",
+                            {
+                                "message": "Generating LaTeX workbench output",
+                                "agent_activity": _build_agent_activity(updated),
+                            },
+                        )
 
-                    artifact_urls = _build_artifact_urls(updated.run_id)
+                        latex_text = updated.latex_main or ""
+                        if not streamed_latex:
+                            chunk_size = 120
+                            for idx in range(0, len(latex_text), chunk_size):
+                                yield emit("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
+                                await asyncio.sleep(0.01)
 
-                    result = ChatResponse(
-                        kind="result",
-                        assistant_message=_build_result_message(updated),
-                        run_id=updated.run_id,
-                        critic_notes=updated.critic_notes,
-                        warnings=updated.run_warnings,
-                        section_confidence=updated.section_confidence,
-                        task_statuses=[
-                            TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
-                            for task in updated.tasks
-                        ],
-                        artifact_urls=artifact_urls,
-                        agent_activity=_build_agent_activity(updated),
-                        section_evidence=_build_section_evidence(updated),
-                        latex_text=latex_text,
-                        doc_preview_html=_latex_to_doc_html(latex_text),
-                        overleaf_urls=_build_overleaf_urls(updated),
-                    )
-                    yield emit("result", result.model_dump())
+                        artifact_urls = _build_artifact_urls(updated.run_id)
 
-            run_interrupt_signals.pop(run_id, None)
-            if session_active_runs.get(request.session_id) == run_id:
-                session_active_runs.pop(request.session_id, None)
+                        result = ChatResponse(
+                            kind="result",
+                            assistant_message=_build_result_message(updated),
+                            run_id=updated.run_id,
+                            critic_notes=updated.critic_notes,
+                            warnings=updated.run_warnings,
+                            section_confidence=updated.section_confidence,
+                            task_statuses=[
+                                TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
+                                for task in updated.tasks
+                            ],
+                            artifact_urls=artifact_urls,
+                            agent_activity=_build_agent_activity(updated),
+                            section_evidence=_build_section_evidence(updated),
+                            latex_text=latex_text,
+                            doc_preview_html=_latex_to_doc_html(latex_text),
+                            overleaf_urls=_build_overleaf_urls(updated),
+                        )
+                        yield emit("result", result.model_dump())
+            except Exception as outer_e:
+                import traceback
+                traceback.print_exc()
+                yield emit("error", {"message": f"Critical stream error: {str(outer_e)}"})
+            finally:
+                run_interrupt_signals.pop(run_id, None)
+                if session_active_runs.get(request.session_id) == run_id:
+                    session_active_runs.pop(request.session_id, None)
 
         return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 

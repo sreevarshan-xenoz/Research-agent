@@ -60,7 +60,7 @@ def _build_subagent_prompt(state: GraphState, fallback_body: str) -> str:
     for section in state["combined_sections"]:
         heading = section.get("heading", "Section")
         content = section.get("content", "")
-        section_lines.append(f"- {heading}: {content}")
+        section_lines.append(f"### {heading}\n{content}")
 
     citations = []
     for citation in state["citations"][:12]:
@@ -68,18 +68,23 @@ def _build_subagent_prompt(state: GraphState, fallback_body: str) -> str:
         title = citation.get("title", "Untitled")
         citations.append(f"- {key}: {title}")
 
-    section_block = "\n".join(section_lines) if section_lines else "- no sections"
-    citation_block = "\n".join(citations) if citations else "- no citations"
+    section_block = "\n\n".join(section_lines) if section_lines else "No sections available."
+    citation_block = "\n".join(citations) if citations else "No citations available."
 
     return (
-        "You are writing the LaTeX body content for a research paper. "
-        "Return only valid LaTeX body sections (no preamble, no documentclass, no markdown).\n\n"
-        f"Topic: {state['topic']}\n\n"
-        "Combined section evidence:\n"
+        "You are an expert academic researcher writing a high-quality research paper for an IEEE/ACM conference. "
+        "Your task is to transform the provided synthesized section content into a cohesive, professional LaTeX document body.\n\n"
+        "### OBJECTIVES:\n"
+        "1.  **Academic Tone**: Use a formal, objective, and precise academic tone throughout.\n"
+        "2.  **Paper Structure**: Ensure the document flows logically. Organize the content into standard sections: Introduction (Background/Motivation), Related Work, Methodology (if applicable), Results/Findings, and Conclusion.\n"
+        "3.  **Citation Integration**: You MUST use the available \\cite{key} commands for all claims. Do NOT invent keys; only use those provided in the 'Available Citations' list.\n"
+        "4.  **LaTeX Syntax**: Return ONLY the LaTeX body content (from the first \\section to the last paragraph). No preamble, no \\begin{document}, and no markdown code blocks.\n\n"
+        f"**TOPIC**: {state['topic']}\n\n"
+        "**SYNTHESIZED SECTIONS (Draft Content)**:\n"
         f"{section_block}\n\n"
-        "Available citations:\n"
+        "**AVAILABLE CITATIONS (Use these keys)**:\n"
         f"{citation_block}\n\n"
-        "Draft body to improve (ensure all \\cite commands are preserved):\n"
+        "**DRAFT LATEX TO REFINE**:\n"
         f"{fallback_body}\n"
     )
 
@@ -150,6 +155,23 @@ async def composer_node(state: GraphState) -> dict:
         body=body,
         language=settings.output.language
     )
+
+    # STREAMING FEEDBACK: If we haven't streamed chunks yet (local generation), 
+    # we simulate it here so the UI feels alive.
+    from research_agent.models.llm_client import _STREAM_CALLBACK
+    chunk_handler = _STREAM_CALLBACK.get()
+    if chunk_handler:
+        # Stream the full content in small bursts
+        chunk_size = 500
+        for i in range(0, len(main_tex), chunk_size):
+            chunk = main_tex[i : i + chunk_size]
+            import asyncio
+            if asyncio.iscoroutinefunction(chunk_handler):
+                await chunk_handler(chunk)
+            else:
+                chunk_handler(chunk)
+            # Small delay to make it look like "writing"
+            await asyncio.sleep(0.02)
 
     bibtex = build_bibtex(state["citations"])
 

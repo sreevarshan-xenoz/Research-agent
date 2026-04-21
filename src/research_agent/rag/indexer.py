@@ -4,7 +4,7 @@ import os
 import uuid
 import hashlib
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from collections import OrderedDict
 
 from qdrant_client import QdrantClient
@@ -34,11 +34,20 @@ class ResearchIndex:
         self.client = QdrantClient(":memory:")
         self.collection_name = collection_name
         self.run_id = run_id
-        self.vector_size = 384  # Default for many small local models
+        self.vector_size = 384  # Fallback for deterministic local embeddings.
+        self._collection_created = False
         self._seen_fingerprints: set[str] = set()
         self._inserted_points = 0
         self._skipped_duplicates = 0
 
+    def _ensure_collection(self, vector_size: int) -> None:
+        if self._collection_created and vector_size == self.vector_size:
+            return
+
+        if self._collection_created:
+            self.client.delete_collection(collection_name=self.collection_name)
+
+        self.vector_size = vector_size
         self.client.create_collection(
             collection_name=self.collection_name,
             vectors_config=models.VectorParams(
@@ -46,6 +55,18 @@ class ResearchIndex:
                 distance=models.Distance.COSINE
             ),
         )
+        self._collection_created = True
+
+    def _coerce_vector(self, vector: List[float]) -> List[float]:
+        if not self._collection_created:
+            self._ensure_collection(len(vector) or self.vector_size)
+            return vector
+
+        if len(vector) == self.vector_size:
+            return vector
+        if len(vector) > self.vector_size:
+            return vector[: self.vector_size]
+        return vector + [0.0] * (self.vector_size - len(vector))
 
     async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
         # For v1, we use a simple deterministic "embedding" if no real model is available
@@ -83,7 +104,7 @@ class ResearchIndex:
         if not chunks:
             return
             
-        embeddings = await self._get_embeddings(chunks)
+        embeddings = [self._coerce_vector(vector) for vector in await self._get_embeddings(chunks)]
 
         source_url = str(item.get("url") or "")
         points = []
@@ -125,7 +146,7 @@ class ResearchIndex:
 
     async def asearch(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         query_vectors = await self._get_embeddings([query])
-        query_vector = query_vectors[0]
+        query_vector = self._coerce_vector(query_vectors[0])
         
         results = self.client.query_points(
             collection_name=self.collection_name,
