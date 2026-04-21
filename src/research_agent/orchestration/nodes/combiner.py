@@ -38,7 +38,7 @@ async def combiner_node(state: GraphState) -> dict:
             if task_id in {link.get("task_a", ""), link.get("task_b", "")}
         ]
 
-        contradiction_text = ""
+        contradiction_text = "No contradictions detected between sources."
         if task_contradictions:
             lines = [
                 (
@@ -47,7 +47,7 @@ async def combiner_node(state: GraphState) -> dict:
                 )
                 for link in task_contradictions[:3]
             ]
-            contradiction_text = "\nContradictions to address:\n" + "\n".join(lines)
+            contradiction_text = "\nContradictions detected to address:\n" + "\n".join(lines)
 
         # Grounded synthesis prompt
         prompt = (
@@ -56,8 +56,8 @@ async def combiner_node(state: GraphState) -> dict:
             f"Objective: {task['objective']}\n\n"
             "Use the following evidence retrieved via Deep RAG. "
             "IMPORTANT: Use the reference keys like [REF1], [REF2] exactly as provided to cite your claims.\n\n"
-            f"Evidence:\n{evidence_text}\n"
-            f"{contradiction_text}\n\n"
+            f"Evidence:\n{evidence_text}\n\n"
+            f"Verification Context:\n{contradiction_text}\n\n"
             "Write 2-3 detailed paragraphs. Be objective and technical. "
             "If contradictions are present, acknowledge the differing viewpoints."
         )
@@ -72,12 +72,14 @@ async def combiner_node(state: GraphState) -> dict:
             )
 
         # Build citation map: REF number -> source info for composer to use
+        # v2.1: Use URL as stable source key
         citation_map = {}
         for i, hit in enumerate(hits):
             ref_key = f"REF{i+1}"
+            url = hit.get("source_url") or f"internal://{hashlib.sha1(hit['text'].encode()).hexdigest()[:8]}"
             citation_map[ref_key] = {
                 "title": hit.get("source_title") or hit.get("source_url") or "Source",
-                "url": hit.get("source_url") or "",
+                "url": url,
                 "provider": hit.get("source_type") or "web",
             }
 

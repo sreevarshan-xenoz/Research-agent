@@ -46,9 +46,13 @@ def _route_after_worker(state: GraphState) -> str:
 
     if not pending:
         return "complete"
-    if ready:
-        return "loop"
-    return "blocked"
+    
+    # v2.1: Detect deadlock (pending tasks but none are ready)
+    if not ready:
+        state["stop_reason"] = "dependency_deadlock"
+        return "stopped"
+        
+    return "loop"
 
 
 def _route_after_critic(state: GraphState) -> str:

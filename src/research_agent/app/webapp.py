@@ -367,8 +367,13 @@ def create_app(
     @app.post("/api/session", response_model=SessionCreateResponse)
     async def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
         template = request.template or settings.output.default_template
+        
+        # Robust mapping for legacy/shorthand names
+        if template == "ieee":
+            template = "ieee-2col"
+        
         if template not in settings.output.supported_templates:
-            raise HTTPException(status_code=400, detail="Unsupported template")
+            raise HTTPException(status_code=400, detail=f"Unsupported template: {template}")
 
         session_id = f"sess-{uuid.uuid4().hex[:10]}"
         sessions[session_id] = ChatSession(session_id=session_id, template=template)
@@ -426,7 +431,6 @@ def create_app(
             max_cost_usd=max(0.0, float(cost_cap)),
             max_iterations=max_iterations,
             started_at=time.time(),
-            interrupt_signal=interrupt_signal,
             artifact_root=str(ARTIFACT_DIR),
         )
         save_checkpoint(state, label="start")
@@ -529,7 +533,6 @@ def create_app(
             max_cost_usd=max(0.0, float(cost_cap)),
             max_iterations=max_iterations,
             started_at=time.time(),
-            interrupt_signal=interrupt_signal,
             artifact_root=str(ARTIFACT_DIR),
         )
         save_checkpoint(state, label="start")

@@ -412,7 +412,7 @@ async function ensureSession() {
   const response = await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ template: templateSelect?.value || "ieee" }),
+    body: JSON.stringify({ template: templateSelect?.value || "ieee-2col" }),
   });
 
   if (!response.ok) throw new Error("Failed to initialize research session.");
@@ -466,7 +466,7 @@ async function sendMessageStream(text, onEvent) {
       body: JSON.stringify({
         session_id: sid,
         message: text,
-        template: templateSelect?.value || "ieee",
+        template: templateSelect?.value || "ieee-2col",
         depth: depthSelect?.value || "balanced",
         autonomy_mode: autonomySelect?.value || "hybrid",
         max_runtime_minutes: Number.isFinite(runtimeCap) ? Math.max(1, runtimeCap) : 25,

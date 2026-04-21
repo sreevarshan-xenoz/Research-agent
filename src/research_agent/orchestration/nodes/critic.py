@@ -70,15 +70,21 @@ async def critic_node(state: GraphState) -> dict:
     if not notes:
         notes.append("Evidence confidence is acceptable for initial v1 synthesis")
     
-    # If we have low confidence and capacity for more iterations, generate new tasks
+    # If we have low confidence and capacity for more iterations, mark ONLY those tasks for re-run
     if low_confidence_tasks and iteration_index < state["max_iterations"]:
         await apublish_progress(
             agent="Critic",
             status="running",
-            detail="Generating follow-up tasks",
+            detail=f"Resetting {len(low_confidence_tasks)} low-confidence tasks",
             message="Planning iteration loop",
         )
         
+        # Mark low-confidence tasks as pending so worker_executor picks them up
+        low_conf_ids = {str(t["task_id"]) for t in low_confidence_tasks}
+        for t in tasks:
+            if str(t["task_id"]) in low_conf_ids:
+                t["status"] = "pending"
+
         low_conf_str = "\n".join([f"- {t['title']}: {t['objective']}" for t in low_confidence_tasks])
         prompt = (
             f"The following research tasks for the topic '{state['topic']}' had low evidence quality:\n"

@@ -3,20 +3,30 @@ from __future__ import annotations
 import os
 import uuid
 import hashlib
+import random
 from typing import Any, Dict, List, Optional
+from collections import OrderedDict
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from research_agent.rag.chunker import chunk_text
 
+class LRUCache(OrderedDict):
+    """Simple LRU cache for fingerprints to prevent memory leaks."""
+    def __init__(self, capacity: int = 10000):
+        super().__init__()
+        self.capacity = capacity
+
+    def __setitem__(self, key, value):
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > self.capacity:
+            self.popitem(last=False)
+
 # Global fingerprint cache for cross-run deduplication
-# Key: fingerprint, Value: run_id when first seen
-#
-# NOTE: This is an in-memory cache only. For multi-worker deployments
-# (separate processes), use Redis-backed cache or DB-level dedup.
-# Current approach works for single-worker deployments (dev/small scale).
-_GLOBAL_FINGERPRINT_CACHE: dict[str, str] = {}
+_GLOBAL_FINGERPRINT_CACHE = LRUCache(capacity=50000)
 
 
 class ResearchIndex:
@@ -57,11 +67,10 @@ class ResearchIndex:
                 pass
         
         # Fallback: simple deterministic projection for "semantic" search mock
-        import numpy as np
-        
         def mock_embed(text: str) -> List[float]:
-            state = np.random.RandomState(sum(ord(c) for c in text) % 2**32)
-            return state.randn(self.vector_size).tolist()
+            seed = sum(ord(c) for c in text) % 2**32
+            rng = random.Random(seed)
+            return [rng.uniform(-1, 1) for _ in range(self.vector_size)]
             
         return [mock_embed(t) for t in texts]
 

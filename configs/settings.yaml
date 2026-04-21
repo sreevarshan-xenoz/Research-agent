@@ -16,14 +16,13 @@ models:
   # Subagent: primary model for section synthesis
   subagent_provider: auto         # auto | ollama | openrouter | puter
   subagent_local: deepseek-r1:8b  # Local Ollama model
-  subagent_cloud: openrouter/free # OpenRouter free tier (auto-selected if no local)
+  subagent_cloud: openrouter/google/gemini-2.0-flash-lite:free # OpenRouter free tier (auto-selected if no local)
 
   # Provider priority order (list)
-  # Options: ollama, openrouter, puter
+  # Options: ollama, openrouter
   provider_priority:
-    - ollama
     - openrouter
-    - puter
+    - ollama
 
 output:
   # v2 template names

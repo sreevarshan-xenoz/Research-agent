@@ -10,50 +10,43 @@ from research_agent.output.latex import build_bibtex, render_main_tex, escape_la
 
 
 def _build_body(state: GraphState) -> str:
+    # v2.1: Pre-build URL -> CitationKey map for O(1) lookup
+    url_to_citekey = {
+        cit.get("url"): cit["key"]
+        for cit in state["citations"]
+        if cit.get("url")
+    }
+
     sections: list[str] = []
     for section in state["combined_sections"]:
         heading = escape_latex(section.get("heading", "Section"))
         content = section.get("content", "No synthesized content available.")
 
-        # Use the citation_map from the section if available
+        # Use the citation_map from the section
         citation_map = section.get("citation_map", {})
 
         # Replace [REF1], [REF2], etc. with proper cite keys
         ref_matches = re.findall(r"\[REF(\d+)\]", content)
         for ref_num in ref_matches:
-            idx = int(ref_num)
-            ref_key = f"REF{idx}"
-
-            # Get the source info from the citation_map
+            ref_key = f"REF{ref_num}"
             source_info = citation_map.get(ref_key)
+            
             if source_info:
-                # Find a matching citation in state['citations']
-                source_title = source_info.get("title", "")
-                source_url = source_info.get("url", "")
-                found_key = None
-                for cit in state["citations"]:
-                    cit_title = cit.get("title", "")
-                    cit_url = cit.get("url", "")
-                    if source_title in cit_title or source_url in cit_url:
-                        found_key = cit["key"]
-                        break
-
+                source_url = source_info.get("url")
+                found_key = url_to_citekey.get(source_url)
+                
                 if found_key:
-                    content = content.replace(f"[REF{ref_num}]", f"\\cite{{{found_key}}}")
+                    content = content.replace(f"[{ref_key}]", f"\\cite{{{found_key}}}")
                 else:
-                    content = content.replace(f"[REF{ref_num}]", f"[{ref_num}] (source: {source_title})")
-            else:
-                # Fallback: find any available citation for this task_id
-                task_id = section.get("task_id", "")
-                found_key = None
-                for cit in state["citations"]:
-                    if cit["key"].startswith(f"{task_id}_"):
-                        found_key = cit["key"]
-                        break
-                if found_key:
-                    content = content.replace(f"[REF{ref_num}]", f"\\cite{{{found_key}}}")
-                else:
-                    content = content.replace(f"[REF{ref_num}]", f"[{ref_num}]")
+                    # Partial match or fallback to title
+                    source_title = source_info.get("title", "")
+                    for cit in state["citations"]:
+                        if source_title in cit.get("title", ""):
+                            content = content.replace(f"[{ref_key}]", f"\\cite{{{cit['key']}}}")
+                            break
+            
+            # Final fallback if still present
+            content = content.replace(f"[{ref_key}]", f"[{ref_num}]")
 
         sections.append(f"\\section{{{heading}}}\n{content}")
 

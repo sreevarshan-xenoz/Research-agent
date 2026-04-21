@@ -118,7 +118,7 @@ def _extract_json(text: str) -> str:
 
 async def agenerate_json(
     *,
-    role: str = "orchestrator",
+    role: str = "head",
     prompt: str,
     system_prompt: str = "You are a research assistant that only outputs valid JSON. No markdown, no explanation, just the JSON object.",
     temperature: float = 0.1,
@@ -152,7 +152,8 @@ async def agenerate_json(
             return None
 
         return json.loads(text)
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        print(f"LLM Error (agenerate_json, role={role}): {type(e).__name__}: {str(e)}")
         return None
 
 
@@ -220,16 +221,19 @@ async def agenerate_text(
                 fallbacks=fallbacks,
                 **extra_kwargs,
             )
-
             text = (response.choices[0].message.content or "").strip()
             return text or None
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        print(f"LLM Error (role={role}): {type(e).__name__}: {str(e)}")
+        return None
+
+        print(f"LLM Error (agenerate_text, role={role}): {type(e).__name__}: {str(e)}")
         return None
 
 
 def generate_json(
     *,
-    role: str = "orchestrator",
+    role: str = "head",
     prompt: str,
     system_prompt: str = "You are a research assistant that only outputs valid JSON. No markdown, no explanation, just the JSON object.",
     temperature: float = 0.1,
@@ -266,7 +270,8 @@ def generate_json(
             return None
 
         return json.loads(text)
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        print(f"LLM Error (generate_json, role={role}): {type(e).__name__}: {str(e)}")
         return None
 
 
@@ -336,8 +341,11 @@ def generate_text(
                 fallbacks=fallbacks,
                 **extra_kwargs,
             )
-
             text = (response.choices[0].message.content or "").strip()
             return text or None
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        print(f"LLM Error (role={role}): {type(e).__name__}: {str(e)}")
+        return None
+
+        print(f"LLM Error (agenerate_text, role={role}): {type(e).__name__}: {str(e)}")
         return None

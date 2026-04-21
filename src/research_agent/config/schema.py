@@ -50,6 +50,18 @@ class ModelSettings(BaseModel):
     worker_model: str = ""
     strong_model: str = ""
 
+    @model_validator(mode="after")
+    def populate_legacy_aliases(self) -> "ModelSettings":
+        if not self.head_model:
+            self.head_model = self.orchestrator_model
+        if not self.subagent_model:
+            self.subagent_model = self.subagent_cloud
+        if not self.worker_model:
+            self.worker_model = self.subagent_local
+        if not self.strong_model:
+            self.strong_model = self.subagent_cloud
+        return self
+
     @field_validator("provider_priority")
     @classmethod
     def validate_provider_priority(cls, value: list[str]) -> list[str]:
@@ -137,7 +149,7 @@ class FeatureFlags(BaseModel):
     cite_autofix: bool = True
     session_persistence: Literal["localStorage", "redis", "none"] = "localStorage"
     enable_session_persistence: bool = True
-    pdf_export: bool = False
+    pdf_export: bool = True
     multi_language: bool = False
 
 

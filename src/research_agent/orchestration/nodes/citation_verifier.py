@@ -142,13 +142,13 @@ async def _autofix_citations(
     citations: list[dict[str, str]], 
     mailto: str = "noreply@example.com"
 ) -> tuple[list[dict[str, str]], int]:
-    """Attempts to repair incomplete citations using OpenAlex."""
+    """Attempts to repair incomplete citations using OpenAlex in parallel."""
+    import asyncio
     repaired_count = 0
     adapter = OpenAlexAdapter(mailto=mailto)
     
-    fixed_citations: list[dict[str, str]] = []
-    
-    for cite in citations:
+    async def fix_single(cite: dict[str, str]) -> dict[str, str]:
+        nonlocal repaired_count
         needs_fix = (
             cite.get("author") == "Unknown" or 
             not cite.get("url") or 
@@ -157,11 +157,10 @@ async def _autofix_citations(
         
         if needs_fix and cite.get("title"):
             try:
-                # Search for the exact title to get better metadata
-                search_res = adapter.search(cite["title"], limit=1)
+                # v2.1: Use a thread pool for the sync adapter search call
+                search_res = await asyncio.to_thread(adapter.search, cite["title"], limit=1)
                 if search_res.items:
                     best_match = search_res.items[0]
-                    # Only update if we found something meaningful
                     if best_match.get("title"):
                         cite["title"] = str(best_match["title"])
                         if best_match.get("authors"):
@@ -173,10 +172,10 @@ async def _autofix_citations(
                         repaired_count += 1
             except Exception:
                 pass
-        
-        fixed_citations.append(cite)
-        
-    return fixed_citations, repaired_count
+        return cite
+
+    fixed_citations = await asyncio.gather(*(fix_single(c) for c in citations))
+    return list(fixed_citations), repaired_count
 
 
 async def citation_verifier_node(state: GraphState) -> dict:
@@ -255,9 +254,15 @@ async def citation_verifier_node(state: GraphState) -> dict:
         detail=detail_msg,
         message="Citation pass complete",
     )
+    
+    # v2.1: More descriptive phase
+    phase = "citations_verified"
+    if unsupported_task_ids:
+        phase = "citations_rejected"
+
     return {
         "citations": citations,
         "combined_sections": filtered_sections,
         "run_warnings": run_warnings,
-        "phase": "citations_verified",
+        "phase": phase,
     }
