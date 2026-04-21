@@ -41,6 +41,10 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
         models["subagent_local"] = env["SUBAGENT_LOCAL_MODEL"]
     if env.get("SUBAGENT_CLOUD_MODEL"):
         models["subagent_cloud"] = env["SUBAGENT_CLOUD_MODEL"]
+    if env.get("SUBAGENT_NVIDIA_MODEL"):
+        models["subagent_nvidia"] = env["SUBAGENT_NVIDIA_MODEL"]
+    elif env.get("NVIDIA_MODEL"):
+        models["subagent_nvidia"] = env["NVIDIA_MODEL"]
     if env.get("MODEL_PROVIDER_PRIORITY"):
         models["provider_priority"] = _coerce_list(env["MODEL_PROVIDER_PRIORITY"])
 

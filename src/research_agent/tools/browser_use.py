@@ -173,9 +173,15 @@ class BrowserUseAdapter(BaseToolAdapter):
             model = os.getenv("BROWSER_USE_MODEL", "bu-2-0")
             return ChatBrowserUse(model=model)
 
-        openrouter_key = os.getenv("OPENROUTER_API_KEY")
         openai_key = os.getenv("OPENAI_API_KEY")
-        key = openrouter_key or openai_key
+        use_openrouter = os.getenv("BROWSER_USE_USE_OPENROUTER", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        openrouter_key = os.getenv("OPENROUTER_API_KEY") if use_openrouter else ""
+        key = openai_key or openrouter_key
         if not key:
             return None
 
@@ -185,7 +191,7 @@ class BrowserUseAdapter(BaseToolAdapter):
             or "gpt-4.1-mini",
             "api_key": key,
         }
-        if openrouter_key:
+        if openrouter_key and not openai_key:
             kwargs["base_url"] = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
         elif os.getenv("OPENAI_API_BASE"):
             kwargs["base_url"] = os.getenv("OPENAI_API_BASE")

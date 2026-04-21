@@ -50,8 +50,8 @@ async def critic_node(state: GraphState) -> dict:
                     1.0,
                     (item_count / 8.0)
                     - (warning_count * 0.04)
-                    - (metadata_only_count * metadata_penalty),
-                    - contradiction_penalty
+                    - (metadata_only_count * metadata_penalty)
+                    - contradiction_penalty,
                 ),
             )
 
