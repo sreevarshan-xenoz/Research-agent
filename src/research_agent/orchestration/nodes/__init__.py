@@ -1,4 +1,5 @@
 from research_agent.orchestration.nodes.clarifier import awaiting_user_node, clarifier_node
+from research_agent.orchestration.state import GraphState
 from research_agent.orchestration.nodes.combiner import combiner_node
 from research_agent.orchestration.nodes.composer import composer_node
 from research_agent.orchestration.nodes.citation_verifier import citation_verifier_node
@@ -37,4 +38,11 @@ __all__ = [
 	"citation_verifier_node",
 	"composer_node",
 	"exporter_node",
+	"awaiting_user_critic_node",
 ]
+
+
+async def awaiting_user_critic_node(state: GraphState) -> dict:
+    """Pauses the graph to wait for user feedback on the critic's findings."""
+    return {"phase": "awaiting_critic_review"}
+

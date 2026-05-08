@@ -1,4 +1,3 @@
-from research_agent.models import agenerate_json
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links
 from research_agent.orchestration.state import GraphState
@@ -85,39 +84,15 @@ async def critic_node(state: GraphState) -> dict:
             if str(t["task_id"]) in low_conf_ids:
                 t["status"] = "pending"
 
-        low_conf_str = "\n".join([f"- {t['title']}: {t['objective']}" for t in low_confidence_tasks])
-        prompt = (
-            f"The following research tasks for the topic '{state['topic']}' had low evidence quality:\n"
-            f"{low_conf_str}\n\n"
-            "Generate 1-3 specific follow-up research tasks to address these gaps. "
-            "Each task must have a 'task_id' (unique, e.g. f1, f2), 'title', 'objective', and 'depends_on' (list).\n"
-            "Return a JSON object with a 'tasks' key."
-        )
-        
-        # Use the HEAD model (local Ollama) for follow-up task generation
-        llm_followup = await agenerate_json(role="head", prompt=prompt)
-        new_tasks = []
-        if llm_followup and isinstance(llm_followup, dict) and "tasks" in llm_followup:
-            raw_tasks = llm_followup["tasks"]
-            if isinstance(raw_tasks, list):
-                for t in raw_tasks:
-                    if isinstance(t, dict) and all(k in t for k in ("task_id", "title", "objective")):
-                        t["depends_on"] = t.get("depends_on", [])
-                        if not isinstance(t["depends_on"], list):
-                            t["depends_on"] = []
-                        new_tasks.append(t)
-
-        if not new_tasks:
-            # Fallback: create follow-up tasks that depend on the original low-confidence tasks
-            depends_on_originals = [str(t["task_id"]) for t in low_confidence_tasks]
-            new_tasks = [
-                {
-                    "task_id": f"f{iteration_index}",
-                    "title": "Deep evidence recovery",
-                    "objective": f"Recover missing evidence for: {state['topic']}",
-                    "depends_on": depends_on_originals,  # Proper dependency on originals
-                }
-            ]
+        depends_on_originals = [str(t["task_id"]) for t in low_confidence_tasks]
+        new_tasks = [
+            {
+                "task_id": f"f{iteration_index}",
+                "title": "Deep evidence recovery",
+                "objective": f"Recover missing evidence for: {state['topic']}",
+                "depends_on": depends_on_originals,
+            }
+        ]
 
         for t in new_tasks:
             t["status"] = "pending"

@@ -10,20 +10,19 @@ runtime:
 
 models:
   # Orchestrator: local model for planning, clarification, critic
-  orchestrator_model: openrouter/google/gemini-2.0-flash-lite:free
-  orchestrator_provider: openrouter
+  orchestrator_model: ollama/qwen3.5:2b
+  orchestrator_provider: ollama
 
   # Subagent: primary model for section synthesis
   subagent_provider: auto         # auto | ollama | openrouter | puter | nvidia
-  subagent_local: deepseek-r1:8b  # Local Ollama model
-  subagent_cloud: openrouter/google/gemini-2.0-flash-lite:free
-  subagent_nvidia: nvidia/meta/llama-3.1-405b-instruct
+  subagent_local: qwen3.5:2b      # Local Ollama fallback model
+  subagent_cloud: openrouter/free
+  subagent_nvidia: moonshotai/kimi-k2-instruct-0905
 
   # Provider priority order (list)
   # Options: ollama, openrouter, nvidia
   provider_priority:
     - nvidia
-    - openrouter
     - ollama
 
 output:
