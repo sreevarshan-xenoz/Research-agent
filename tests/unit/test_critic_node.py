@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import pytest
 from research_agent.orchestration.nodes import critic as critic_module
 from research_agent.orchestration.nodes.critic import critic_node
 
 
-def test_critic_applies_metadata_fallback_penalty() -> None:
+@pytest.mark.asyncio
+async def test_critic_applies_metadata_fallback_penalty() -> None:
     state = {
         "run_id": "run-critic",
         "topic": "topic",
@@ -56,14 +58,14 @@ def test_critic_applies_metadata_fallback_penalty() -> None:
         "run_warnings": [],
     }
 
-    result = critic_node(state)
+    result = await critic_node(state)
 
     # Base confidence with 2 items would be 0.25; metadata penalty should not increase it.
     assert result["section_confidence"]["t1"] <= 0.25
     assert any("Metadata fallback penalty applied for t1" in note for note in result["critic_notes"])
 
 
-def test_critic_applies_contradiction_penalty(monkeypatch) -> None:  # noqa: ANN001
+async def test_critic_applies_contradiction_penalty(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(
         critic_module,
         "get_contradiction_links",
@@ -128,6 +130,6 @@ def test_critic_applies_contradiction_penalty(monkeypatch) -> None:  # noqa: ANN
         "run_warnings": [],
     }
 
-    result = critic_node(state)
+    result = await critic_node(state)
 
     assert any("Contradiction penalty applied for t1" in note for note in result["critic_notes"])

@@ -6,6 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
 
 from research_agent.orchestration.nodes import (
+    awaiting_user_critic_node,
     awaiting_user_node,
     citation_verifier_node,
     clarifier_node,
@@ -65,6 +66,8 @@ def _route_after_critic(state: GraphState) -> str:
     low_confidence = any(score < 0.35 for score in state["section_confidence"].values())
     
     if low_confidence and state["iteration_index"] < state["max_iterations"]:
+        if state.get("autonomy_mode") == "interactive":
+            return "await_user_critic"
         return "loop"
     return "combiner"
 
@@ -101,6 +104,7 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_node("stopped", stop_node)
     graph.add_node("indexing", indexing_node)
     graph.add_node("critic", critic_node)
+    graph.add_node("await_user_critic", awaiting_user_critic_node)
     graph.add_node("combiner", combiner_node)
     graph.add_node("figure_generator", figure_generator_node)
     graph.add_node("citation_verifier", citation_verifier_node)
@@ -137,11 +141,14 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
         "critic",
         _route_after_critic,
         {
+            "await_user_critic": "await_user_critic",
             "loop": "worker_executor",
             "combiner": "combiner",
             "stopped": "stopped",
         },
     )
+
+    graph.add_edge("await_user_critic", END)
 
     graph.add_edge("stopped", "combiner")
     
