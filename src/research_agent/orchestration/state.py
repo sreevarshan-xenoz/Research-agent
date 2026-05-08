@@ -34,6 +34,7 @@ class GraphState(TypedDict):
     needs_clarification: bool
     task_findings: dict[str, dict[str, dict[str, object]]]
     critic_notes: list[str]
+    critic_user_feedback: str | None
     combined_sections: list[dict[str, str]]
     citations: list[dict[str, str]]
     figures: list[dict[str, str]]
@@ -75,6 +76,7 @@ class WorkflowState:
     needs_clarification: bool = False
     task_findings: Dict[str, Dict[str, Dict[str, object]]] = field(default_factory=dict)
     critic_notes: List[str] = field(default_factory=list)
+    critic_user_feedback: Optional[str] = None
     combined_sections: List[Dict[str, str]] = field(default_factory=list)
     citations: List[Dict[str, str]] = field(default_factory=list)
     figures: List[Dict[str, str]] = field(default_factory=list)
@@ -116,6 +118,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "needs_clarification": state.needs_clarification,
         "task_findings": state.task_findings,
         "critic_notes": state.critic_notes,
+        "critic_user_feedback": state.critic_user_feedback,
         "combined_sections": state.combined_sections,
         "citations": state.citations,
         "figures": state.figures,
@@ -158,6 +161,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         needs_clarification=state["needs_clarification"],
         task_findings=state["task_findings"],
         critic_notes=state["critic_notes"],
+        critic_user_feedback=state.get("critic_user_feedback"),
         combined_sections=state["combined_sections"],
         citations=state["citations"],
         figures=state.get("figures", []),
