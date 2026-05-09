@@ -12,8 +12,10 @@ import threading
 import time
 import uuid
 import zipfile
+from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException
+import redis.asyncio as redis
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
@@ -47,6 +49,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str = Field(min_length=1)
     template: str | None = None
+    language: str | None = None
     depth: str | None = None
     autonomy_mode: str | None = None
     max_runtime_minutes: int | None = None
@@ -69,6 +72,8 @@ class ChatResponse(BaseModel):
     kind: str
     assistant_message: str
     run_id: str | None = None
+    template: str | None = None
+    language: str | None = None
     questions: list[str] = Field(default_factory=list)
     critic_notes: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -87,9 +92,75 @@ class ChatSession:
     session_id: str
     template: str
     original_topic: str = ""
+    last_run_id: str = ""
     awaiting_clarification: bool = False
     pending_questions: list[str] = field(default_factory=list)
     clarification_answers: list[str] = field(default_factory=list)
+
+
+class AsyncRedisSessionStore:
+    def __init__(self, url: str):
+        self.client = redis.from_url(url, decode_responses=True)
+        self.key_prefix = "research_agent:sessions"
+
+    async def get(self, session_id: str) -> ChatSession | None:
+        data = await self.client.hgetall(f"{self.key_prefix}:{session_id}")
+        if not data:
+            return None
+        # Convert string representations of lists back to lists
+        for list_key in ["pending_questions", "clarification_answers"]:
+            if list_key in data and isinstance(data[list_key], str):
+                try:
+                    data[list_key] = json.loads(data[list_key])
+                except Exception:
+                    data[list_key] = []
+        
+        # Boolean conversion
+        if "awaiting_clarification" in data:
+            data["awaiting_clarification"] = data["awaiting_clarification"] == "True"
+            
+        return ChatSession(**data)
+
+    async def set(self, session: ChatSession) -> None:
+        data = vars(session).copy()
+        # Serialize lists to JSON strings for Redis hash
+        for list_key in ["pending_questions", "clarification_answers"]:
+            data[list_key] = json.dumps(data[list_key])
+        
+        await self.client.hset(f"{self.key_prefix}:{session.session_id}", mapping=data)
+
+    async def delete(self, session_id: str) -> None:
+        await self.client.delete(f"{self.key_prefix}:{session_id}")
+
+
+def _get_session_store_path() -> Path:
+    path = Path(os.getenv("CHECKPOINT_ROOT", ".runtime/checkpoints")).resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path / "sessions.json"
+
+
+def _load_sessions() -> dict[str, ChatSession]:
+    path = _get_session_store_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        sessions = {}
+        for sid, sdata in data.items():
+            sessions[sid] = ChatSession(**sdata)
+        return sessions
+    except Exception as e:
+        print(f"Error loading sessions: {e}")
+        return {}
+
+
+def _save_sessions(sessions: dict[str, ChatSession]) -> None:
+    path = _get_session_store_path()
+    try:
+        data = {sid: vars(s) for sid, s in sessions.items()}
+        path.write_text(json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"Error saving sessions: {e}")
 
 
 class StopResponse(BaseModel):
@@ -98,12 +169,20 @@ class StopResponse(BaseModel):
 
 
 def _build_artifact_urls(run_id: str) -> dict[str, str]:
-    return {
+    urls = {
         "main_tex": f"/artifacts/{run_id}/main.tex",
         "references_bib": f"/artifacts/{run_id}/references.bib",
         "compile_instructions": f"/artifacts/{run_id}/compile_instructions.md",
         "summary": f"/artifacts/{run_id}/summary.json",
+        "bundle": f"/artifacts/{run_id}/overleaf_bundle.zip",
     }
+    
+    # Check if PDF exists
+    pdf_path = ARTIFACT_DIR / run_id / "main.pdf"
+    if pdf_path.exists():
+        urls["pdf"] = f"/artifacts/{run_id}/main.pdf"
+        
+    return urls
 
 
 def _compose_refined_topic(topic: str, questions: list[str], answers: list[str]) -> str:
@@ -351,6 +430,198 @@ def _merge_activity_update(
     return updated
 
 
+async def _execute_research_run(
+    *,
+    run_id: str,
+    session: ChatSession,
+    topic: str,
+    template: str,
+    language: str,
+    depth: str,
+    autonomy_mode: str,
+    max_runtime_minutes: int,
+    max_cost_usd: float,
+    max_iterations: int,
+    graph_runner,
+    tool_registry: dict[str, BaseToolAdapter],
+    emit_callback: Callable[[str, dict], Any],
+) -> WorkflowState | None:
+    state = WorkflowState(
+        run_id=run_id,
+        topic=topic,
+        template=template,
+        language=language,
+        depth=depth,
+        autonomy_mode=autonomy_mode,
+        max_runtime_minutes=max_runtime_minutes,
+        max_cost_usd=max_cost_usd,
+        max_iterations=max_iterations,
+        started_at=time.time(),
+        artifact_root=str(ARTIFACT_DIR),
+    )
+    save_checkpoint(state, label="start")
+
+    event_loop = asyncio.get_running_loop()
+    latex_queue: asyncio.Queue[str] = asyncio.Queue()
+    progress_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
+    activity_entries = _seed_activity_entries()
+
+    def on_latex_chunk(chunk: str) -> None:
+        event_loop.call_soon_threadsafe(latex_queue.put_nowait, chunk)
+
+    def on_progress(payload: dict[str, str]) -> None:
+        event_loop.call_soon_threadsafe(progress_queue.put_nowait, payload)
+
+    async def run_graph_task():
+        with progress_callback(on_progress):
+            with stream_callback(on_latex_chunk):
+                try:
+                    return await _call_graph_runner(graph_runner, state, tool_registry)
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    raise RuntimeError(f"Graph execution failed: {str(e)}") from e
+
+    await emit_callback(
+        "status",
+        {
+            "message": "Run accepted",
+            "agent_activity": activity_entries,
+        },
+    )
+
+    run_task = asyncio.create_task(run_graph_task())
+    streamed_latex = False
+    last_heartbeat = time.time()
+
+    while not run_task.done() or not latex_queue.empty() or not progress_queue.empty():
+        current_time = time.time()
+        
+        # Heartbeat
+        if current_time - last_heartbeat > 15:
+            await emit_callback("ping", {"time": current_time})
+            last_heartbeat = current_time
+
+        # Check for updates
+        has_updates = False
+        while not progress_queue.empty():
+            progress_payload = await progress_queue.get()
+            agent_name = progress_payload.get("agent", "Agent")
+            activity_entries = _merge_activity_update(
+                activity_entries,
+                agent=agent_name,
+                status=progress_payload.get("status", "running"),
+                detail=progress_payload.get("detail", ""),
+            )
+            has_updates = True
+        
+        if has_updates:
+            await emit_callback(
+                "status",
+                {
+                    "message": "Research in progress",
+                    "agent_activity": activity_entries,
+                },
+            )
+
+        while not latex_queue.empty():
+            chunk = await latex_queue.get()
+            if chunk:
+                if not streamed_latex:
+                    streamed_latex = True
+                    await emit_callback(
+                        "status",
+                        {
+                            "message": "Streaming LaTeX generation",
+                            "agent_activity": _merge_activity_update(
+                                activity_entries,
+                                agent="Composer",
+                                status="running",
+                                detail="Receiving model tokens",
+                            ),
+                        },
+                    )
+                await emit_callback("latex_chunk", {"chunk": chunk})
+        
+        if run_task.done():
+            # Check for exceptions
+            try:
+                if run_task.exception():
+                    await emit_callback("error", {"message": str(run_task.exception())})
+                    return None
+            except asyncio.CancelledError:
+                return None
+
+        await asyncio.sleep(0.05)
+
+    run_error = run_task.exception() if run_task.done() else None
+    if run_error:
+        await emit_callback("error", {"message": str(run_error)})
+        return None
+
+    updated = run_task.result()
+    save_checkpoint(updated, label=updated.phase)
+
+    if updated.phase == "awaiting_user_clarification":
+        session.awaiting_clarification = True
+        session.pending_questions = list(updated.clarification_questions)
+        clarification = ChatResponse(
+            kind="clarification",
+            assistant_message="I need a few details before I run deep research.",
+            run_id=updated.run_id,
+            template=updated.template,
+            language=updated.language,
+            questions=session.pending_questions,
+            agent_activity=_build_agent_activity(updated),
+        )
+        await emit_callback("clarification", clarification.model_dump())
+    else:
+        session.awaiting_clarification = False
+        session.pending_questions = []
+        session.clarification_answers = []
+
+        await emit_callback(
+            "status",
+            {
+                "message": "Generating LaTeX workbench output",
+                "agent_activity": _build_agent_activity(updated),
+            },
+        )
+
+        latex_text = updated.latex_main or ""
+        if not streamed_latex:
+            chunk_size = 120
+            for idx in range(0, len(latex_text), chunk_size):
+                await emit_callback("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
+                await asyncio.sleep(0.01)
+
+        artifact_urls = _build_artifact_urls(updated.run_id)
+
+        result = ChatResponse(
+            kind="result",
+            assistant_message=_build_result_message(updated),
+            run_id=updated.run_id,
+            template=updated.template,
+            language=updated.language,
+            critic_notes=updated.critic_notes,
+            warnings=updated.run_warnings,
+            section_confidence=updated.section_confidence,
+            task_statuses=[
+                TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
+                for task in updated.tasks
+            ],
+            artifact_urls=artifact_urls,
+            agent_activity=_build_agent_activity(updated),
+            section_evidence=_build_section_evidence(updated),
+            latex_text=latex_text,
+            doc_preview_html=_latex_to_doc_html(latex_text),
+            overleaf_urls=_build_overleaf_urls(updated),
+        )
+        await emit_callback("result", result.model_dump())
+    
+    return updated
+
+
 def create_app(
     *,
     graph_runner=run_graph,
@@ -359,9 +630,14 @@ def create_app(
     settings = load_settings()
     tool_registry = build_tool_registry(settings) if registry is None else registry
 
-    sessions: dict[str, ChatSession] = {}
+    # Persistence Backend Selection
+    session_store = None
+    if settings.features.session_persistence == "redis":
+        session_store = AsyncRedisSessionStore(settings.redis.url)
+    
+    # Cache for in-memory fallback
+    sessions: dict[str, ChatSession] = _load_sessions()
     session_active_runs: dict[str, str] = {}
-    session_last_run: dict[str, str] = {}
     run_interrupt_signals: dict[str, threading.Event] = {}
 
     app = FastAPI(title="Research Agent Web")
@@ -377,6 +653,18 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    async def get_session(session_id: str) -> ChatSession | None:
+        if session_store:
+            return await session_store.get(session_id)
+        return sessions.get(session_id)
+
+    async def save_session(session: ChatSession) -> None:
+        if session_store:
+            await session_store.set(session)
+        else:
+            sessions[session.session_id] = session
+            _save_sessions(sessions)
+
     @app.post("/api/session", response_model=SessionCreateResponse)
     async def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
         template = request.template or settings.output.default_template
@@ -389,12 +677,13 @@ def create_app(
             raise HTTPException(status_code=400, detail=f"Unsupported template: {template}")
 
         session_id = f"sess-{uuid.uuid4().hex[:10]}"
-        sessions[session_id] = ChatSession(session_id=session_id, template=template)
+        session = ChatSession(session_id=session_id, template=template)
+        await save_session(session)
         return SessionCreateResponse(session_id=session_id, template=template)
 
     @app.post("/api/chat", response_model=ChatResponse)
     async def chat(request: ChatRequest) -> ChatResponse:
-        session = sessions.get(request.session_id)
+        session = await get_session(request.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -422,10 +711,11 @@ def create_app(
         interrupt_signal = threading.Event()
         run_interrupt_signals[run_id] = interrupt_signal
         session_active_runs[request.session_id] = run_id
-        session_last_run[request.session_id] = run_id
+        session.last_run_id = run_id
+        await save_session(session)
 
-        runtime_cap = request.max_runtime_minutes or settings.runtime.max_runtime_minutes
-        cost_cap = request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd
+        runtime_cap = max(1, int(request.max_runtime_minutes or settings.runtime.max_runtime_minutes))
+        cost_cap = max(0.0, float(request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd))
         depth = (request.depth or "balanced").strip().lower()
         autonomy_mode = (request.autonomy_mode or "hybrid").strip().lower()
         max_iterations = max(1, min(settings.runtime.max_iterations, 3))
@@ -434,51 +724,54 @@ def create_app(
         elif depth == "deep":
             max_iterations = min(5, max_iterations + 1)
 
-        state = WorkflowState(
+        # Mock emit for sync chat
+        async def mock_emit(event, payload): pass
+
+        updated = await _execute_research_run(
             run_id=run_id,
+            session=session,
             topic=topic,
             template=template,
+            language=request.language or "en",
             depth=depth,
             autonomy_mode=autonomy_mode,
-            max_runtime_minutes=max(1, int(runtime_cap)),
-            max_cost_usd=max(0.0, float(cost_cap)),
+            max_runtime_minutes=runtime_cap,
+            max_cost_usd=cost_cap,
             max_iterations=max_iterations,
-            started_at=time.time(),
-            artifact_root=str(ARTIFACT_DIR),
+            graph_runner=graph_runner,
+            tool_registry=tool_registry,
+            emit_callback=mock_emit
         )
-        save_checkpoint(state, label="start")
-        try:
-            updated = await _call_graph_runner(graph_runner, state, tool_registry)
-        finally:
-            run_interrupt_signals.pop(run_id, None)
-            if session_active_runs.get(request.session_id) == run_id:
-                session_active_runs.pop(request.session_id, None)
+        
+        if updated is None:
+            raise HTTPException(status_code=500, detail="Graph execution failed")
 
-        save_checkpoint(updated, label=updated.phase)
+        run_interrupt_signals.pop(run_id, None)
+        if session_active_runs.get(request.session_id) == run_id:
+            session_active_runs.pop(request.session_id, None)
+
+        await save_session(session)
 
         if updated.phase == "awaiting_user_clarification":
-            session.awaiting_clarification = True
-            session.pending_questions = list(updated.clarification_questions)
             return ChatResponse(
                 kind="clarification",
                 assistant_message="I need a few details before I run deep research.",
                 run_id=updated.run_id,
+                template=updated.template,
+                language=updated.language,
                 questions=session.pending_questions,
                 agent_activity=_build_agent_activity(updated),
             )
 
-        session.awaiting_clarification = False
-        session.pending_questions = []
-        session.clarification_answers = []
-
         artifact_urls = _build_artifact_urls(updated.run_id)
-
         overleaf_urls = _build_overleaf_urls(updated)
 
         return ChatResponse(
             kind="result",
             assistant_message=_build_result_message(updated),
             run_id=updated.run_id,
+            template=updated.template,
+            language=updated.language,
             critic_notes=updated.critic_notes,
             warnings=updated.run_warnings,
             section_confidence=updated.section_confidence,
@@ -496,7 +789,7 @@ def create_app(
 
     @app.post("/api/chat/stream")
     async def chat_stream(request: ChatRequest) -> StreamingResponse:
-        session = sessions.get(request.session_id)
+        session = await get_session(request.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -524,10 +817,11 @@ def create_app(
         interrupt_signal = threading.Event()
         run_interrupt_signals[run_id] = interrupt_signal
         session_active_runs[request.session_id] = run_id
-        session_last_run[request.session_id] = run_id
+        session.last_run_id = run_id
+        await save_session(session)
 
-        runtime_cap = request.max_runtime_minutes or settings.runtime.max_runtime_minutes
-        cost_cap = request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd
+        runtime_cap = max(1, int(request.max_runtime_minutes or settings.runtime.max_runtime_minutes))
+        cost_cap = max(0.0, float(request.max_cost_usd if request.max_cost_usd is not None else settings.runtime.max_cost_usd))
         depth = (request.depth or "balanced").strip().lower()
         autonomy_mode = (request.autonomy_mode or "hybrid").strip().lower()
         max_iterations = max(1, min(settings.runtime.max_iterations, 3))
@@ -536,194 +830,134 @@ def create_app(
         elif depth == "deep":
             max_iterations = min(5, max_iterations + 1)
 
-        state = WorkflowState(
-            run_id=run_id,
-            topic=topic,
-            template=template,
-            depth=depth,
-            autonomy_mode=autonomy_mode,
-            max_runtime_minutes=max(1, int(runtime_cap)),
-            max_cost_usd=max(0.0, float(cost_cap)),
-            max_iterations=max_iterations,
-            started_at=time.time(),
-            artifact_root=str(ARTIFACT_DIR),
-        )
-        save_checkpoint(state, label="start")
-
         async def event_generator():
-            def emit(event: str, payload: dict) -> str:
-                envelope = {"event": event, "payload": payload}
+            queue = asyncio.Queue()
+            
+            async def emit(event: str, payload: dict):
                 append_run_event(run_id=run_id, event=event, payload=payload)
-                try:
-                    return json.dumps(jsonable_encoder(envelope), ensure_ascii=True) + "\n"
-                except Exception:
-                    return json.dumps({"event": "error", "payload": {"message": "Encoding error"}}) + "\n"
+                await queue.put(json.dumps(jsonable_encoder({"event": event, "payload": payload}), ensure_ascii=True) + "\n")
 
-            event_loop = asyncio.get_running_loop()
-            latex_queue: asyncio.Queue[str] = asyncio.Queue()
-            progress_queue: asyncio.Queue[dict[str, str]] = asyncio.Queue()
-            activity_entries = _seed_activity_entries()
-
-            def on_latex_chunk(chunk: str) -> None:
-                event_loop.call_soon_threadsafe(latex_queue.put_nowait, chunk)
-
-            def on_progress(payload: dict[str, str]) -> None:
-                event_loop.call_soon_threadsafe(progress_queue.put_nowait, payload)
-
-            async def run_graph_task():
-                with progress_callback(on_progress):
-                    with stream_callback(on_latex_chunk):
-                        try:
-                            return await _call_graph_runner(graph_runner, state, tool_registry)
-                        except Exception as e:
-                            import traceback
-                            traceback.print_exc()
-                            raise RuntimeError(f"Graph execution failed: {str(e)}") from e
+            run_task = asyncio.create_task(_execute_research_run(
+                run_id=run_id,
+                session=session,
+                topic=topic,
+                template=template,
+                language=request.language or "en",
+                depth=depth,
+                autonomy_mode=autonomy_mode,
+                max_runtime_minutes=runtime_cap,
+                max_cost_usd=cost_cap,
+                max_iterations=max_iterations,
+                graph_runner=graph_runner,
+                tool_registry=tool_registry,
+                emit_callback=emit
+            ))
 
             try:
-                yield emit(
-                    "status",
-                    {
-                        "message": "Run accepted",
-                        "agent_activity": activity_entries,
-                    },
-                )
-
-                run_task = asyncio.create_task(run_graph_task())
-                streamed_latex = False
-                last_heartbeat = time.time()
-
-                while not run_task.done() or not latex_queue.empty() or not progress_queue.empty():
-                    current_time = time.time()
-                    
-                    # Heartbeat
-                    if current_time - last_heartbeat > 15:
-                        yield emit("ping", {"time": current_time})
-                        last_heartbeat = current_time
-
-                    # Check for updates
-                    has_updates = False
-                    while not progress_queue.empty():
-                        progress_payload = await progress_queue.get()
-                        agent_name = progress_payload.get("agent", "Agent")
-                        activity_entries = _merge_activity_update(
-                            activity_entries,
-                            agent=agent_name,
-                            status=progress_payload.get("status", "running"),
-                            detail=progress_payload.get("detail", ""),
-                        )
-                        has_updates = True
-                    
-                    if has_updates:
-                        yield emit(
-                            "status",
-                            {
-                                "message": "Research in progress",
-                                "agent_activity": activity_entries,
-                            },
-                        )
-
-                    while not latex_queue.empty():
-                        chunk = await latex_queue.get()
-                        if chunk:
-                            if not streamed_latex:
-                                streamed_latex = True
-                                yield emit(
-                                    "status",
-                                    {
-                                        "message": "Streaming LaTeX generation",
-                                        "agent_activity": _merge_activity_update(
-                                            activity_entries,
-                                            agent="Composer",
-                                            status="running",
-                                            detail="Receiving model tokens",
-                                        ),
-                                    },
-                                )
-                            yield emit("latex_chunk", {"chunk": chunk})
-                    
-                    if run_task.done():
-                        # Check for exceptions
-                        try:
-                            if run_task.exception():
-                                yield emit("error", {"message": str(run_task.exception())})
-                                break
-                        except asyncio.CancelledError:
-                            break
-
-                    await asyncio.sleep(0.05)
-
-                run_error = run_task.exception() if run_task.done() else None
-                if run_error:
-                    yield emit("error", {"message": str(run_error)})
-                    return
-
-                if run_task.done():
-                    updated = run_task.result()
-                    save_checkpoint(updated, label=updated.phase)
-
-                    if updated.phase == "awaiting_user_clarification":
-                        session.awaiting_clarification = True
-                        session.pending_questions = list(updated.clarification_questions)
-                        clarification = ChatResponse(
-                            kind="clarification",
-                            assistant_message="I need a few details before I run deep research.",
-                            run_id=updated.run_id,
-                            questions=session.pending_questions,
-                            agent_activity=_build_agent_activity(updated),
-                        )
-                        yield emit("clarification", clarification.model_dump())
-                    else:
-                        session.awaiting_clarification = False
-                        session.pending_questions = []
-                        session.clarification_answers = []
-
-                        yield emit(
-                            "status",
-                            {
-                                "message": "Generating LaTeX workbench output",
-                                "agent_activity": _build_agent_activity(updated),
-                            },
-                        )
-
-                        latex_text = updated.latex_main or ""
-                        if not streamed_latex:
-                            chunk_size = 120
-                            for idx in range(0, len(latex_text), chunk_size):
-                                yield emit("latex_chunk", {"chunk": latex_text[idx : idx + chunk_size]})
-                                await asyncio.sleep(0.01)
-
-                        artifact_urls = _build_artifact_urls(updated.run_id)
-
-                        result = ChatResponse(
-                            kind="result",
-                            assistant_message=_build_result_message(updated),
-                            run_id=updated.run_id,
-                            critic_notes=updated.critic_notes,
-                            warnings=updated.run_warnings,
-                            section_confidence=updated.section_confidence,
-                            task_statuses=[
-                                TaskStatus(task_id=task.task_id, title=task.title, status=task.status)
-                                for task in updated.tasks
-                            ],
-                            artifact_urls=artifact_urls,
-                            agent_activity=_build_agent_activity(updated),
-                            section_evidence=_build_section_evidence(updated),
-                            latex_text=latex_text,
-                            doc_preview_html=_latex_to_doc_html(latex_text),
-                            overleaf_urls=_build_overleaf_urls(updated),
-                        )
-                        yield emit("result", result.model_dump())
-            except Exception as outer_e:
-                import traceback
-                traceback.print_exc()
-                yield emit("error", {"message": f"Critical stream error: {str(outer_e)}"})
+                while not run_task.done() or not queue.empty():
+                    try:
+                        yield await asyncio.wait_for(queue.get(), timeout=1.0)
+                    except asyncio.TimeoutError:
+                        continue
+                
+                if run_task.result():
+                    await save_session(session)
+            except Exception as e:
+                yield json.dumps({"event": "error", "payload": {"message": str(e)}}) + "\n"
             finally:
                 run_interrupt_signals.pop(run_id, None)
                 if session_active_runs.get(request.session_id) == run_id:
                     session_active_runs.pop(request.session_id, None)
 
         return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+    @app.websocket("/ws/chat/{session_id}")
+    async def chat_websocket(websocket: WebSocket, session_id: str):
+        await websocket.accept()
+        session = await get_session(session_id)
+        if not session:
+            await websocket.send_json({"event": "error", "payload": {"message": "Session not found"}})
+            await websocket.close()
+            return
+
+        try:
+            while True:
+                data = await websocket.receive_json()
+                action = data.get("action")
+                if action == "chat":
+                    message = data.get("message", "").strip()
+                    if not message:
+                        await websocket.send_json({"event": "error", "payload": {"message": "Empty message"}})
+                        continue
+
+                    template = data.get("template") or session.template
+                    session.template = template
+                    language = data.get("language") or "en"
+
+                    if session.awaiting_clarification:
+                        session.clarification_answers.append(message)
+                        topic = _compose_refined_topic(
+                            session.original_topic,
+                            session.pending_questions,
+                            session.clarification_answers,
+                        )
+                    else:
+                        session.original_topic = message
+                        session.pending_questions = []
+                        session.clarification_answers = []
+                        topic = message
+
+                    run_id = f"run-{uuid.uuid4().hex[:8]}"
+                    interrupt_signal = threading.Event()
+                    run_interrupt_signals[run_id] = interrupt_signal
+                    session_active_runs[session_id] = run_id
+                    session.last_run_id = run_id
+                    await save_session(session)
+
+                    runtime_cap = max(1, int(data.get("max_runtime_minutes") or settings.runtime.max_runtime_minutes))
+                    cost_cap = max(0.0, float(data.get("max_cost_usd") if data.get("max_cost_usd") is not None else settings.runtime.max_cost_usd))
+                    depth = (data.get("depth") or "balanced").strip().lower()
+                    autonomy_mode = (data.get("autonomy_mode") or "hybrid").strip().lower()
+                    max_iterations = max(1, min(settings.runtime.max_iterations, 3))
+                    
+                    async def emit_ws(event: str, payload: dict):
+                        append_run_event(run_id=run_id, event=event, payload=payload)
+                        await websocket.send_json({"event": event, "payload": payload})
+
+                    try:
+                        updated = await _execute_research_run(
+                            run_id=run_id,
+                            session=session,
+                            topic=topic,
+                            template=template,
+                            language=language,
+                            depth=depth,
+                            autonomy_mode=autonomy_mode,
+                            max_runtime_minutes=runtime_cap,
+                            max_cost_usd=cost_cap,
+                            max_iterations=max_iterations,
+                            graph_runner=graph_runner,
+                            tool_registry=tool_registry,
+                            emit_callback=emit_ws
+                        )
+                        if updated:
+                            await save_session(session)
+                    finally:
+                        run_interrupt_signals.pop(run_id, None)
+                        if session_active_runs.get(session_id) == run_id:
+                            session_active_runs.pop(session_id, None)
+
+                elif action == "stop":
+                    await stop_session_run(session_id)
+                    await websocket.send_json({"event": "status", "payload": {"message": "Stop requested"}})
+                
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            try:
+                await websocket.send_json({"event": "error", "payload": {"message": str(e)}})
+            except: pass
+            await websocket.close()
 
     @app.post("/api/session/{session_id}/stop", response_model=StopResponse)
     async def stop_session_run(session_id: str) -> StopResponse:
@@ -740,11 +974,11 @@ def create_app(
 
     @app.post("/api/session/{session_id}/resume", response_model=ChatResponse)
     async def resume_session_run(session_id: str) -> ChatResponse:
-        session = sessions.get(session_id)
+        session = await get_session(session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        run_id = session_last_run.get(session_id)
+        run_id = session.last_run_id
         if not run_id:
             raise HTTPException(status_code=404, detail="No run available for resume")
 
@@ -759,6 +993,8 @@ def create_app(
                 kind="clarification",
                 assistant_message="I need a few details before I run deep research.",
                 run_id=restored.run_id,
+                template=restored.template,
+                language=restored.language,
                 questions=session.pending_questions,
                 agent_activity=_build_agent_activity(restored),
             )
@@ -768,6 +1004,8 @@ def create_app(
             kind="result",
             assistant_message=_build_result_message(restored),
             run_id=restored.run_id,
+            template=restored.template,
+            language=restored.language,
             critic_notes=restored.critic_notes,
             warnings=restored.run_warnings,
             section_confidence=restored.section_confidence,

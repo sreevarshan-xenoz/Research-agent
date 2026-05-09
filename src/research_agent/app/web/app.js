@@ -2,6 +2,7 @@ const messagesEl = document.getElementById("messages");
 const chatForm = document.getElementById("chatForm");
 const messageInput = document.getElementById("messageInput");
 const templateSelect = document.getElementById("templateSelect");
+const languageSelect = document.getElementById("languageSelect");
 const depthSelect = document.getElementById("depthSelect");
 const autonomySelect = document.getElementById("autonomySelect");
 const runtimeCapInput = document.getElementById("runtimeCapInput");
@@ -20,6 +21,7 @@ const latexStreamEl = document.getElementById("latexStream");
 const docEditorEl = document.getElementById("docEditor");
 const newOverleafLinkEl = document.getElementById("newOverleafLink");
 const bundleLinkEl = document.getElementById("bundleLink");
+const pdfLinkEl = document.getElementById("pdfLink");
 const workbenchStatusEl = document.getElementById("workbenchStatus");
 const discoveryFeedEl = document.getElementById("discoveryFeed");
 const evidenceExplorerEl = document.getElementById("evidenceExplorer");
@@ -47,6 +49,56 @@ if (docEditorEl) {
 let sessionId = null;
 let loadingMessageNode = null;
 let loadingTickerId = null;
+
+class WebSocketManager {
+  constructor() {
+    this.ws = null;
+    this.onEvent = null;
+  }
+
+  async connect(sid) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+
+    return new Promise((resolve, reject) => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const url = `${protocol}//${window.location.host}/ws/chat/${sid}`;
+      this.ws = new WebSocket(url);
+
+      this.ws.onopen = () => {
+        console.log("WebSocket connected");
+        resolve();
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (this.onEvent) this.onEvent(data);
+        } catch (e) {
+          console.error("WS Parse error:", e);
+        }
+      };
+
+      this.ws.onclose = () => {
+        console.warn("WebSocket closed");
+        this.ws = null;
+      };
+
+      this.ws.onerror = (err) => {
+        console.error("WebSocket error:", err);
+        reject(err);
+      };
+    });
+  }
+
+  send(data) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error("WebSocket is not connected");
+    }
+    this.ws.send(JSON.stringify(data));
+  }
+}
+
+const wsManager = new WebSocketManager();
 
 function switchWorkbenchTab(tab) {
   const isDoc = tab === "doc";
@@ -150,6 +202,10 @@ function resetWorkbench() {
     bundleLinkEl.href = "#";
     bundleLinkEl.classList.add("hidden");
   }
+  if (pdfLinkEl) {
+    pdfLinkEl.href = "#";
+    pdfLinkEl.classList.add("hidden");
+  }
   setWorkbenchStatus("idle", "idle");
   switchWorkbenchTab("doc");
 }
@@ -159,7 +215,7 @@ function renderEvidenceExplorer(sectionEvidence) {
 
   const rows = Array.isArray(sectionEvidence) ? sectionEvidence : [];
   if (!rows.length) {
-    evidenceExplorerEl.innerHTML = '<p class="small muted">No section evidence available for this run.</p>';
+    evidenceExplorerEl.innerHTML = "";
     return;
   }
 
@@ -231,6 +287,19 @@ function applyOverleafUrls(overleafUrls) {
       bundleLinkEl.href = "#";
       bundleLinkEl.classList.add("hidden");
     }
+  }
+}
+
+function renderArtifacts(urls) {
+  if (!urls) return;
+
+  if (bundleLinkEl && urls.bundle) {
+    bundleLinkEl.href = urls.bundle;
+    bundleLinkEl.classList.remove("hidden");
+  }
+  if (pdfLinkEl && urls.pdf) {
+    pdfLinkEl.href = urls.pdf;
+    pdfLinkEl.classList.remove("hidden");
   }
 }
 
@@ -418,6 +487,14 @@ function stopGeneratingUI() {
 async function ensureSession() {
   if (sessionId) return sessionId;
 
+  // Try to load from localStorage
+  const storedId = localStorage.getItem("research_session_id");
+  if (storedId) {
+    sessionId = storedId;
+    if (sessionInfoEl) sessionInfoEl.textContent = `Session: ${sessionId}`;
+    return sessionId;
+  }
+
   const response = await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -428,8 +505,58 @@ async function ensureSession() {
 
   const payload = await response.json();
   sessionId = payload.session_id;
+  localStorage.setItem("research_session_id", sessionId);
   if (sessionInfoEl) sessionInfoEl.textContent = `Session: ${sessionId}`;
   return sessionId;
+}
+
+async function tryResumeSession() {
+  const storedId = localStorage.getItem("research_session_id");
+  if (!storedId) return;
+
+  try {
+    sessionId = storedId;
+    if (sessionInfoEl) sessionInfoEl.textContent = `Session: ${sessionId}`;
+
+    const response = await fetch(`/api/session/${sessionId}/resume`, {
+      method: "POST",
+    });
+
+    if (response.ok) {
+      const payload = await response.json();
+      appendMessage("assistant", "Resumed previous session findings.");
+      
+      // Update config select values from payload if present
+      if (templateSelect && payload.template) {
+        templateSelect.value = payload.template;
+      }
+      if (languageSelect && payload.language) {
+        languageSelect.value = payload.language;
+      }
+
+      renderInsights(payload);
+      if (payload.latex_text && latexStreamEl) {
+        latexStreamEl.textContent = payload.latex_text;
+      }
+      if (payload.doc_preview_html) {
+        renderDocPreview(payload.doc_preview_html);
+      }
+      if (payload.artifact_urls) {
+        renderArtifacts(payload.artifact_urls);
+      }
+      applyOverleafUrls(payload.overleaf_urls || {});
+      renderEvidenceExplorer(payload.section_evidence || []);
+      setWorkbenchStatus("ready", "success");
+      switchWorkbenchTab("doc");
+    } else {
+      // Session might be expired or unknown to server
+      console.warn("Could not resume session, starting fresh.");
+      localStorage.removeItem("research_session_id");
+      sessionId = null;
+    }
+  } catch (error) {
+    console.error("Resume error:", error);
+  }
 }
 
 function renderInsights(payload) {
@@ -467,73 +594,20 @@ async function sendMessageStream(text, onEvent) {
   const sid = await ensureSession();
   const runtimeCap = Number.parseInt(runtimeCapInput?.value || "25", 10);
   const costCap = Number.parseFloat(costCapInput?.value || "5.0");
-  let response;
-  try {
-    response = await fetch("/api/chat/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sid,
-        message: text,
-        template: templateSelect?.value || "ieee-2col",
-        depth: depthSelect?.value || "balanced",
-        autonomy_mode: autonomySelect?.value || "hybrid",
-        max_runtime_minutes: Number.isFinite(runtimeCap) ? Math.max(1, runtimeCap) : 25,
-        max_cost_usd: Number.isFinite(costCap) ? Math.max(0, costCap) : 5.0,
-      }),
-    });
-  } catch (err) {
-    throw new Error(`Connection failed: ${err.message}`);
-  }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || `Server error: ${response.status}`);
-  }
+  wsManager.onEvent = onEvent;
+  await wsManager.connect(sid);
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("Stream reader not available.");
-
-  const decoder = new TextDecoder();
-  let pending = "";
-
-  while (true) {
-    let result;
-    try {
-      result = await reader.read();
-    } catch (err) {
-      throw new Error(`Stream read error: ${err.message}`);
-    }
-
-    const { value, done } = result;
-    if (done) break;
-
-    pending += decoder.decode(value, { stream: true });
-    const lines = pending.split("\n");
-    pending = lines.pop() || "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let event;
-      try {
-        event = JSON.parse(trimmed);
-      } catch (e) {
-        console.error("Stream parse error", e);
-        continue;
-      }
-      onEvent(event);
-    }
-  }
-
-  if (pending.trim()) {
-    try {
-      const event = JSON.parse(pending.trim());
-      onEvent(event);
-    } catch (e) {
-      console.error("Stream parse error", e);
-    }
-  }
+  wsManager.send({
+    action: "chat",
+    message: text,
+    template: templateSelect?.value || "ieee-2col",
+    language: languageSelect?.value || "en",
+    depth: depthSelect?.value || "balanced",
+    autonomy_mode: autonomySelect?.value || "hybrid",
+    max_runtime_minutes: Number.isFinite(runtimeCap) ? Math.max(1, runtimeCap) : 25,
+    max_cost_usd: Number.isFinite(costCap) ? Math.max(0, costCap) : 5.0,
+  });
 }
 
 chatForm?.addEventListener("submit", async (event) => {
@@ -548,29 +622,32 @@ chatForm?.addEventListener("submit", async (event) => {
   try {
     let payload = null;
 
-    await sendMessageStream(text, (eventData) => {
-      const eventName = eventData?.event;
-      const eventPayload = eventData?.payload || {};
+    await new Promise((resolve, reject) => {
+      sendMessageStream(text, (eventData) => {
+        const eventName = eventData?.event;
+        const eventPayload = eventData?.payload || {};
 
-      if (eventName === "status") {
-        setWorkbenchStatus("running", "running");
-        renderAgentActivity(eventPayload.agent_activity || []);
-        return;
-      }
+        if (eventName === "status") {
+          setWorkbenchStatus("running", "running");
+          renderAgentActivity(eventPayload.agent_activity || []);
+          return;
+        }
 
-      if (eventName === "latex_chunk") {
-        appendLatexChunk(eventPayload.chunk || "");
-        return;
-      }
+        if (eventName === "latex_chunk") {
+          appendLatexChunk(eventPayload.chunk || "");
+          return;
+        }
 
-      if (eventName === "clarification" || eventName === "result") {
-        payload = eventPayload;
-        return;
-      }
+        if (eventName === "clarification" || eventName === "result") {
+          payload = eventPayload;
+          resolve();
+          return;
+        }
 
-      if (eventName === "error") {
-        throw new Error(eventPayload.message || "Pipeline error");
-      }
+        if (eventName === "error") {
+          reject(new Error(eventPayload.message || "Pipeline error"));
+        }
+      }).catch(reject);
     });
 
     if (!payload) throw new Error("Connection closed without response.");
@@ -590,6 +667,7 @@ chatForm?.addEventListener("submit", async (event) => {
           "summary.json": payload.artifact_urls?.summary,
           "overleaf project": payload.overleaf_urls?.new_project,
           "overleaf bundle": payload.overleaf_urls?.upload_bundle,
+          "download pdf": payload.artifact_urls?.pdf,
         },
       });
       if (messageInput) messageInput.placeholder = "Enter a new topic...";
@@ -599,6 +677,7 @@ chatForm?.addEventListener("submit", async (event) => {
       renderDocPreview(payload.doc_preview_html || "");
       applyOverleafUrls(payload.overleaf_urls || {});
       renderEvidenceExplorer(payload.section_evidence || []);
+      renderArtifacts(payload.artifact_urls || {});
       
       // FINISH RUN UI
       setWorkbenchStatus("ready", "success");
@@ -620,6 +699,7 @@ chatForm?.addEventListener("submit", async (event) => {
 
 newSessionBtn?.addEventListener("click", () => {
   sessionId = null;
+  localStorage.removeItem("research_session_id");
   if (sessionInfoEl) sessionInfoEl.textContent = "Session: not initialized";
   if (insightBoxEl) insightBoxEl.textContent = "No run yet.";
   stopLoadingActivity();
@@ -634,17 +714,23 @@ stopRunBtn?.addEventListener("click", async () => {
     return;
   }
 
+  // Send stop via WebSocket if possible, fallback to API
   try {
-    const response = await fetch(`/api/session/${sessionId}/stop`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    const payload = await response.json();
-    if (response.ok && payload?.ok) {
-      appendMessage("assistant", "Stop request sent. Wrapping up current run...");
-      setWorkbenchStatus("waiting", "stopping");
+    if (wsManager.ws && wsManager.ws.readyState === WebSocket.OPEN) {
+       wsManager.send({ action: "stop" });
+       appendMessage("assistant", "Stop request sent via WebSocket.");
     } else {
-      appendMessage("assistant", `Stop request failed: ${payload?.detail || "unknown error"}`);
+        const response = await fetch(`/api/session/${sessionId}/stop`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        const payload = await response.json();
+        if (response.ok && payload?.ok) {
+          appendMessage("assistant", "Stop request sent. Wrapping up current run...");
+          setWorkbenchStatus("waiting", "stopping");
+        } else {
+          appendMessage("assistant", `Stop request failed: ${payload?.detail || "unknown error"}`);
+        }
     }
   } catch (error) {
     appendMessage("assistant", `Stop request failed: ${error.message}`);
@@ -655,6 +741,10 @@ latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));
 docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
 
-appendMessage("assistant", "Welcome. I am your Research Agent. Enter a topic to start.");
-renderAgentActivity([]);
-resetWorkbench();
+// STARTUP
+(async () => {
+  renderAgentActivity([]);
+  resetWorkbench();
+  appendMessage("assistant", "Welcome. I am your Research Agent. Enter a topic to start.");
+  await tryResumeSession();
+})();
