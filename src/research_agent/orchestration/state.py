@@ -17,6 +17,7 @@ class GraphState(TypedDict):
     run_id: str
     topic: str
     template: str
+    language: str
     phase: str
     iteration_index: int
     max_iterations: int
@@ -59,6 +60,7 @@ class WorkflowState:
     run_id: str
     topic: str
     template: str = "ieee"
+    language: str = "en"
     phase: str = "intake"
     iteration_index: int = 0
     max_iterations: int = 3
@@ -92,6 +94,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "run_id": state.run_id,
         "topic": state.topic,
         "template": state.template,
+        "language": state.language,
         "phase": state.phase,
         "iteration_index": state.iteration_index,
         "max_iterations": state.max_iterations,
@@ -135,6 +138,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         run_id=state["run_id"],
         topic=state["topic"],
         template=state["template"],
+        language=state.get("language", "en"),
         phase=state["phase"],
         iteration_index=state["iteration_index"],
         max_iterations=state.get("max_iterations", 3),
