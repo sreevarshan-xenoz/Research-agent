@@ -239,11 +239,11 @@ retrieval:
 
 ## 5. New Features
 
-### 5.1 Real-Time Collaboration (Future)
-
-- Session persistence in Redis
-- WebSocket-based updates
-- Multiple user presence
+### 5.1 Real-Time Collaboration
+- [x] Session persistence in local JSON (Phase 2 foundation)
+- [x] WebSocket-based updates (v3 architecture)
+- [x] Session persistence in Redis (Phase 4 Foundation)
+- [ ] Multiple user presence
 
 ### 5.2 Citation Auto-Fix
 
@@ -286,11 +286,12 @@ templates:
       - fr
 ```
 
-### 5.4 Figure Generation (Future)
+### 5.4 Figure Generation
+- [x] Mermaid diagram generation from descriptions
+- [x] Mermaid to TikZ translation for native LaTeX rendering
+- [ ] PlantUML integration
+- [ ] Matplotlib code generation
 
-- Mermaid diagram generation from descriptions
-- PlantUML integration
-- Matplotlib code generation
 
 ### 5.5 PDF Export
 
@@ -509,17 +510,18 @@ async def test_parallel_workers():
 - [x] Parallel worker execution
 
 ### Phase 2: Reliability (v2.1)
-- [ ] Citation autofix
-- [ ] Session persistence
-- [ ] Enhanced error handling
+- [x] Citation autofix
+- [x] Session persistence
+- [x] Enhanced error handling
 
 ### Phase 3: Features (v2.2)
-- [ ] PDF export
-- [ ] Multi-language templates
+- [x] Figure Generation (TikZ)
+- [x] PDF export
+- [x] Multi-language templates
 - [ ] Real-time collaboration
 
 ### Phase 4: Scale (v2.3)
-- [ ] Redis-backed state
+- [x] Redis-backed state
 - [ ] Multi-user support
 - [ ] vLLM integration
 
