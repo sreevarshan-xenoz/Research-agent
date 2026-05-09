@@ -3,176 +3,75 @@ from __future__ import annotations
 import os
 import re
 
-from research_agent.models import agenerate_text
+from research_agent.models import agenerate_text, agenerate_json
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
-from research_agent.output.latex import build_bibtex, render_main_tex, escape_latex
-
-
-def _build_body(state: GraphState) -> str:
-    # v2.1: Pre-build URL -> CitationKey map for O(1) lookup
-    url_to_citekey = {
-        cit.get("url"): cit["key"]
-        for cit in state["citations"]
-        if cit.get("url")
-    }
-
-    sections: list[str] = []
-    for section in state["combined_sections"]:
-        heading = escape_latex(section.get("heading", "Section"))
-        content = section.get("content", "No synthesized content available.")
-
-        # Use the citation_map from the section
-        citation_map = section.get("citation_map", {})
-
-        # Replace [REF1], [REF2], etc. with proper cite keys
-        ref_matches = re.findall(r"\[REF(\d+)\]", content)
-        for ref_num in ref_matches:
-            ref_key = f"REF{ref_num}"
-            source_info = citation_map.get(ref_key)
-            
-            if source_info:
-                source_url = source_info.get("url")
-                found_key = url_to_citekey.get(source_url)
-                
-                if found_key:
-                    content = content.replace(f"[{ref_key}]", f"\\cite{{{found_key}}}")
-                else:
-                    # Partial match or fallback to title
-                    source_title = source_info.get("title", "")
-                    for cit in state["citations"]:
-                        if source_title in cit.get("title", ""):
-                            content = content.replace(f"[{ref_key}]", f"\\cite{{{cit['key']}}}")
-                            break
-            
-            # Final fallback if still present
-            content = content.replace(f"[{ref_key}]", f"[{ref_num}]")
-
-        sections.append(f"\\section{{{heading}}}\n{content}")
-
-    if not sections:
-        sections.append("\\section{Findings}\nNo evidence-backed findings were generated.")
-    return "\n\n".join(sections)
-
-
-def _build_subagent_prompt(state: GraphState, fallback_body: str) -> str:
-    section_lines = []
-    for section in state["combined_sections"]:
-        heading = section.get("heading", "Section")
-        content = section.get("content", "")
-        section_lines.append(f"### {heading}\n{content}")
-
-    citations = []
-    for citation in state["citations"][:12]:
-        key = citation.get("key", "ref")
-        title = citation.get("title", "Untitled")
-        citations.append(f"- {key}: {title}")
-
-    section_block = "\n\n".join(section_lines) if section_lines else "No sections available."
-    citation_block = "\n".join(citations) if citations else "No citations available."
-
-    return (
-        "You are an expert academic researcher writing a high-quality research paper for an IEEE/ACM conference. "
-        "Your task is to transform the provided synthesized section content into a cohesive, professional LaTeX document body.\n\n"
-        "### OBJECTIVES:\n"
-        "1.  **Academic Tone**: Use a formal, objective, and precise academic tone throughout.\n"
-        "2.  **Paper Structure**: Ensure the document flows logically. Organize the content into standard sections: Introduction (Background/Motivation), Related Work, Methodology (if applicable), Results/Findings, and Conclusion.\n"
-        "3.  **Citation Integration**: You MUST use the available \\cite{key} commands for all claims. Do NOT invent keys; only use those provided in the 'Available Citations' list.\n"
-        "4.  **LaTeX Syntax**: Return ONLY the LaTeX body content (from the first \\section to the last paragraph). No preamble, no \\begin{document}, and no markdown code blocks.\n\n"
-        f"**TOPIC**: {state['topic']}\n\n"
-        "**SYNTHESIZED SECTIONS (Draft Content)**:\n"
-        f"{section_block}\n\n"
-        "**AVAILABLE CITATIONS (Use these keys)**:\n"
-        f"{citation_block}\n\n"
-        "**DRAFT LATEX TO REFINE**:\n"
-        f"{fallback_body}\n"
-    )
-
-
-def _use_subagent_model() -> bool:
-    """Check if a subagent model (cloud) is configured for composition."""
-    # Check if subagent model is explicitly set
-    subagent = os.getenv("SUBAGENT_MODEL", "").strip()
-    if subagent:
-        return True
-
-    # Fall back to checking for OpenRouter or NVIDIA keys
-    if os.getenv("OPENROUTER_API_KEY", "").strip():
-        return True
-    if os.getenv("NVIDIA_API_KEY", "").strip() or os.getenv("NVIDIA_NIMS_API_KEY", "").strip():
-        return True
-
-    return False
+from research_agent.output.latex.renderer import render_main_tex, build_bibtex, escape_latex
+from research_agent.config import load_settings
 
 
 async def composer_node(state: GraphState) -> dict:
-    from research_agent.config import load_settings
-    settings = load_settings()
-    
     await apublish_progress(
         agent="Composer",
         status="running",
-        detail="Generating LaTeX output",
-        message="Composing final document",
-    )
-    avg_confidence = 0.0
-    if state["section_confidence"]:
-        avg_confidence = sum(state["section_confidence"].values()) / len(state["section_confidence"])
-
-    abstract = (
-        f"This document summarizes autonomous multi-agent research for '{state['topic']}'. "
-        f"Average section confidence is {avg_confidence:.2f}."
+        detail="Synthesizing final document",
+        message="Generating LaTeX output",
     )
 
-    body = _build_body(state)
-    run_warnings = list(state["run_warnings"])
+    # 1. Build a fallback body from combined_sections
+    fallback_body = _build_body(state)
+    run_warnings = []
 
-    if _use_subagent_model():
-        await apublish_progress(
-            agent="Composer",
-            status="running",
-            detail="Generating content via cloud subagent",
-            message="Using cloud model for LaTeX body",
-        )
-        subagent_text = await agenerate_text(
-            role="subagent",
-            prompt=_build_subagent_prompt(state, body),
-            temperature=0.7,
-            top_p=0.8,
-            max_tokens=4096,
-        )
-        if subagent_text:
-            body = subagent_text
-        else:
-            run_warnings.append("subagent_generation:fallback_to_local_composer")
+    # 2. Attempt to use LLM to refine the body and metadata (Title, Abstract)
+    language = state.get("language", "en")
+    language_map = {
+        "en": "English",
+        "de": "German (Deutsch)",
+        "fr": "French (Français)",
+        "es": "Spanish (Español)",
+        "it": "Italian (Italiano)",
+    }
+    lang_name = language_map.get(language, "English")
 
-    # Use render_main_tex with the language from settings
+    prompt = (
+        f"You are a scientific technical writer. Your task is to compose a final academic research paper in {lang_name}.\n\n"
+        "Input Data:\n"
+        f"Topic: {state['topic']}\n"
+        f"Draft Sections (in various languages/raw data):\n{fallback_body}\n\n"
+        "Instructions:\n"
+        f"1. Translate and refine all content into high-quality {lang_name}.\n"
+        f"2. Generate a compelling Title and Abstract in {lang_name}.\n"
+        "3. Ensure the tone is academic and formal.\n"
+        "4. Output exactly one JSON object with these keys: 'title', 'abstract', 'body' (LaTeX content without preamble).\n"
+    )
+
+    composed_json = await agenerate_json(
+        role="orchestrator",
+        prompt=prompt,
+        temperature=0.2
+    )
+
+    if not composed_json or not isinstance(composed_json, dict):
+        # Fallback
+        title = state["topic"]
+        abstract = "Research abstract."
+        body = fallback_body
+    else:
+        title = composed_json.get("title", state["topic"])
+        abstract = composed_json.get("abstract", "Research abstract.")
+        body = composed_json.get("body", fallback_body)
+
+    # Use render_main_tex with the language from state
     main_tex = render_main_tex(
         template_name=state["template"],
-        title=f"Research Synthesis: {state['topic']}",
-        author_block="Research Agent",
+        title=title,
+        author_block="Research Agent (Autonomous)",
         abstract=abstract,
         body=body,
-        language=settings.output.language
+        language=language
     )
 
-    # STREAMING FEEDBACK: If we haven't streamed chunks yet (local generation), 
-    # we simulate it here so the UI feels alive.
-    from research_agent.models.llm_client import _STREAM_CALLBACK
-    chunk_handler = _STREAM_CALLBACK.get()
-    if chunk_handler:
-        # Stream the full content in small bursts
-        chunk_size = 500
-        for i in range(0, len(main_tex), chunk_size):
-            chunk = main_tex[i : i + chunk_size]
-            import asyncio
-            if asyncio.iscoroutinefunction(chunk_handler):
-                await chunk_handler(chunk)
-            else:
-                chunk_handler(chunk)
-            # Small delay to make it look like "writing"
-            await asyncio.sleep(0.02)
-
+    # 3. Build BibTeX
     bibtex = build_bibtex(state["citations"])
 
     await apublish_progress(
@@ -187,3 +86,59 @@ async def composer_node(state: GraphState) -> dict:
         "run_warnings": run_warnings,
         "phase": "latex_composed",
     }
+
+
+def _build_body(state: GraphState) -> str:
+    sections = []
+    combined = state.get("combined_sections", [])
+    
+    for sec in combined:
+        heading = str(sec.get("heading", "Section")).strip()
+        content = str(sec.get("content", "")).strip()
+        if heading and content:
+            sections.append(f"\\section{{{heading}}}\n{content}")
+
+    if not sections:
+        sections.append("\\section{Findings}\nNo evidence-backed findings were generated.")
+    
+    # v2: Append generated figures
+    figures = state.get("figures", [])
+    for fig in figures:
+        if fig.get("type") == "tikz" and fig.get("content"):
+            tikz_content = fig["content"]
+            caption = escape_latex(fig.get("caption", "System Diagram"))
+            
+            # Use figure* for two-column templates if it looks complex, or stick to figure
+            fig_env = "figure"
+            if "2col" in state.get("template", ""):
+                fig_env = "figure*" # Span both columns
+            
+            sections.append(
+                f"\\begin{{{fig_env}}}[htbp]\n"
+                "\\centering\n"
+                f"{tikz_content}\n"
+                f"\\caption{{{caption}}}\n"
+                f"\\end{{{fig_env}}}"
+            )
+
+    return "\n\n".join(sections)
+
+
+def _build_subagent_prompt(state: GraphState, fallback_body: str) -> str:
+    section_lines = []
+    for sec in state.get("combined_sections", []):
+        section_lines.append(f"### {sec.get('heading')}\n{sec.get('content')}")
+    
+    sections_text = "\n\n".join(section_lines)
+    
+    return (
+        "You are a scientific technical writer. Your task is to refine and organize research findings into a professional LaTeX document body.\n\n"
+        f"Topic: {state['topic']}\n"
+        f"Research Sections:\n{sections_text}\n\n"
+        "Guidelines:\n"
+        "1. Maintain a formal academic tone.\n"
+        "2. Ensure smooth transitions between sections.\n"
+        "3. Preserve all citations in the format [Source Key].\n"
+        "4. DO NOT include the preamble or document environment (\begin{document}).\n"
+        "5. Output the LaTeX body directly."
+    )

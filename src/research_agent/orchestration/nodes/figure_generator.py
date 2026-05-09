@@ -52,13 +52,50 @@ async def figure_generator_node(state: GraphState) -> dict:
         code_lower = mermaid_code.lower()
         if "graph" in code_lower or "diagram" in code_lower:
             # Clean up any potential markdown residue
-            clean_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
-            if clean_code != "NO_DIAGRAM":
-                figures.append({
-                    "type": "mermaid",
-                    "content": clean_code,
-                    "caption": f"Conceptual diagram for {state['topic']}"
-                })
+            clean_mermaid = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
+            if clean_mermaid != "NO_DIAGRAM":
+                await apublish_progress(
+                    agent="Figure Generator",
+                    status="running",
+                    detail="Translating Mermaid to TikZ",
+                    message="Converting visuals for LaTeX",
+                )
+                
+                # Translation prompt
+                translate_prompt = (
+                    "You are a LaTeX expert. Translate the following Mermaid.js diagram code "
+                    "into a high-quality LaTeX tikzpicture environment.\n\n"
+                    "Mermaid Code:\n"
+                    f"{clean_mermaid}\n\n"
+                    "Instructions:\n"
+                    "1. Output ONLY the \\begin{tikzpicture} ... \\end{tikzpicture} block.\n"
+                    "2. Do not use markdown code blocks.\n"
+                    "3. Use standard TikZ styles and positioning (node, edge, ->, etc.).\n"
+                    "4. Ensure the output is valid LaTeX and aesthetically pleasing.\n"
+                )
+                
+                tikz_code = await agenerate_text(
+                    role="orchestrator",
+                    prompt=translate_prompt,
+                    temperature=0.2,
+                    max_tokens=2000
+                )
+                
+                if tikz_code and "\\begin{tikzpicture}" in tikz_code:
+                    clean_tikz = tikz_code.replace("```latex", "").replace("```", "").strip()
+                    figures.append({
+                        "type": "tikz",
+                        "content": clean_tikz,
+                        "caption": f"System architecture for {state['topic']}",
+                        "mermaid_source": clean_mermaid
+                    })
+                else:
+                    # Fallback to Mermaid if translation fails
+                    figures.append({
+                        "type": "mermaid",
+                        "content": clean_mermaid,
+                        "caption": f"Conceptual diagram for {state['topic']}"
+                    })
 
     await apublish_progress(
         agent="Figure Generator",
