@@ -74,6 +74,7 @@ class ChatResponse(BaseModel):
     run_id: str | None = None
     template: str | None = None
     language: str | None = None
+    persona: str | None = None
     questions: list[str] = Field(default_factory=list)
     critic_notes: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -571,6 +572,7 @@ async def _execute_research_run(
             run_id=updated.run_id,
             template=updated.template,
             language=updated.language,
+            persona="planner",
             questions=session.pending_questions,
             agent_activity=_build_agent_activity(updated),
         )
@@ -603,6 +605,7 @@ async def _execute_research_run(
             run_id=updated.run_id,
             template=updated.template,
             language=updated.language,
+            persona="critic",
             critic_notes=updated.critic_notes,
             warnings=updated.run_warnings,
             section_confidence=updated.section_confidence,
@@ -759,6 +762,7 @@ def create_app(
                 run_id=updated.run_id,
                 template=updated.template,
                 language=updated.language,
+                persona="planner",
                 questions=session.pending_questions,
                 agent_activity=_build_agent_activity(updated),
             )
@@ -772,6 +776,7 @@ def create_app(
             run_id=updated.run_id,
             template=updated.template,
             language=updated.language,
+            persona="critic",
             critic_notes=updated.critic_notes,
             warnings=updated.run_warnings,
             section_confidence=updated.section_confidence,
@@ -956,7 +961,8 @@ def create_app(
         except Exception as e:
             try:
                 await websocket.send_json({"event": "error", "payload": {"message": str(e)}})
-            except: pass
+            except Exception:
+                pass
             await websocket.close()
 
     @app.post("/api/session/{session_id}/stop", response_model=StopResponse)
@@ -995,6 +1001,7 @@ def create_app(
                 run_id=restored.run_id,
                 template=restored.template,
                 language=restored.language,
+                persona="planner",
                 questions=session.pending_questions,
                 agent_activity=_build_agent_activity(restored),
             )
@@ -1006,6 +1013,7 @@ def create_app(
             run_id=restored.run_id,
             template=restored.template,
             language=restored.language,
+            persona="critic",
             critic_notes=restored.critic_notes,
             warnings=restored.run_warnings,
             section_confidence=restored.section_confidence,

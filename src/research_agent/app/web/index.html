@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles_premium.css" />
   <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
 </head>
 <body>
   <div class="app-shell">
@@ -112,6 +113,34 @@
 
     <!-- CENTER: WORKBENCH (EDITOR & LATEX) -->
     <main class="workbench">
+      <!-- PIPELINE TRACKER -->
+      <section class="pipeline-tracker">
+        <div class="step" data-phase="intake">
+          <div class="step-icon">1</div>
+          <span class="step-label">Intake</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-phase="planner">
+          <div class="step-icon">2</div>
+          <span class="step-label">Planning</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-phase="worker_executor">
+          <div class="step-icon">3</div>
+          <span class="step-label">Researching</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-phase="critic">
+          <div class="step-icon">4</div>
+          <span class="step-label">Verification</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step" data-phase="composer">
+          <div class="step-icon">5</div>
+          <span class="step-label">Composing</span>
+        </div>
+      </section>
+
       <header class="workbench-tabs">
         <button id="docTabBtn" class="tab-btn active" type="button">Document Editor</button>
         <button id="latexTabBtn" class="tab-btn" type="button">LaTeX Source</button>
@@ -148,7 +177,9 @@
             Live stream
           </span>
         </div>
-        <pre id="latexStream" class="latex-stream">No generation yet.</pre>
+        <div class="latex-container">
+          <pre id="latexStream" class="language-latex"><code>No generation yet.</code></pre>
+        </div>
       </section>
     </main>
 
@@ -171,6 +202,9 @@
   </div>
 
   <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-latex.min.js"></script>
   <script src="/static/app.js" defer></script>
 </body>
 </html>

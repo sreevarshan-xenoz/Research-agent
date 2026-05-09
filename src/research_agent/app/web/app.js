@@ -22,6 +22,8 @@ const docEditorEl = document.getElementById("docEditor");
 const newOverleafLinkEl = document.getElementById("newOverleafLink");
 const bundleLinkEl = document.getElementById("bundleLink");
 const pdfLinkEl = document.getElementById("pdfLink");
+const pipelineSteps = document.querySelectorAll(".pipeline-tracker .step");
+const pipelineLines = document.querySelectorAll(".pipeline-tracker .step-line");
 const workbenchStatusEl = document.getElementById("workbenchStatus");
 const discoveryFeedEl = document.getElementById("discoveryFeed");
 const evidenceExplorerEl = document.getElementById("evidenceExplorer");
@@ -183,9 +185,51 @@ function setWorkbenchStatus(status, label) {
   workbenchStatusEl.textContent = label || normalized;
 }
 
+function updatePipelineTracker(phase) {
+  const phaseMap = {
+    intake: 0,
+    clarifier: 0,
+    await_user: 0,
+    planner: 1,
+    worker_executor: 2,
+    loop: 2,
+    workers_complete: 2,
+    indexing: 3,
+    critic: 3,
+    await_user_critic: 3,
+    combiner: 4,
+    figure_generator: 4,
+    citation_verifier: 4,
+    composer: 4,
+    exporter: 4,
+    latex_composed: 4,
+    completed: 4
+  };
+
+  const currentIndex = phaseMap[phase] ?? -1;
+  if (currentIndex === -1) return;
+
+  pipelineSteps.forEach((step, i) => {
+    step.classList.remove("active", "complete");
+    if (i < currentIndex) step.classList.add("complete");
+    else if (i === currentIndex) step.classList.add("active");
+  });
+
+  pipelineLines.forEach((line, i) => {
+    line.classList.remove("active", "complete");
+    if (i < currentIndex) line.classList.add("complete");
+    else if (i === currentIndex) line.classList.add("active");
+  });
+}
+
 function resetWorkbench() {
   if (latexStreamEl) {
-    latexStreamEl.textContent = "No generation yet.";
+    const codeEl = latexStreamEl.querySelector("code");
+    if (codeEl) {
+      codeEl.textContent = "No generation yet.";
+    } else {
+      latexStreamEl.textContent = "No generation yet.";
+    }
     latexStreamEl.classList.remove("streaming");
   }
   if (quill) {
@@ -207,6 +251,7 @@ function resetWorkbench() {
     pdfLinkEl.classList.add("hidden");
   }
   setWorkbenchStatus("idle", "idle");
+  updatePipelineTracker("intake");
   switchWorkbenchTab("doc");
 }
 
@@ -246,15 +291,25 @@ function renderEvidenceExplorer(sectionEvidence) {
 
 function appendLatexChunk(chunk) {
   if (!chunk || !latexStreamEl) return;
+  const codeEl = latexStreamEl.querySelector("code");
+  if (!codeEl) return;
+
   if (
-    latexStreamEl.textContent === "No generation yet." ||
-    latexStreamEl.textContent.startsWith("Preparing") ||
-    latexStreamEl.textContent.startsWith("Waiting")
+    codeEl.textContent === "No generation yet." ||
+    codeEl.textContent.startsWith("Preparing") ||
+    codeEl.textContent.startsWith("Waiting")
   ) {
-    latexStreamEl.textContent = "";
+    codeEl.textContent = "";
     latexStreamEl.classList.add("typing-active");
   }
-  latexStreamEl.textContent += chunk;
+  codeEl.textContent += chunk;
+  
+  // Periodic highlighting would be better for performance during fast streams,
+  // but for now, let's trigger it directly.
+  if (typeof Prism !== 'undefined') {
+    Prism.highlightElement(codeEl);
+  }
+  
   latexStreamEl.scrollTop = latexStreamEl.scrollHeight;
 }
 
@@ -307,22 +362,49 @@ function appendMessage(role, text, options = {}) {
   if (!messagesEl) return;
   const node = document.createElement("article");
   node.className = `message ${role}`;
+  if (options.persona) node.classList.add(`persona-${options.persona}`);
+
+  // Create Avatar
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  if (role === "user") {
+    avatar.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  } else {
+    // Default Agent Icon
+    avatar.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.1 12.1"/><path d="M12 12l9.8 4.9"/><path d="M12 12l-4.9 9.8"/></svg>';
+    if (options.persona === "planner") {
+      avatar.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 9l-5 5-2-2-5 5"/></svg>';
+    } else if (options.persona === "critic") {
+      avatar.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+    }
+  }
+  node.appendChild(avatar);
+
+  const msgContent = document.createElement("div");
+  msgContent.className = "message-body";
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.textContent = role === "user" ? "You" : "Research Agent";
-  node.appendChild(meta);
+  let label = role === "user" ? "You" : "Research Agent";
+  if (options.persona) label += ` (${options.persona})`;
+  meta.textContent = label;
+  msgContent.appendChild(meta);
 
-  const content = document.createElement("div");
-  content.textContent = text;
-  node.appendChild(content);
+  const textNode = document.createElement("div");
+  textNode.className = "text-content";
+  if (role === "assistant" && typeof marked !== 'undefined') {
+    textNode.innerHTML = marked.parse(text);
+  } else {
+    textNode.textContent = text;
+  }
+  msgContent.appendChild(textNode);
 
   if (options.generating) {
     node.classList.add("generating");
     const typing = document.createElement("div");
     typing.className = "typing";
     typing.innerHTML = "<span></span><span></span><span></span>";
-    node.appendChild(typing);
+    msgContent.appendChild(typing);
   }
 
   if (options.links) {
@@ -341,9 +423,10 @@ function appendMessage(role, text, options = {}) {
         link.style.marginRight = "8px";
         links.appendChild(link);
       });
-    node.appendChild(links);
+    msgContent.appendChild(links);
   }
 
+  node.appendChild(msgContent);
   messagesEl.appendChild(node);
   messagesEl.scrollTop = messagesEl.scrollHeight;
   return node;
@@ -462,7 +545,8 @@ function startGeneratingUI() {
     generating: true,
   });
   if (latexStreamEl) {
-    latexStreamEl.textContent = "Waiting for agent stream...";
+    const codeEl = latexStreamEl.querySelector("code");
+    if (codeEl) codeEl.textContent = "Waiting for agent stream...";
     latexStreamEl.classList.add("streaming");
   }
   setDocStatus("running", "Orchestrating research...");
@@ -536,7 +620,13 @@ async function tryResumeSession() {
 
       renderInsights(payload);
       if (payload.latex_text && latexStreamEl) {
-        latexStreamEl.textContent = payload.latex_text;
+        const codeEl = latexStreamEl.querySelector("code");
+        if (codeEl) {
+          codeEl.textContent = payload.latex_text;
+          if (typeof Prism !== 'undefined') {
+            Prism.highlightElement(codeEl);
+          }
+        }
       }
       if (payload.doc_preview_html) {
         renderDocPreview(payload.doc_preview_html);
@@ -629,6 +719,7 @@ chatForm?.addEventListener("submit", async (event) => {
 
         if (eventName === "status") {
           setWorkbenchStatus("running", "running");
+          if (eventPayload.phase) updatePipelineTracker(eventPayload.phase);
           renderAgentActivity(eventPayload.agent_activity || []);
           return;
         }
@@ -653,13 +744,16 @@ chatForm?.addEventListener("submit", async (event) => {
     if (!payload) throw new Error("Connection closed without response.");
 
     if (payload.kind === "clarification") {
+      const persona = payload.persona || "planner";
       const questionText = [payload.assistant_message, "", ...(payload.questions || []).map((q, i) => `${i + 1}. ${q}`)].join("\n");
-      appendMessage("assistant", questionText);
+      appendMessage("assistant", questionText, { persona });
       if (messageInput) messageInput.placeholder = "Please clarify details above...";
       renderAgentActivity(payload.agent_activity || []);
       setWorkbenchStatus("waiting", "clarification");
     } else {
+      const persona = payload.persona || "critic";
       appendMessage("assistant", payload.assistant_message, {
+        persona,
         links: {
           "main.tex": payload.artifact_urls?.main_tex,
           "references.bib": payload.artifact_urls?.references_bib,
@@ -672,7 +766,13 @@ chatForm?.addEventListener("submit", async (event) => {
       });
       if (messageInput) messageInput.placeholder = "Enter a new topic...";
       if (payload.latex_text && latexStreamEl) {
-        latexStreamEl.textContent = payload.latex_text;
+        const codeEl = latexStreamEl.querySelector("code");
+        if (codeEl) {
+          codeEl.textContent = payload.latex_text;
+          if (typeof Prism !== 'undefined') {
+            Prism.highlightElement(codeEl);
+          }
+        }
       }
       renderDocPreview(payload.doc_preview_html || "");
       applyOverleafUrls(payload.overleaf_urls || {});
@@ -681,6 +781,7 @@ chatForm?.addEventListener("submit", async (event) => {
       
       // FINISH RUN UI
       setWorkbenchStatus("ready", "success");
+      updatePipelineTracker("completed");
       switchWorkbenchTab("doc"); // AUTO SWITCH TO DOC VIEW
       
       // Optional: show a small toast or pulse the tab
