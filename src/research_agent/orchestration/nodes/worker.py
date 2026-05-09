@@ -135,45 +135,58 @@ class WorkerPool:
             query = str(task["objective"])
             providers = task.get("providers")
             
-            # Execute multi-source search
-            result_map = await arun_multi_source_search(
-                query, 
-                registry, 
-                limit=4, 
-                providers=providers
-            )
-            
-            # Enrich results with page content
-            await _enrich_web_results_with_page_content(result_map, registry)
-            
-            # Format findings
-            task_finding = {
-                provider: {
-                    "item_count": len(result.items),
-                    "metadata_only_count": sum(
-                        1
-                        for item in result.items
-                        if isinstance(item, dict)
-                        and not str(item.get("snippet") or item.get("content") or "").strip()
-                    ),
-                    "warning_count": len(result.warnings),
-                    "warnings": result.warnings,
-                    "items": result.items,
-                }
-                for provider, result in result_map.items()
-            }
-            
+            task_finding = {}
             task_warnings = []
-            for provider, result in result_map.items():
-                for warning in result.warnings:
-                    task_warnings.append(f"{provider}:{warning}")
+            
+            try:
+                # Execute multi-source search
+                result_map = await arun_multi_source_search(
+                    query, 
+                    registry, 
+                    limit=4, 
+                    providers=providers
+                )
+                
+                # Enrich results with page content
+                try:
+                    await _enrich_web_results_with_page_content(result_map, registry)
+                except Exception as enrichment_exc:
+                    task_warnings.append(f"enrichment_error:{str(enrichment_exc)}")
+                
+                # Format findings
+                task_finding = {
+                    provider: {
+                        "item_count": len(result.items),
+                        "metadata_only_count": sum(
+                            1
+                            for item in result.items
+                            if isinstance(item, dict)
+                            and not str(item.get("snippet") or item.get("content") or "").strip()
+                        ),
+                        "warning_count": len(result.warnings),
+                        "warnings": result.warnings,
+                        "items": result.items,
+                    }
+                    for provider, result in result_map.items()
+                }
+                
+                for provider, result in result_map.items():
+                    for warning in result.warnings:
+                        task_warnings.append(f"{provider}:{warning}")
+                        
+            except Exception as search_exc:
+                import traceback
+                traceback.print_exc()
+                task_warnings.append(f"search_catastrophic_error:{str(search_exc)}")
+                task_finding = {"error": {"items": [], "warnings": [str(search_exc)], "item_count": 0}}
             
             task["status"] = "complete"
+            total_items = sum(f.get("item_count", 0) for f in task_finding.values())
             await _emit_progress(
                 progress_handler,
                 agent=f"Worker {task_id}",
                 status="complete",
-                detail=f"{task['title']} ({sum(len(result.items) for result in result_map.values())} items)",
+                detail=f"{task['title']} ({total_items} items)",
                 message=f"Completed {task_id}",
             )
             return task_id, task_finding, task_warnings

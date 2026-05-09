@@ -15,6 +15,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterator
 
+from tenacity import (
+    AsyncRetrying,
+    Retrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 
 _STREAM_CALLBACK: ContextVar[Callable[[str], None] | None] = ContextVar(
     "llm_stream_callback",
@@ -116,7 +124,8 @@ def _extract_json(text: str) -> str:
                 if last_idx >= 0:
                     try:
                         return candidate[:last_idx+1]
-                    except: pass
+                    except Exception:
+                        pass
 
     return text
 
@@ -147,17 +156,24 @@ async def agenerate_json(
         import litellm
         litellm.drop_params = True
 
-        response = await litellm.acompletion(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            fallbacks=fallbacks,
-            **extra_kwargs,
-        )
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        ):
+            with attempt:
+                response = await litellm.acompletion(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    fallbacks=fallbacks,
+                    **extra_kwargs,
+                )
 
         text = response.choices[0].message.content or ""
         text = _extract_json(text)
@@ -209,16 +225,23 @@ async def agenerate_text(
         messages.append({"role": "user", "content": prompt})
 
         if chunk_handler:
-            response = await litellm.acompletion(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                stream=True,
-                fallbacks=fallbacks,
-                **extra_kwargs,
-            )
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+            ):
+                with attempt:
+                    response = await litellm.acompletion(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                        stream=True,
+                        fallbacks=fallbacks,
+                        **extra_kwargs,
+                    )
 
             chunks: list[str] = []
             async for part in response:
@@ -236,15 +259,22 @@ async def agenerate_text(
             text = "".join(chunks).strip()
             return text or None
         else:
-            response = await litellm.acompletion(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                fallbacks=fallbacks,
-                **extra_kwargs,
-            )
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+            ):
+                with attempt:
+                    response = await litellm.acompletion(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                        fallbacks=fallbacks,
+                        **extra_kwargs,
+                    )
             text = (response.choices[0].message.content or "").strip()
             return text or None
     except Exception as e:
@@ -278,17 +308,24 @@ def generate_json(
         import litellm
         litellm.drop_params = True
 
-        response = litellm.completion(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            fallbacks=fallbacks,
-            **extra_kwargs,
-        )
+        for attempt in Retrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+        ):
+            with attempt:
+                response = litellm.completion(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    fallbacks=fallbacks,
+                    **extra_kwargs,
+                )
 
         text = response.choices[0].message.content or ""
         text = _extract_json(text)
@@ -339,16 +376,23 @@ def generate_text(
         messages.append({"role": "user", "content": prompt})
 
         if chunk_handler:
-            response = litellm.completion(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                stream=True,
-                fallbacks=fallbacks,
-                **extra_kwargs,
-            )
+            for attempt in Retrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+            ):
+                with attempt:
+                    response = litellm.completion(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                        stream=True,
+                        fallbacks=fallbacks,
+                        **extra_kwargs,
+                    )
 
             chunks: list[str] = []
             for part in response:
@@ -363,15 +407,22 @@ def generate_text(
             text = "".join(chunks).strip()
             return text or None
         else:
-            response = litellm.completion(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                top_p=top_p,
-                max_tokens=max_tokens,
-                fallbacks=fallbacks,
-                **extra_kwargs,
-            )
+            for attempt in Retrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                retry=retry_if_exception_type(Exception),
+                reraise=True,
+            ):
+                with attempt:
+                    response = litellm.completion(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        top_p=top_p,
+                        max_tokens=max_tokens,
+                        fallbacks=fallbacks,
+                        **extra_kwargs,
+                    )
             text = (response.choices[0].message.content or "").strip()
             return text or None
     except Exception as e:
