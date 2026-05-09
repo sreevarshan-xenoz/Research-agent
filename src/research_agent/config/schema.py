@@ -101,7 +101,7 @@ class RetrievalSettings(BaseModel):
     web_provider: str = "hybrid"
     web_search_depth: Literal["fast", "balanced", "advanced"] = "advanced"
     paper_providers: list[str] = Field(
-        default_factory=lambda: ["arxiv", "semantic_scholar", "openalex"]
+        default_factory=lambda: ["arxiv", "semantic_scholar", "openalex", "pubmed"]
     )
     max_papers_per_section: int = Field(default=15, ge=1, le=50)
     chunk_size: int = Field(default=1024, ge=256, le=4096)

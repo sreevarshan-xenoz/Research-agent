@@ -10,6 +10,7 @@ from research_agent.tools.base import BaseToolAdapter, ToolResult
 from research_agent.tools.browser_use import BrowserUseAdapter
 from research_agent.tools.open_alex import OpenAlexAdapter
 from research_agent.tools.page_fetcher import PageFetcherAdapter
+from research_agent.tools.pubmed import PubMedAdapter
 from research_agent.tools.semantic_scholar import SemanticScholarAdapter
 from research_agent.tools.web_search import DuckDuckGoAdapter, WebSearchAdapter
 
@@ -43,6 +44,8 @@ def build_tool_registry(settings: AppSettings) -> dict[str, BaseToolAdapter]:
         )
     if "openalex" in settings.retrieval.paper_providers:
         registry["openalex"] = OpenAlexAdapter()
+    if "pubmed" in settings.retrieval.paper_providers:
+        registry["pubmed"] = PubMedAdapter()
 
     return registry
 
