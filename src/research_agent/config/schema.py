@@ -144,6 +144,13 @@ class OpenRouterSettings(BaseModel):
     timeout_seconds: int = Field(default=60, ge=10, le=180)
 
 
+class RedisSettings(BaseModel):
+    """Redis connection settings."""
+    url: str = "redis://localhost:6379"
+    max_connections: int = Field(default=10, ge=1)
+    timeout_seconds: int = Field(default=5, ge=1)
+
+
 class FeatureFlags(BaseModel):
     """Feature flags for v2 features."""
     parallel_subagents: bool = True
@@ -170,5 +177,6 @@ class AppSettings(BaseModel):
     retrieval: RetrievalSettings
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
+    redis: RedisSettings = Field(default_factory=RedisSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)

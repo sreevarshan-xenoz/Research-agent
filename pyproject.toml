@@ -26,7 +26,10 @@ dependencies = [
   "browser-use>=0.1.0",
   "qdrant-client>=1.9.0",
   "pymupdf>=1.24.0",
-  "tenacity>=8.3.0"
+  "tenacity>=8.3.0",
+  "websockets>=12.0",
+  "redis>=5.0.0",
+  "langgraph-checkpoint-redis>=1.0.0"
 ]
 
 [project.optional-dependencies]
