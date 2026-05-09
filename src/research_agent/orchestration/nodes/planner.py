@@ -86,6 +86,14 @@ async def planner_node(state: GraphState) -> dict:
         "Return a JSON object with a 'tasks' key containing the list of task objects."
     )
 
+    feedback = state.get("critic_user_feedback")
+    if feedback:
+        prompt += (
+            f"\n\nUSER FEEDBACK FROM PREVIOUS ITERATION:\n"
+            f"The user reviewed the findings and provided this direction for the next research loop: {feedback}\n"
+            f"Ensure the new tasks specifically address this feedback."
+        )
+
     # Use the HEAD model (local Ollama) for task planning
     llm_plan = await agenerate_json(role="head", prompt=prompt)
     if llm_plan and isinstance(llm_plan, dict) and "tasks" in llm_plan:
@@ -110,4 +118,8 @@ async def planner_node(state: GraphState) -> dict:
         detail=f"Planned {len(tasks)} tasks",
         message="Task graph ready",
     )
-    return {"tasks": tasks, "phase": "planned"}
+    return {
+        "tasks": tasks,
+        "phase": "planning_complete",
+        "critic_user_feedback": None
+    }
