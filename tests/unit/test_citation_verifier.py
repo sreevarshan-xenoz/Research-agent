@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from research_agent.orchestration.nodes.citation_verifier import citation_verifier_node
 
 
@@ -85,10 +86,11 @@ def _base_state() -> dict:
     }
 
 
-def test_citation_verifier_rejects_unsupported_sections() -> None:
+@pytest.mark.asyncio
+async def test_citation_verifier_rejects_unsupported_sections() -> None:
     state = _base_state()
 
-    result = citation_verifier_node(state)
+    result = await citation_verifier_node(state)
 
     # Sections are kept (not dropped) but unsupported ones are flagged via warnings
     assert len(result["combined_sections"]) == 2
@@ -102,7 +104,8 @@ def test_citation_verifier_rejects_unsupported_sections() -> None:
     )
 
 
-def test_citation_verifier_keeps_supported_sections() -> None:
+@pytest.mark.asyncio
+async def test_citation_verifier_keeps_supported_sections() -> None:
     state = _base_state()
     state["task_findings"]["t2"]["fake"]["item_count"] = 1
     state["task_findings"]["t2"]["fake"]["items"] = [
@@ -115,7 +118,7 @@ def test_citation_verifier_keeps_supported_sections() -> None:
     ]
     state["combined_sections"][1]["content"] = "Evidence (Deep RAG): supported text."
 
-    result = citation_verifier_node(state)
+    result = await citation_verifier_node(state)
 
     assert len(result["combined_sections"]) == 2
     assert any(c["key"].startswith("t2_") for c in result["citations"])
@@ -125,7 +128,8 @@ def test_citation_verifier_keeps_supported_sections() -> None:
     )
 
 
-def test_citation_verifier_rejects_section_with_only_unsupported_claims() -> None:
+@pytest.mark.asyncio
+async def test_citation_verifier_rejects_section_with_only_unsupported_claims() -> None:
     state = _base_state()
     state["combined_sections"][0]["content"] = (
         "Objective: Has evidence\n"
@@ -134,7 +138,7 @@ def test_citation_verifier_rejects_section_with_only_unsupported_claims() -> Non
         "Confidence score: 0.80."
     )
 
-    result = citation_verifier_node(state)
+    result = await citation_verifier_node(state)
 
     # Sections are kept but flagged via warnings (not dropped)
     assert len(result["combined_sections"]) == 2
@@ -148,7 +152,8 @@ def test_citation_verifier_rejects_section_with_only_unsupported_claims() -> Non
     )
 
 
-def test_citation_verifier_flags_partial_unsupported_claims_without_rejecting() -> None:
+@pytest.mark.asyncio
+async def test_citation_verifier_flags_partial_unsupported_claims_without_rejecting() -> None:
     state = _base_state()
     state["task_findings"]["t1"]["fake"]["items"][0]["snippet"] = (
         "Useful content supports supported section claims with evidence overlap."
@@ -161,7 +166,7 @@ def test_citation_verifier_flags_partial_unsupported_claims_without_rejecting() 
         "Confidence score: 0.80."
     )
 
-    result = citation_verifier_node(state)
+    result = await citation_verifier_node(state)
 
     assert any(section["task_id"] == "t1" for section in result["combined_sections"])
     assert any(
