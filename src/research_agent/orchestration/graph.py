@@ -4,6 +4,8 @@ import time
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.redis.asyncio import RedisSaver
+import redis.asyncio as redis
 
 from research_agent.orchestration.nodes import (
     awaiting_user_critic_node,
@@ -91,7 +93,7 @@ def _stop_reason(state: GraphState) -> str | None:
     return None
 
 
-def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
+def build_graph(registry: dict[str, BaseToolAdapter] | None = None, checkpointer=None):
     tool_registry = {} if registry is None else registry
     graph = StateGraph(GraphState)
     graph.add_node("intake", intake_node)
@@ -158,7 +160,7 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None):
     graph.add_edge("composer", "exporter")
     graph.add_edge("exporter", END)
     
-    return graph.compile(checkpointer=MemorySaver())
+    return graph.compile(checkpointer=checkpointer or MemorySaver())
 
 
 async def run_graph(
@@ -166,7 +168,21 @@ async def run_graph(
     registry: dict[str, BaseToolAdapter] | None = None,
     thread_id: str | None = None,
 ) -> WorkflowState:
-    compiled = build_graph(registry=registry)
-    config = {"configurable": {"thread_id": thread_id or state.run_id}}
-    result = await compiled.ainvoke(to_graph_state(state), config=config)
-    return from_graph_state(result)
+    from research_agent.config import load_settings
+    settings = load_settings()
+    
+    checkpointer = None
+    redis_conn = None
+    
+    if settings.features.session_persistence == "redis":
+        redis_conn = redis.from_url(settings.redis.url)
+        checkpointer = RedisSaver(redis_conn)
+
+    try:
+        compiled = build_graph(registry=registry, checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": thread_id or state.run_id}}
+        result = await compiled.ainvoke(to_graph_state(state), config=config)
+        return from_graph_state(result)
+    finally:
+        if redis_conn:
+            await redis_conn.aclose()
