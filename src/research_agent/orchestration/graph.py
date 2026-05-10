@@ -4,7 +4,7 @@ import time
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.redis.asyncio import RedisSaver
+from langgraph.checkpoint.redis import AsyncRedisSaver
 import redis.asyncio as redis
 
 from research_agent.orchestration.nodes import (
@@ -176,7 +176,7 @@ async def run_graph(
     
     if settings.features.session_persistence == "redis":
         redis_conn = redis.from_url(settings.redis.url)
-        checkpointer = RedisSaver(redis_conn)
+        checkpointer = AsyncRedisSaver(redis_conn)
 
     try:
         compiled = build_graph(registry=registry, checkpointer=checkpointer)

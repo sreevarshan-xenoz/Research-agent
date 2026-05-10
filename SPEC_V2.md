@@ -522,8 +522,33 @@ async def test_parallel_workers():
 
 ### Phase 4: Scale (v2.3)
 - [x] Redis-backed state
-- [ ] Multi-user support
+- [x] OAuth2 / Multi-user support
+- [ ] Persistent Vector Store (Qdrant disk-backed)
 - [ ] vLLM integration
+
+### Phase 5: Advanced (v3.0)
+- [x] Human-in-the-loop: Interactive Critic Feedback
+- [ ] Visual Graph Editor
+- [ ] Cross-lingual RAG (Multilingual embeddings)
+- [ ] Automated LaTeX Peer Review agent
+
+---
+
+## 12. Identified Gaps & Upgrades
+
+### 12.1 Volatile Semantic Memory
+The current `ResearchIndex` is in-memory only. 
+*   **Fix**: Migrate to persistent Qdrant storage.
+*   **Upgrade**: Shared knowledge base across users.
+
+### 12.2 Lack of Authentication
+The API is currently open.
+*   **Fix**: Implement OAuth2 with GitHub/Google providers.
+*   **Tooling**: FastAPI Users or Authlib.
+
+### 12.3 Limited Search Breadth
+Current adapters cover core academic APIs but miss domain-specific sources.
+*   **Upgrades**: Add PubMed [DONE], USPTO, and IEEE Xplore adapters.
 
 ---
 
