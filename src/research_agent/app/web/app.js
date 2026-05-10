@@ -396,14 +396,57 @@ function appendMessage(role, text, options = {}) {
 }
 
 function renderAgentActivity(entries) {
-  if (!agentPanelEl) return;
-  agentPanelEl.innerHTML = entries.length ? "" : '<div class="agent-row idle"><span class="agent-name">No active run</span></div>';
+  const colPending = document.getElementById("col-pending");
+  const colRunning = document.getElementById("col-running");
+  const colComplete = document.getElementById("col-complete");
+  const countPending = document.getElementById("count-pending");
+  const countRunning = document.getElementById("count-running");
+  const countComplete = document.getElementById("count-complete");
+
+  if (!colPending || !colRunning || !colComplete) return;
+
+  colPending.innerHTML = "";
+  colRunning.innerHTML = "";
+  colComplete.innerHTML = "";
+
+  let nPending = 0, nRunning = 0, nComplete = 0;
+
   entries.forEach((entry) => {
+    const status = normalizeStatus(entry.status);
     const row = document.createElement("div");
-    row.className = `agent-row fade-in status-${entry.status}`;
-    row.innerHTML = `<div class="agent-row-top" style="display:flex;justify-content:space-between"><span>${entry.name}</span><span class="agent-pill ${entry.status}">${entry.status}</span></div><div class="detail">${entry.detail || ""}</div>`;
-    agentPanelEl.appendChild(row);
+    row.className = `agent-row status-${status}`;
+    row.innerHTML = `
+      <div class="agent-row-top">
+        <span class="agent-name" title="${entry.name}">${entry.name}</span>
+      </div>
+      <div class="detail">${entry.detail || ""}</div>
+    `;
+
+    if (status === "pending") {
+      colPending.appendChild(row);
+      nPending++;
+    } else if (status === "running" || status === "waiting") {
+      colRunning.appendChild(row);
+      nRunning++;
+    } else {
+      colComplete.appendChild(row);
+      nComplete++;
+    }
+
+    if (status === "running" || status === "complete") {
+      appendDiscovery(entry.name, entry.detail);
+    }
   });
+
+  if (countPending) countPending.textContent = nPending;
+  if (countRunning) countRunning.textContent = nRunning;
+  if (countComplete) countComplete.textContent = nComplete;
+
+  // Horizontal scroll to Active if it has items
+  if (nRunning > 0) {
+     const board = document.getElementById("agentPanel");
+     if (board) board.scrollLeft = 200; // Rough estimate to center 'Active'
+  }
 }
 
 function startGeneratingUI() {
@@ -488,18 +531,25 @@ chatForm?.addEventListener("submit", async (e) => {
           renderAgentActivity(eventData.payload.agent_activity || []);
         } else if (eventData.event === "latex_chunk") {
           appendLatexChunk(eventData.payload.chunk);
-        } else if (eventData.event === "result" || eventData.event === "clarification") {
+        } else if (eventData.event === "result" || eventData.event === "clarification" || eventData.event === "critic_feedback") {
           payload = eventData.payload; resolve();
         } else if (eventData.event === "error") reject(new Error(eventData.payload.message));
       }).catch(reject);
     });
     if (payload.kind === "clarification") {
       appendMessage("assistant", payload.assistant_message, { persona: payload.persona });
+      messageInput.placeholder = "Please clarify details...";
+      setWorkbenchStatus("waiting", "clarification");
+    } else if (payload.kind === "critic_feedback") {
+      appendMessage("assistant", payload.assistant_message, { persona: payload.persona });
+      messageInput.placeholder = "Provide guidance to the agent...";
+      setWorkbenchStatus("waiting", "critic review");
     } else {
       appendMessage("assistant", payload.assistant_message, {
         persona: payload.persona,
         links: { "PDF": payload.artifact_urls?.pdf, "Overleaf": payload.overleaf_urls?.new_project }
       });
+      messageInput.placeholder = "Enter a new research topic...";
       const codeEl = latexStreamEl?.querySelector("code");
       if (codeEl && payload.latex_text) { codeEl.textContent = payload.latex_text; Prism.highlightElement(codeEl); }
       renderDocPreview(payload.doc_preview_html);

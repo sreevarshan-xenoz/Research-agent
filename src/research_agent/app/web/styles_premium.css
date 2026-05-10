@@ -651,53 +651,123 @@ button:active {
   margin-bottom: 0.75rem;
 }
 
-/* Agent Rows (Activity Monitor) */
+/* Kanban Board */
+.kanban-wrapper {
+  padding: 16px !important;
+}
+
+.kanban-board {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  min-height: 200px;
+}
+
+.kanban-col {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.col-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.col-title .count {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+}
+
+.kanban-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 50px;
+}
+
+/* Kanban Task Cards (Refactored Agent Rows) */
 .agent-row {
-  padding: 14px;
-  background: rgba(0,0,0,0.2);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  margin-bottom: 10px;
-  transition: all 0.3s ease;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
+  animation: fadeIn 0.3s ease forwards;
 }
 
 .agent-row-top {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  position: relative;
-  z-index: 2;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .agent-name {
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   color: #e4e4e7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .agent-pill {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 4px 8px;
-  border-radius: 999px;
+  display: none; /* Hide pills in Kanban as column defines state */
 }
 
-/* Status Variations */
-.agent-row.status-running {
-  border-color: rgba(139, 92, 246, 0.4);
+.agent-row .detail {
+  font-size: 0.65rem;
+  color: var(--muted);
+  line-height: 1.3;
+  margin-top: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.agent-row.status-running::before {
-  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-  background: #8b5cf6;
-  box-shadow: 0 0 10px #8b5cf6;
-}
-.agent-row.status-running .agent-pill { background: rgba(139,92,246,0.15); color: #c4b5fd; }
 
-.agent-row.status-complete {
+/* Kanban Card States */
+.status-running {
+  border-color: rgba(139, 92, 246, 0.5);
+  background: rgba(139, 92, 246, 0.05);
+}
+.status-running::after {
+  content: ''; position: absolute; bottom: 0; left: 0; height: 2px; width: 100%;
+  background: var(--accent-purple);
+  animation: cardProgress 2s linear infinite;
+}
+
+@keyframes cardProgress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.status-complete {
   border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.02);
+}
+
+.status-error {
+  border-color: rgba(244, 63, 94, 0.3);
+  background: rgba(244, 63, 94, 0.05);
+}
+
+/* Custom Scrollbar for Kanban */
+.kanban-board::-webkit-scrollbar { height: 4px; }
+.kanban-board::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 10px; }
 }
 .agent-row.status-complete::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;

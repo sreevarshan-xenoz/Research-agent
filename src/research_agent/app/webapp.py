@@ -36,6 +36,7 @@ from research_agent.app.auth import (
     UserRead,
     UserUpdate,
     auth_backend,
+    create_db_and_tables,
     current_active_user,
     fastapi_users,
 )
@@ -106,6 +107,7 @@ class ChatSession:
     original_topic: str = ""
     last_run_id: str = ""
     awaiting_clarification: bool = False
+    awaiting_critic_feedback: bool = False
     pending_questions: list[str] = field(default_factory=list)
     clarification_answers: list[str] = field(default_factory=list)
 
@@ -128,8 +130,9 @@ class AsyncRedisSessionStore:
                     data[list_key] = []
         
         # Boolean conversion
-        if "awaiting_clarification" in data:
-            data["awaiting_clarification"] = data["awaiting_clarification"] == "True"
+        for bool_key in ["awaiting_clarification", "awaiting_critic_feedback"]:
+            if bool_key in data:
+                data[bool_key] = data[bool_key] == "True"
             
         return ChatSession(**data)
 
@@ -457,6 +460,7 @@ async def _execute_research_run(
     graph_runner,
     tool_registry: dict[str, BaseToolAdapter],
     emit_callback: Callable[[str, dict], Any],
+    critic_user_feedback: str | None = None,
 ) -> WorkflowState | None:
     state = WorkflowState(
         run_id=run_id,
@@ -470,6 +474,7 @@ async def _execute_research_run(
         max_iterations=max_iterations,
         started_at=time.time(),
         artifact_root=str(ARTIFACT_DIR),
+        critic_user_feedback=critic_user_feedback,
     )
     save_checkpoint(state, label="start")
 
@@ -588,8 +593,26 @@ async def _execute_research_run(
             agent_activity=_build_agent_activity(updated),
         )
         await emit_callback("clarification", clarification.model_dump())
+    elif updated.phase == "await_user_critic":
+        session.awaiting_critic_feedback = True
+        critic_msg = "The initial findings have low confidence. Please provide guidance to improve the research."
+        if updated.critic_notes:
+            critic_msg += "\n\n**Critic Notes:**\n" + "\n".join(f"- {n}" for n in updated.critic_notes)
+        
+        feedback_req = ChatResponse(
+            kind="critic_feedback",
+            assistant_message=critic_msg,
+            run_id=updated.run_id,
+            template=updated.template,
+            language=updated.language,
+            persona="critic",
+            critic_notes=updated.critic_notes,
+            agent_activity=_build_agent_activity(updated),
+        )
+        await emit_callback("critic_feedback", feedback_req.model_dump())
     else:
         session.awaiting_clarification = False
+        session.awaiting_critic_feedback = False
         session.pending_questions = []
         session.clarification_answers = []
 
@@ -740,7 +763,11 @@ def create_app(
         template = request.template or session.template
         session.template = template
 
-        if session.awaiting_clarification:
+        critic_user_feedback = None
+        if session.awaiting_critic_feedback:
+            critic_user_feedback = message
+            topic = session.original_topic # Don't change topic
+        elif session.awaiting_clarification:
             session.clarification_answers.append(message)
             topic = _compose_refined_topic(
                 session.original_topic,
@@ -786,7 +813,8 @@ def create_app(
             max_iterations=max_iterations,
             graph_runner=graph_runner,
             tool_registry=tool_registry,
-            emit_callback=mock_emit
+            emit_callback=mock_emit,
+            critic_user_feedback=critic_user_feedback,
         )
         
         if updated is None:
@@ -807,6 +835,18 @@ def create_app(
                 language=updated.language,
                 persona="planner",
                 questions=session.pending_questions,
+                agent_activity=_build_agent_activity(updated),
+            )
+        
+        if updated.phase == "await_user_critic":
+             return ChatResponse(
+                kind="critic_feedback",
+                assistant_message="Confidence is low. Please guide the next steps.",
+                run_id=updated.run_id,
+                template=updated.template,
+                language=updated.language,
+                persona="critic",
+                critic_notes=updated.critic_notes,
                 agent_activity=_build_agent_activity(updated),
             )
 
@@ -851,7 +891,11 @@ def create_app(
         template = request.template or session.template
         session.template = template
 
-        if session.awaiting_clarification:
+        critic_user_feedback = None
+        if session.awaiting_critic_feedback:
+            critic_user_feedback = message
+            topic = session.original_topic
+        elif session.awaiting_clarification:
             session.clarification_answers.append(message)
             topic = _compose_refined_topic(
                 session.original_topic,
@@ -901,7 +945,8 @@ def create_app(
                 max_iterations=max_iterations,
                 graph_runner=graph_runner,
                 tool_registry=tool_registry,
-                emit_callback=emit
+                emit_callback=emit,
+                critic_user_feedback=critic_user_feedback
             ))
 
             try:
@@ -958,7 +1003,11 @@ def create_app(
                     session.template = template
                     language = data.get("language") or "en"
 
-                    if session.awaiting_clarification:
+                    critic_user_feedback = None
+                    if session.awaiting_critic_feedback:
+                        critic_user_feedback = message
+                        topic = session.original_topic
+                    elif session.awaiting_clarification:
                         session.clarification_answers.append(message)
                         topic = _compose_refined_topic(
                             session.original_topic,
@@ -1002,7 +1051,8 @@ def create_app(
                             max_iterations=max_iterations,
                             graph_runner=graph_runner,
                             tool_registry=tool_registry,
-                            emit_callback=emit_ws
+                            emit_callback=emit_ws,
+                            critic_user_feedback=critic_user_feedback
                         )
                         if updated:
                             await save_session(session)
@@ -1068,6 +1118,19 @@ def create_app(
                 language=restored.language,
                 persona="planner",
                 questions=session.pending_questions,
+                agent_activity=_build_agent_activity(restored),
+            )
+        
+        if restored.phase == "await_user_critic":
+             session.awaiting_critic_feedback = True
+             return ChatResponse(
+                kind="critic_feedback",
+                assistant_message="Confidence is low. Please guide the next steps.",
+                run_id=restored.run_id,
+                template=restored.template,
+                language=restored.language,
+                persona="critic",
+                critic_notes=restored.critic_notes,
                 agent_activity=_build_agent_activity(restored),
             )
 

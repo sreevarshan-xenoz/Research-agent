@@ -93,12 +93,25 @@
         </div>
       </div>
 
-      <div class="panel status-panel">
+      <div class="panel status-panel kanban-wrapper">
         <header class="panel-header">
-          <h2>Agent Activity</h2>
+          <h2>Task Board</h2>
           <span id="workbenchStatus" class="workbench-status idle">idle</span>
         </header>
-        <div id="agentPanel" class="agent-panel"></div>
+        <div id="agentPanel" class="kanban-board">
+          <div class="kanban-col">
+            <h3 class="col-title">Pending <span class="count" id="count-pending">0</span></h3>
+            <div class="kanban-items" id="col-pending"></div>
+          </div>
+          <div class="kanban-col">
+            <h3 class="col-title">Active <span class="count" id="count-running">0</span></h3>
+            <div class="kanban-items" id="col-running"></div>
+          </div>
+          <div class="kanban-col">
+            <h3 class="col-title">Done <span class="count" id="count-complete">0</span></h3>
+            <div class="kanban-items" id="col-complete"></div>
+          </div>
+        </div>
       </div>
 
       <div class="panel status-panel">
