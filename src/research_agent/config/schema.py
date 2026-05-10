@@ -151,6 +151,13 @@ class RedisSettings(BaseModel):
     timeout_seconds: int = Field(default=5, ge=1)
 
 
+class AuthSettings(BaseModel):
+    """Authentication settings."""
+    secret_key: str = "DEV_SECRET_DO_NOT_USE_IN_PROD"
+    jwt_lifetime_seconds: int = 3600
+    enable_registration: bool = True
+
+
 class FeatureFlags(BaseModel):
     """Feature flags for v2 features."""
     parallel_subagents: bool = True
@@ -178,5 +185,6 @@ class AppSettings(BaseModel):
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)

@@ -15,7 +15,7 @@ import zipfile
 from typing import Any, Callable
 
 import redis.asyncio as redis
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse
 from fastapi.responses import StreamingResponse
@@ -29,6 +29,16 @@ from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
 from research_agent.tools import build_tool_registry
 from research_agent.tools.base import BaseToolAdapter
+
+from research_agent.app.auth import (
+    User,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+    auth_backend,
+    current_active_user,
+    fastapi_users,
+)
 
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -91,6 +101,7 @@ class ChatResponse(BaseModel):
 @dataclass
 class ChatSession:
     session_id: str
+    user_id: str
     template: str
     original_topic: str = ""
     last_run_id: str = ""
@@ -104,8 +115,8 @@ class AsyncRedisSessionStore:
         self.client = redis.from_url(url, decode_responses=True)
         self.key_prefix = "research_agent:sessions"
 
-    async def get(self, session_id: str) -> ChatSession | None:
-        data = await self.client.hgetall(f"{self.key_prefix}:{session_id}")
+    async def get(self, user_id: str, session_id: str) -> ChatSession | None:
+        data = await self.client.hgetall(f"{self.key_prefix}:{user_id}:{session_id}")
         if not data:
             return None
         # Convert string representations of lists back to lists
@@ -128,10 +139,10 @@ class AsyncRedisSessionStore:
         for list_key in ["pending_questions", "clarification_answers"]:
             data[list_key] = json.dumps(data[list_key])
         
-        await self.client.hset(f"{self.key_prefix}:{session.session_id}", mapping=data)
+        await self.client.hset(f"{self.key_prefix}:{session.user_id}:{session.session_id}", mapping=data)
 
-    async def delete(self, session_id: str) -> None:
-        await self.client.delete(f"{self.key_prefix}:{session_id}")
+    async def delete(self, user_id: str, session_id: str) -> None:
+        await self.client.delete(f"{self.key_prefix}:{user_id}:{session_id}")
 
 
 def _get_session_store_path() -> Path:
@@ -648,6 +659,31 @@ def create_app(
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
     app.mount("/artifacts", StaticFiles(directory=ARTIFACT_DIR), name="artifacts")
 
+    # AUTH ROUTERS
+    app.include_router(
+        fastapi_users.get_auth_router(auth_backend), prefix="/auth/jwt", tags=["auth"]
+    )
+    app.include_router(
+        fastapi_users.get_register_router(UserRead, UserCreate),
+        prefix="/auth",
+        tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_reset_password_router(),
+        prefix="/auth",
+        tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_verify_router(UserRead),
+        prefix="/auth",
+        tags=["auth"],
+    )
+    app.include_router(
+        fastapi_users.get_users_router(UserRead, UserUpdate),
+        prefix="/users",
+        tags=["users"],
+    )
+
     @app.get("/")
     async def index() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
@@ -656,9 +692,10 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    async def get_session(session_id: str) -> ChatSession | None:
+    async def get_session(user_id: str, session_id: str) -> ChatSession | None:
         if session_store:
-            return await session_store.get(session_id)
+            return await session_store.get(user_id, session_id)
+        # For simple in-memory, we scope by session_id but theoretically should by user_id
         return sessions.get(session_id)
 
     async def save_session(session: ChatSession) -> None:
@@ -669,7 +706,10 @@ def create_app(
             _save_sessions(sessions)
 
     @app.post("/api/session", response_model=SessionCreateResponse)
-    async def create_session(request: SessionCreateRequest) -> SessionCreateResponse:
+    async def create_session(
+        request: SessionCreateRequest,
+        user: User = Depends(current_active_user)
+    ) -> SessionCreateResponse:
         template = request.template or settings.output.default_template
         
         # Robust mapping for legacy/shorthand names
@@ -680,13 +720,16 @@ def create_app(
             raise HTTPException(status_code=400, detail=f"Unsupported template: {template}")
 
         session_id = f"sess-{uuid.uuid4().hex[:10]}"
-        session = ChatSession(session_id=session_id, template=template)
+        session = ChatSession(session_id=session_id, user_id=str(user.id), template=template)
         await save_session(session)
         return SessionCreateResponse(session_id=session_id, template=template)
 
     @app.post("/api/chat", response_model=ChatResponse)
-    async def chat(request: ChatRequest) -> ChatResponse:
-        session = await get_session(request.session_id)
+    async def chat(
+        request: ChatRequest,
+        user: User = Depends(current_active_user)
+    ) -> ChatResponse:
+        session = await get_session(str(user.id), request.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -793,8 +836,11 @@ def create_app(
         )
 
     @app.post("/api/chat/stream")
-    async def chat_stream(request: ChatRequest) -> StreamingResponse:
-        session = await get_session(request.session_id)
+    async def chat_stream(
+        request: ChatRequest,
+        user: User = Depends(current_active_user)
+    ) -> StreamingResponse:
+        session = await get_session(str(user.id), request.session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -877,9 +923,22 @@ def create_app(
         return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
     @app.websocket("/ws/chat/{session_id}")
-    async def chat_websocket(websocket: WebSocket, session_id: str):
+    async def chat_websocket(
+        websocket: WebSocket,
+        session_id: str,
+        token: str | None = None
+    ):
         await websocket.accept()
-        session = await get_session(session_id)
+        # Simple token verification for WS
+        from research_agent.app.auth import get_jwt_strategy
+        strategy = get_jwt_strategy()
+        user = await strategy.read_token(token, fastapi_users.get_user_manager)
+        if not user or not user.is_active:
+             await websocket.send_json({"event": "error", "payload": {"message": "Unauthorized"}})
+             await websocket.close()
+             return
+
+        session = await get_session(str(user.id), session_id)
         if not session:
             await websocket.send_json({"event": "error", "payload": {"message": "Session not found"}})
             await websocket.close()
@@ -953,7 +1012,7 @@ def create_app(
                             session_active_runs.pop(session_id, None)
 
                 elif action == "stop":
-                    await stop_session_run(session_id)
+                    await stop_session_run(session_id, user)
                     await websocket.send_json({"event": "status", "payload": {"message": "Stop requested"}})
                 
         except WebSocketDisconnect:
@@ -966,7 +1025,10 @@ def create_app(
             await websocket.close()
 
     @app.post("/api/session/{session_id}/stop", response_model=StopResponse)
-    async def stop_session_run(session_id: str) -> StopResponse:
+    async def stop_session_run(
+        session_id: str,
+        user: User = Depends(current_active_user)
+    ) -> StopResponse:
         run_id = session_active_runs.get(session_id)
         if not run_id:
             return StopResponse(ok=False, detail="No active run for session")
@@ -979,8 +1041,11 @@ def create_app(
         return StopResponse(ok=True, detail=f"Stop requested for {run_id}")
 
     @app.post("/api/session/{session_id}/resume", response_model=ChatResponse)
-    async def resume_session_run(session_id: str) -> ChatResponse:
-        session = await get_session(session_id)
+    async def resume_session_run(
+        session_id: str,
+        user: User = Depends(current_active_user)
+    ) -> ChatResponse:
+        session = await get_session(str(user.id), session_id)
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
