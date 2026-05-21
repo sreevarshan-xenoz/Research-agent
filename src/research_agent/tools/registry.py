@@ -49,6 +49,10 @@ def build_tool_registry(settings: AppSettings) -> dict[str, BaseToolAdapter]:
         registry["pubmed"] = PubMedAdapter()
     if "github" in settings.retrieval.paper_providers:
         registry["github"] = GitHubCrawlerAdapter()
+    if "patent" in settings.retrieval.paper_providers:
+        registry["patent"] = PatentSearchAdapter()
+    if "news_social" in settings.retrieval.paper_providers:
+        registry["news_social"] = NewsSocialAdapter()
 
     return registry
 

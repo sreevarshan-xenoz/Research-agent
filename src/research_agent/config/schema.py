@@ -123,7 +123,7 @@ class RetrievalSettings(BaseModel):
     def validate_paper_providers(cls, value: list[str]) -> list[str]:
         if not value:
             raise ValueError("paper_providers cannot be empty")
-        supported = {"arxiv", "semantic_scholar", "openalex", "pubmed", "github"}
+        supported = {"arxiv", "semantic_scholar", "openalex", "pubmed", "github", "patent", "news_social"}
         for p in value:
             if p not in supported:
                 raise ValueError(f"Unsupported paper provider: {p}. Supported: {sorted(supported)}")
