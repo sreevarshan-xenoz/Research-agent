@@ -69,6 +69,12 @@ async def exporter_node(state: GraphState) -> dict:
         detail="Artifacts written",
         message="Export complete",
     )
+    # After writing artifacts, refresh global analytics
+    try:
+        await asyncio.to_thread(aggregate_team_analytics)
+    except Exception:
+        pass
+
     return {
         "artifact_dir": artifact_dir,
         "phase": "completed",
