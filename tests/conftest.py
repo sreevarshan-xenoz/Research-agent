@@ -15,8 +15,12 @@ def mock_llm_calls(monkeypatch):
     def _mock_completion(*args, **kwargs):
         raise ValueError("Litellm disabled during testing")
         
+    async def _mock_acompletion(*args, **kwargs):
+        raise ValueError("Litellm disabled during testing")
+        
     try:
         import litellm
         monkeypatch.setattr(litellm, "completion", _mock_completion)
+        monkeypatch.setattr(litellm, "acompletion", _mock_acompletion)
     except ImportError:
         pass
