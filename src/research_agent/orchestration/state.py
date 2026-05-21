@@ -41,6 +41,9 @@ class GraphState(TypedDict):
     figures: list[dict[str, str]]
     latex_main: str
     bibtex: str
+    peer_review_report: str | None
+    knowledge_graph: dict[str, Any] | None
+    bias_report: str | None
     artifact_root: str
     artifact_dir: str
     run_warnings: list[str]
@@ -85,6 +88,8 @@ class WorkflowState:
     latex_main: str = ""
     bibtex: str = ""
     peer_review_report: Optional[str] = None
+    knowledge_graph: Optional[Dict[str, Any]] = None
+    bias_report: Optional[str] = None
     artifact_root: str = ".runtime/artifacts"
     artifact_dir: str = ""
     run_warnings: List[str] = field(default_factory=list)
@@ -128,6 +133,9 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "figures": state.figures,
         "latex_main": state.latex_main,
         "bibtex": state.bibtex,
+        "peer_review_report": state.peer_review_report,
+        "knowledge_graph": state.knowledge_graph,
+        "bias_report": state.bias_report,
         "artifact_root": state.artifact_root,
         "artifact_dir": state.artifact_dir,
         "run_warnings": state.run_warnings,
@@ -172,7 +180,11 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         figures=state.get("figures", []),
         latex_main=state["latex_main"],
         bibtex=state["bibtex"],
+        peer_review_report=state.get("peer_review_report"),
+        knowledge_graph=state.get("knowledge_graph"),
+        bias_report=state.get("bias_report"),
         artifact_root=state["artifact_root"],
         artifact_dir=state["artifact_dir"],
         run_warnings=state["run_warnings"],
     )
+

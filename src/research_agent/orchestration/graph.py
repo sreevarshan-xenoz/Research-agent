@@ -121,6 +121,8 @@ def build_graph(
     graph.add_node("critic", critic_node)
     graph.add_node("await_user_critic", awaiting_user_critic_node)
     graph.add_node("combiner", combiner_node)
+    graph.add_node("knowledge_graph", knowledge_graph_node)
+    graph.add_node("bias_detector", bias_detector_node)
     graph.add_node("figure_generator", figure_generator_node)
     graph.add_node("citation_verifier", citation_verifier_node)
     graph.add_node("composer", composer_node)
@@ -169,7 +171,9 @@ def build_graph(
 
     graph.add_edge("stopped", "combiner")
     
-    graph.add_edge("combiner", "figure_generator")
+    graph.add_edge("combiner", "knowledge_graph")
+    graph.add_edge("knowledge_graph", "bias_detector")
+    graph.add_edge("bias_detector", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
     graph.add_edge("composer", "peer_reviewer")

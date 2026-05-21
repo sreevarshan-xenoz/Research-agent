@@ -38,12 +38,21 @@ __all__ = [
 	"citation_verifier_node",
 	"composer_node",
 	"peer_reviewer_node",
+	"knowledge_graph_node",
+	"bias_detector_node",
 	"exporter_node",
 	"awaiting_user_critic_node",
 ]
 
 
 async def awaiting_user_critic_node(state: GraphState) -> dict:
+    """Pauses the graph to wait for user feedback on the critic's findings."""
+    return {"phase": "awaiting_critic_review"}
+
+s."""
+    return {"phase": "awaiting_critic_review"}
+
+-> dict:
     """Pauses the graph to wait for user feedback on the critic's findings."""
     return {"phase": "awaiting_critic_review"}
 

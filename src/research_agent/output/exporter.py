@@ -39,6 +39,8 @@ def export_run_artifacts(
     main_tex: str,
     bibtex: str,
     peer_review_report: str | None = None,
+    knowledge_graph: dict[str, Any] | None = None,
+    bias_report: str | None = None,
     summary: dict[str, Any],
     template_name: str,
 ) -> str:
@@ -50,6 +52,13 @@ def export_run_artifacts(
     (run_dir / "references.bib").write_text(bibtex, encoding="utf-8")
     if peer_review_report:
         (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
+    if knowledge_graph:
+        (run_dir / "knowledge_graph.json").write_text(
+            json.dumps(knowledge_graph, indent=2, ensure_ascii=True),
+            encoding="utf-8"
+        )
+    if bias_report:
+        (run_dir / "bias_report.md").write_text(bias_report, encoding="utf-8")
     (run_dir / "compile_instructions.md").write_text(
         build_compile_instructions(template_name),
         encoding="utf-8",
