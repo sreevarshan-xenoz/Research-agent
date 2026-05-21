@@ -14,7 +14,7 @@ def test_render_main_tex_for_ieee_template() -> None:
         abstract="Short abstract.",
         body="\\section{Intro}\\nBody text.",
     )
-    assert "\\documentclass[conference]{IEEEtran}" in tex
+    assert "\\documentclass[conference,twocolumn]{IEEEtran}" in tex
     assert "Test Title" in tex
     assert "\\section{Intro}" in tex
 
