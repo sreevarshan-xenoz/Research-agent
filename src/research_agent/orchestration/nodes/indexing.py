@@ -149,9 +149,11 @@ async def indexing_node(state: GraphState) -> dict:
             continue
             
         for provider, result in provider_map.items():
-            items = result.get("items", [])
-            for item in items:
-                await index.aadd_finding(task_id, provider, item)
+            if isinstance(result, dict):
+                items = result.get("items", [])
+                if isinstance(items, list):
+                    for item in items:
+                        await index.aadd_finding(task_id, provider, item)
         
         indexed_task_ids.add(task_id)
 
