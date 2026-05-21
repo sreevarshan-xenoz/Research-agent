@@ -1,4 +1,5 @@
 from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 from typing import Any
@@ -7,7 +8,7 @@ import httpx
 
 try:
     # Try the new package name first
-    from ddgs import DDGS
+    from ddgs import DDGS  # type: ignore[import-not-found]
 except Exception:
     try:
         # Fall back to the old package name
