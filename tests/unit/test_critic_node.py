@@ -65,6 +65,7 @@ async def test_critic_applies_metadata_fallback_penalty() -> None:
     assert any("Metadata fallback penalty applied for t1" in note for note in result["critic_notes"])
 
 
+@pytest.mark.asyncio
 async def test_critic_applies_contradiction_penalty(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(
         critic_module,
