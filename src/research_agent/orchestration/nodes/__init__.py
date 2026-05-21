@@ -20,6 +20,8 @@ from research_agent.orchestration.nodes.future_work import future_work_extrapola
 from research_agent.orchestration.nodes.comparison import comparison_table_node
 from research_agent.orchestration.nodes.formula_normalizer import formula_normalizer_node
 from research_agent.orchestration.nodes.hallucination_guard import hallucination_guard_node
+from research_agent.orchestration.nodes.formula_verifier import formula_verifier_node
+from research_agent.orchestration.nodes.replanner import replanner_node
 from research_agent.orchestration.nodes.indexing import indexing_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
@@ -42,12 +44,14 @@ __all__ = [
 	"stop_node",
 	"indexing_node",
 	"critic_node",
+	"replanner_node",
 	"combiner_node",
 	"figure_generator_node",
 	"citation_verifier_node",
 	"composer_node",
 	"formula_normalizer_node",
 	"hallucination_guard_node",
+	"formula_verifier_node",
 	"peer_reviewer_node",
 	"presentation_generator_node",
 	"poster_generator_node",

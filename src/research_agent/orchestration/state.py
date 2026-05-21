@@ -46,6 +46,7 @@ class GraphState(TypedDict):
     future_research_agenda: str | None
     comparison_table: str | None
     guard_report: str | None
+    math_verification_report: str | None
     peer_review_report: str | None
     knowledge_graph: dict[str, Any] | None
     bias_report: str | None
@@ -97,6 +98,7 @@ class WorkflowState:
     future_research_agenda: Optional[str] = None
     comparison_table: Optional[str] = None
     guard_report: Optional[str] = None
+    math_verification_report: Optional[str] = None
     peer_review_report: Optional[str] = None
     knowledge_graph: Optional[Dict[str, Any]] = None
     bias_report: Optional[str] = None
@@ -148,6 +150,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "future_research_agenda": state.future_research_agenda,
         "comparison_table": state.comparison_table,
         "guard_report": state.guard_report,
+        "math_verification_report": state.math_verification_report,
         "peer_review_report": state.peer_review_report,
         "knowledge_graph": state.knowledge_graph,
         "bias_report": state.bias_report,
@@ -186,7 +189,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         ],
         section_confidence=state["section_confidence"],
         clarification_questions=state["clarification_questions"],
-        needs_clarification=state["needs_clarification"],
+        needs_clarification=bool(state["needs_clarification"]),
         task_findings=state["task_findings"],
         critic_notes=state["critic_notes"],
         critic_user_feedback=state.get("critic_user_feedback"),
@@ -200,6 +203,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         future_research_agenda=state.get("future_research_agenda"),
         comparison_table=state.get("comparison_table"),
         guard_report=state.get("guard_report"),
+        math_verification_report=state.get("math_verification_report"),
         peer_review_report=state.get("peer_review_report"),
         knowledge_graph=state.get("knowledge_graph"),
         bias_report=state.get("bias_report"),

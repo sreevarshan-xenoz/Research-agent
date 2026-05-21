@@ -21,6 +21,7 @@ from research_agent.orchestration.nodes import (
     exporter_node,
     figure_generator_node,
     formula_normalizer_node,
+    formula_verifier_node,
     future_work_extrapolator_node,
     get_pending_task_ids,
     get_ready_task_ids,
@@ -33,6 +34,7 @@ from research_agent.orchestration.nodes import (
     planner_node,
     poster_generator_node,
     presentation_generator_node,
+    replanner_node,
     stop_node,
     workers_complete_node,
 )
@@ -79,7 +81,7 @@ def _route_after_critic(state: GraphState) -> str:
     if low_confidence and state["iteration_index"] < state["max_iterations"]:
         if state.get("autonomy_mode") == "interactive":
             return "await_user_critic"
-        return "loop"
+        return "replan"
     return "combiner"
 
 
@@ -128,6 +130,7 @@ def build_graph(
     graph.add_node("stopped", stop_node)
     graph.add_node("indexing", indexing_node)
     graph.add_node("critic", critic_node)
+    graph.add_node("replanner", replanner_node)
     graph.add_node("await_user_critic", awaiting_user_critic_node)
     graph.add_node("combiner", combiner_node)
     graph.add_node("knowledge_graph", knowledge_graph_node)
@@ -139,6 +142,7 @@ def build_graph(
     graph.add_node("composer", composer_node)
     graph.add_node("formula_normalizer", formula_normalizer_node)
     graph.add_node("hallucination_guard", hallucination_guard_node)
+    graph.add_node("formula_verifier", formula_verifier_node)
     graph.add_node("peer_reviewer", peer_reviewer_node)
     graph.add_node("presentation", presentation_generator_node)
     graph.add_node("poster", poster_generator_node)
@@ -176,12 +180,13 @@ def build_graph(
         _route_after_critic,
         {
             "await_user_critic": "await_user_critic",
-            "loop": "worker_executor",
+            "replan": "replanner",
             "combiner": "combiner",
             "stopped": "stopped",
         },
     )
 
+    graph.add_edge("replanner", "worker_executor")
     graph.add_edge("await_user_critic", END)
 
     graph.add_edge("stopped", "combiner")
@@ -195,7 +200,8 @@ def build_graph(
     graph.add_edge("citation_verifier", "composer")
     graph.add_edge("composer", "formula_normalizer")
     graph.add_edge("formula_normalizer", "hallucination_guard")
-    graph.add_edge("hallucination_guard", "peer_reviewer")
+    graph.add_edge("hallucination_guard", "formula_verifier")
+    graph.add_edge("formula_verifier", "peer_reviewer")
     graph.add_edge("peer_reviewer", "presentation")
     graph.add_edge("presentation", "poster")
     graph.add_edge("poster", "exporter")

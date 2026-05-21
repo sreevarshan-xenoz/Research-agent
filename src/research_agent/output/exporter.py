@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from research_agent.output.latex.renderer import build_compile_instructions
+from research_agent.output.overleaf import build_overleaf_import_url
 from research_agent.config import load_settings
 
 
@@ -43,9 +44,10 @@ def export_run_artifacts(
     future_research_agenda: str | None = None,
     comparison_table: str | None = None,
     peer_review_report: str | None = None,
+    guard_report: str | None = None,
+    math_verification_report: str | None = None,
     knowledge_graph: dict[str, Any] | None = None,
     bias_report: str | None = None,
-    guard_report: str | None = None,
     summary: dict[str, Any],
     template_name: str,
 ) -> str:
@@ -67,6 +69,8 @@ def export_run_artifacts(
         (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
     if guard_report:
         (run_dir / "guard_report.md").write_text(guard_report, encoding="utf-8")
+    if math_verification_report:
+        (run_dir / "math_verification.md").write_text(math_verification_report, encoding="utf-8")
     if knowledge_graph:
         (run_dir / "knowledge_graph.json").write_text(
             json.dumps(knowledge_graph, indent=2, ensure_ascii=True),
