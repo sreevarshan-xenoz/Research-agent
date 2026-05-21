@@ -33,7 +33,7 @@ class SemanticScholarAdapter(BaseToolAdapter):
         if self._api_key:
             headers["x-api-key"] = self._api_key
 
-        params = {
+        params: dict[str, Any] = {
             "query": query,
             "limit": normalized_limit,
             "fields": "title,url,year,authors,citationCount,abstract,paperId",
