@@ -84,6 +84,7 @@ class WorkflowState:
     figures: List[Dict[str, str]] = field(default_factory=list)
     latex_main: str = ""
     bibtex: str = ""
+    peer_review_report: Optional[str] = None
     artifact_root: str = ".runtime/artifacts"
     artifact_dir: str = ""
     run_warnings: List[str] = field(default_factory=list)

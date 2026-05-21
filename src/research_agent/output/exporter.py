@@ -38,6 +38,7 @@ def export_run_artifacts(
     run_id: str,
     main_tex: str,
     bibtex: str,
+    peer_review_report: str | None = None,
     summary: dict[str, Any],
     template_name: str,
 ) -> str:
@@ -47,6 +48,8 @@ def export_run_artifacts(
 
     (run_dir / "main.tex").write_text(main_tex, encoding="utf-8")
     (run_dir / "references.bib").write_text(bibtex, encoding="utf-8")
+    if peer_review_report:
+        (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
     (run_dir / "compile_instructions.md").write_text(
         build_compile_instructions(template_name),
         encoding="utf-8",

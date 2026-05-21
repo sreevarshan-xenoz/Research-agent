@@ -94,13 +94,25 @@ def _stop_reason(state: GraphState) -> str | None:
     return None
 
 
-def build_graph(registry: dict[str, BaseToolAdapter] | None = None, checkpointer=None):
+_GLOBAL_MEMORY_SAVER = MemorySaver()
+
+
+async def plan_validation_node(state: GraphState) -> dict:
+    return {"phase": "plan_validated"}
+
+
+def build_graph(
+    registry: dict[str, BaseToolAdapter] | None = None,
+    checkpointer=None,
+    interrupt_before=None,
+):
     tool_registry = {} if registry is None else registry
     graph = StateGraph(GraphState)
     graph.add_node("intake", intake_node)
     graph.add_node("clarifier", clarifier_node)
     graph.add_node("await_user", awaiting_user_node)
     graph.add_node("planner", planner_node)
+    graph.add_node("plan_validation", plan_validation_node)
     graph.add_node("worker_executor", make_worker_node(tool_registry))
     graph.add_node("workers_complete", workers_complete_node)
     graph.add_node("workers_blocked", dependency_blocked_node)
@@ -112,6 +124,7 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None, checkpointer
     graph.add_node("figure_generator", figure_generator_node)
     graph.add_node("citation_verifier", citation_verifier_node)
     graph.add_node("composer", composer_node)
+    graph.add_node("peer_reviewer", peer_reviewer_node)
     graph.add_node("exporter", exporter_node)
 
     graph.add_edge(START, "intake")
@@ -125,7 +138,8 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None, checkpointer
         },
     )
     graph.add_edge("await_user", END)
-    graph.add_edge("planner", "worker_executor")
+    graph.add_edge("planner", "plan_validation")
+    graph.add_edge("plan_validation", "worker_executor")
     graph.add_conditional_edges(
         "worker_executor",
         _route_after_worker,
@@ -158,10 +172,11 @@ def build_graph(registry: dict[str, BaseToolAdapter] | None = None, checkpointer
     graph.add_edge("combiner", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
-    graph.add_edge("composer", "exporter")
+    graph.add_edge("composer", "peer_reviewer")
+    graph.add_edge("peer_reviewer", "exporter")
     graph.add_edge("exporter", END)
     
-    return graph.compile(checkpointer=checkpointer or MemorySaver())
+    return graph.compile(checkpointer=checkpointer or _GLOBAL_MEMORY_SAVER, interrupt_before=interrupt_before)
 
 
 async def run_graph(
@@ -179,11 +194,37 @@ async def run_graph(
         redis_conn = redis.from_url(settings.redis.url)
         checkpointer = AsyncRedisSaver(redis_client=redis_conn)
 
+    interrupt_before = []
+    if settings.runtime.interactive_checkpoints:
+        interrupt_before = ["plan_validation"]
+
     try:
-        compiled = build_graph(registry=registry, checkpointer=checkpointer)
+        compiled = build_graph(
+            registry=registry,
+            checkpointer=checkpointer,
+            interrupt_before=interrupt_before,
+        )
         config = {"configurable": {"thread_id": thread_id or state.run_id}}
-        result = await compiled.ainvoke(to_graph_state(state), config=config)
-        return from_graph_state(result)
+        
+        # Check if the thread already has a history/checkpoint
+        thread_state = await compiled.aget_state(config)
+        if thread_state.values:
+            # Update current thread state with the user's modifications (if any)
+            await compiled.aupdate_state(config, to_graph_state(state))
+            # Resume execution by passing None to ainvoke
+            result = await compiled.ainvoke(None, config=config)
+        else:
+            # Initial run, start from the beginning
+            result = await compiled.ainvoke(to_graph_state(state), config=config)
+            
+        # Inspect thread state after invocation to check for breakpoints
+        post_thread_state = await compiled.aget_state(config)
+        ret_state = from_graph_state(result)
+        if post_thread_state.next and "plan_validation" in post_thread_state.next:
+            ret_state.phase = "awaiting_plan_approval"
+            ret_state.stop_reason = "plan_validation_checkpoint"
+            
+        return ret_state
     finally:
         if redis_conn:
             await redis_conn.aclose()

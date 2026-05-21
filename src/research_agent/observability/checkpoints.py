@@ -91,6 +91,7 @@ def _deserialize_state(payload: dict[str, Any]) -> WorkflowState:
         figures=list(payload.get("figures", [])),
         latex_main=payload.get("latex_main", ""),
         bibtex=payload.get("bibtex", ""),
+        peer_review_report=payload.get("peer_review_report"),
         artifact_root=payload.get("artifact_root", ".runtime/artifacts"),
         artifact_dir=payload.get("artifact_dir", ""),
         run_warnings=list(payload.get("run_warnings", [])),

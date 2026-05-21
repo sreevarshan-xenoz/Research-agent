@@ -37,6 +37,7 @@ __all__ = [
 	"figure_generator_node",
 	"citation_verifier_node",
 	"composer_node",
+	"peer_reviewer_node",
 	"exporter_node",
 	"awaiting_user_critic_node",
 ]
@@ -44,5 +45,8 @@ __all__ = [
 
 async def awaiting_user_critic_node(state: GraphState) -> dict:
     """Pauses the graph to wait for user feedback on the critic's findings."""
+    return {"phase": "awaiting_critic_review"}
+
+s."""
     return {"phase": "awaiting_critic_review"}
 
