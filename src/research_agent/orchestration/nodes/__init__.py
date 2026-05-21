@@ -17,6 +17,8 @@ from research_agent.orchestration.nodes.knowledge_graph import knowledge_graph_n
 from research_agent.orchestration.nodes.bias_detector import bias_detector_node
 from research_agent.orchestration.nodes.future_work import future_work_extrapolator_node
 from research_agent.orchestration.nodes.comparison import comparison_table_node
+from research_agent.orchestration.nodes.formula_normalizer import formula_normalizer_node
+from research_agent.orchestration.nodes.hallucination_guard import hallucination_guard_node
 from research_agent.orchestration.nodes.indexing import indexing_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
@@ -43,6 +45,8 @@ __all__ = [
 	"figure_generator_node",
 	"citation_verifier_node",
 	"composer_node",
+	"formula_normalizer_node",
+	"hallucination_guard_node",
 	"peer_reviewer_node",
 	"presentation_generator_node",
 	"knowledge_graph_node",

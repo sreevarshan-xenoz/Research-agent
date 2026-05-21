@@ -128,6 +128,8 @@ def build_graph(
     graph.add_node("figure_generator", figure_generator_node)
     graph.add_node("citation_verifier", citation_verifier_node)
     graph.add_node("composer", composer_node)
+    graph.add_node("formula_normalizer", formula_normalizer_node)
+    graph.add_node("hallucination_guard", hallucination_guard_node)
     graph.add_node("peer_reviewer", peer_reviewer_node)
     graph.add_node("presentation", presentation_generator_node)
     graph.add_node("exporter", exporter_node)

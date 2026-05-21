@@ -44,6 +44,7 @@ def export_run_artifacts(
     peer_review_report: str | None = None,
     knowledge_graph: dict[str, Any] | None = None,
     bias_report: str | None = None,
+    guard_report: str | None = None,
     summary: dict[str, Any],
     template_name: str,
 ) -> str:
@@ -61,6 +62,8 @@ def export_run_artifacts(
         (run_dir / "comparison_table.tex").write_text(comparison_table, encoding="utf-8")
     if peer_review_report:
         (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
+    if guard_report:
+        (run_dir / "guard_report.md").write_text(guard_report, encoding="utf-8")
     if knowledge_graph:
         (run_dir / "knowledge_graph.json").write_text(
             json.dumps(knowledge_graph, indent=2, ensure_ascii=True),
