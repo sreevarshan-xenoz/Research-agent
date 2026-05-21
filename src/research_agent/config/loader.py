@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Mapping
 
 from dotenv import load_dotenv
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from research_agent.config.schema import AppSettings
 
@@ -61,10 +61,22 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     # Legacy aliases (deprecated)
     if env.get("HEAD_MODEL"):
         models["head_model"] = env["HEAD_MODEL"]
+        models["orchestrator_model"] = env["HEAD_MODEL"]
     if env.get("SUBAGENT_MODEL"):
         models["subagent_model"] = env["SUBAGENT_MODEL"]
+        models["subagent_cloud"] = env["SUBAGENT_MODEL"]
     if env.get("WORKER_MODEL"):
         models["worker_model"] = env["WORKER_MODEL"]
+        models["subagent_local"] = env["WORKER_MODEL"]
+    if env.get("STRONG_MODEL"):
+        models["strong_model"] = env["STRONG_MODEL"]
+        models["subagent_cloud"] = env["STRONG_MODEL"]
+    if env.get("LITELLM_DEFAULT_MODEL"):
+        models["worker_model"] = env["LITELLM_DEFAULT_MODEL"]
+        models["subagent_local"] = env["LITELLM_DEFAULT_MODEL"]
+    if env.get("LITELLM_STRONG_MODEL"):
+        models["strong_model"] = env["LITELLM_STRONG_MODEL"]
+        models["subagent_cloud"] = env["LITELLM_STRONG_MODEL"]
 
     if env.get("DEFAULT_TEMPLATE"):
         output["default_template"] = env["DEFAULT_TEMPLATE"]
