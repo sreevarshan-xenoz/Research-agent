@@ -1,36 +1,38 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any, cast
 
 from research_agent.observability import apublish_progress
 from research_agent.observability.progress import ProgressCallback, get_progress_callback
-from research_agent.orchestration.state import GraphState
+from research_agent.orchestration.state import GraphState, GraphTask
 from research_agent.tools.base import BaseToolAdapter
 from research_agent.tools.registry import arun_multi_source_search
 
 WEB_SOURCE_TYPES = {"web", "web_scrape", "browser"}
 
 
-def get_ready_task_ids(tasks: list[dict[str, object]]) -> list[str]:
+def get_ready_task_ids(tasks: list[GraphTask]) -> list[str]:
     status_by_id = {str(task["task_id"]): str(task["status"]) for task in tasks}
     ready_ids: list[str] = []
 
     for task in tasks:
         if str(task["status"]) != "pending":
             continue
-        dependencies = [str(dep) for dep in task.get("depends_on", [])]
+        deps = task.get("depends_on")
+        dependencies = [str(dep) for dep in deps] if isinstance(deps, list) else []
         if all(status_by_id.get(dep) == "complete" for dep in dependencies):
             ready_ids.append(str(task["task_id"]))
 
     return ready_ids
 
 
-def get_pending_task_ids(tasks: list[dict[str, object]]) -> list[str]:
+def get_pending_task_ids(tasks: list[GraphTask]) -> list[str]:
     return [str(task["task_id"]) for task in tasks if str(task["status"]) == "pending"]
 
 
 async def _enrich_web_results_with_page_content(
-    result_map: dict[str, object],
+    result_map: dict[str, Any],
     registry: dict[str, BaseToolAdapter],
     *,
     max_pages_per_provider: int = 2,
@@ -116,26 +118,27 @@ class WorkerPool:
 
     async def execute_task(
         self, 
-        task: dict[str, object], 
+        task: GraphTask, 
         registry: dict[str, BaseToolAdapter],
         progress_handler: ProgressCallback | None = None
-    ) -> tuple[str, dict[str, object], list[str]]:
+    ) -> tuple[str, dict[str, dict[str, Any]], list[str]]:
         async with self.semaphore:
             task_id = str(task["task_id"])
             task["status"] = "running"
             
             await _emit_progress(
                 progress_handler,
-                agent=f"Worker {task_id}",
+                agent=f"SubResearch {task_id}",
                 status="running",
                 detail=str(task["title"]),
-                message=f"Processing {task_id}",
+                message=f"Running {task_id}",
             )
 
             query = str(task["objective"])
-            providers = task.get("providers")
+            providers_raw = task.get("providers")
+            providers = [str(p) for p in providers_raw] if isinstance(providers_raw, list) else None
             
-            task_finding = {}
+            task_finding: dict[str, dict[str, Any]] = {}
             task_warnings = []
             
             try:
@@ -181,10 +184,14 @@ class WorkerPool:
                 task_finding = {"error": {"items": [], "warnings": [str(search_exc)], "item_count": 0}}
             
             task["status"] = "complete"
-            total_items = sum(f.get("item_count", 0) for f in task_finding.values())
+            total_items = sum(
+                int(f["item_count"])
+                for f in task_finding.values()
+                if isinstance(f, dict) and "item_count" in f
+            )
             await _emit_progress(
                 progress_handler,
-                agent=f"Worker {task_id}",
+                agent=f"SubResearch {task_id}",
                 status="complete",
                 detail=f"{task['title']} ({total_items} items)",
                 message=f"Completed {task_id}",
@@ -201,7 +208,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
     registry_provider_count = max(len(registry), 1)
 
     async def worker_node(state: GraphState) -> dict:
-        tasks = [dict(task) for task in state["tasks"]]
+        tasks: list[GraphTask] = [cast(GraphTask, dict(task)) for task in state["tasks"]]
         if not tasks:
             return {"phase": "workers_idle"}
 
