@@ -83,7 +83,23 @@ class ResearchIndex:
         # In a real scenario, we'd use sentence-transformers or NVIDIA's embedding API
         # To keep it "free first" and low-dep, we use a hash-based pseudo-embedding
         # OR we check if NVIDIA_API_KEY is available for real embeddings
+        settings = get_settings()
+        embedding_model = settings.retrieval.embedding_model
         
+        # Try local multilingual embeddings first
+        if embedding_model and settings.features.multi_language:
+            try:
+                import asyncio
+                from sentence_transformers import SentenceTransformer
+                # Cache the model on the class or globally to avoid reloading
+                if not hasattr(self, "_st_model"):
+                    self._st_model = SentenceTransformer(embedding_model)
+                self.vector_size = self._st_model.get_sentence_embedding_dimension()
+                embeddings = await asyncio.to_thread(self._st_model.encode, texts)
+                return embeddings.tolist()
+            except ImportError:
+                print("sentence-transformers not installed. Falling back to NVIDIA or deterministic embeddings.")
+
         api_key = os.getenv("NVIDIA_API_KEY")
         enable_nvidia = os.getenv("ENABLE_NVIDIA_MODEL", "true").lower() not in ("0", "false")
         

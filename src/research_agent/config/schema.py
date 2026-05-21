@@ -116,6 +116,7 @@ class RetrievalSettings(BaseModel):
     allow_metadata_fallback: bool = True
     metadata_fallback_confidence_penalty: float = Field(default=0.15, ge=0, le=1)
     enable_fuzzy_dedup: bool = True
+    embedding_model: str = Field(default="intfloat/multilingual-e5-large", description="Model for multilingual embeddings")
 
     @field_validator("paper_providers")
     @classmethod
@@ -195,11 +196,5 @@ class AppSettings(BaseModel):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
-    features: FeatureFlags = Field(default_factory=FeatureFlags)
-    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
-ault_factory=AuthSettings)
-    features: FeatureFlags = Field(default_factory=FeatureFlags)
-    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
-uthSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
