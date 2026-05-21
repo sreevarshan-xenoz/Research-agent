@@ -127,6 +127,7 @@ def build_graph(
     graph.add_node("citation_verifier", citation_verifier_node)
     graph.add_node("composer", composer_node)
     graph.add_node("peer_reviewer", peer_reviewer_node)
+    graph.add_node("presentation", presentation_generator_node)
     graph.add_node("exporter", exporter_node)
 
     graph.add_edge(START, "intake")

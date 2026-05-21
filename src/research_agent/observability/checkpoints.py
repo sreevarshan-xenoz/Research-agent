@@ -94,6 +94,7 @@ def _deserialize_state(payload: dict[str, Any]) -> WorkflowState:
         figures=list(payload.get("figures", [])),
         latex_main=payload.get("latex_main", ""),
         bibtex=payload.get("bibtex", ""),
+        presentation_tex=payload.get("presentation_tex"),
         peer_review_report=payload.get("peer_review_report"),
         knowledge_graph=payload.get("knowledge_graph"),
         bias_report=payload.get("bias_report"),

@@ -87,6 +87,7 @@ class WorkflowState:
     figures: List[Dict[str, str]] = field(default_factory=list)
     latex_main: str = ""
     bibtex: str = ""
+    presentation_tex: Optional[str] = None
     peer_review_report: Optional[str] = None
     knowledge_graph: Optional[Dict[str, Any]] = None
     bias_report: Optional[str] = None
@@ -186,5 +187,8 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         artifact_root=state["artifact_root"],
         artifact_dir=state["artifact_dir"],
         run_warnings=state["run_warnings"],
+    )
+
+],
     )
 

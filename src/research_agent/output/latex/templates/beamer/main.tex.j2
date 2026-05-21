@@ -1,0 +1,41 @@
+\documentclass{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\title{ {{- topic -}} }
+\author{Research Agent v2}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+{% for section in sections %}
+\section{ {{- section.heading -}} }
+\begin{frame}{ {{- section.heading -}} }
+{{ section.content | replace('\n\n', '\n\n\pause\n') }}
+\end{frame}
+{% endfor %}
+
+\begin{frame}{Key Takeaways}
+\begin{itemize}
+    \item High-quality research synthesized by Agentic AI.
+    \item Verified citations from ArXiv, Semantic Scholar, and OpenAlex.
+    \item Automated LaTeX formatting and figures.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{References}
+\begin{tiny}
+\bibliographystyle{amsalpha}
+\bibliography{references}
+\end{tiny}
+\end{frame}
+
+\end{document}

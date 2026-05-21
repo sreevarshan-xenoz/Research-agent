@@ -55,6 +55,7 @@ def render_main_tex(
     abstract: str,
     body: str,
     language: str = "en",
+    acm_layout: str | None = None,
 ) -> str:
     """Renders the main.tex file using Jinja2 templates."""
     # Map friendly names to actual folder/file structure if needed
@@ -63,6 +64,13 @@ def render_main_tex(
     if template_name.startswith("ieee"):
         base_template = "ieee"
     
+    if acm_layout is None:
+        try:
+            from research_agent.config import load_settings
+            acm_layout = load_settings().output.default_acm_layout
+        except Exception:
+            acm_layout = "sigconf"
+
     env = _get_jinja_env()
     try:
         template = env.get_template(f"{base_template}/main.tex.j2")
@@ -78,29 +86,141 @@ def render_main_tex(
         abstract=escape_latex(abstract),
         body=body,
         columns=2 if "2col" in template_name else 1,
-        language=language
+        language=language,
+        acm_layout=acm_layout,
     )
 
 
-def build_bibtex(citations: Iterable[dict[str, str]]) -> str:
+def render_beamer_tex(
+    *,
+    topic: str,
+    sections: list[dict[str, Any]],
+) -> str:
+    """Renders a Beamer presentation .tex file."""
+    env = _get_jinja_env()
+    try:
+        template = env.get_template("beamer/main.tex.j2")
+    except Exception:
+        raise FileNotFoundError("Beamer template not found")
+
+    return template.render(
+        topic=escape_latex(topic),
+        sections=[
+            {
+                "heading": escape_latex(s.get("heading", "Untitled")),
+                "content": s.get("content", ""), # Body content often has latex, keep as is
+            }
+            for s in sections
+        ],
+    )
+
+
+def build_bibtex(citations: Iterable[dict[str, Any]]) -> str:
     blocks: list[str] = []
     for idx, citation in enumerate(citations, start=1):
         key = citation.get("key") or f"ref{idx}"
-        title = escape_latex(citation.get("title", "Untitled source"))
-        author = escape_latex(citation.get("author", "Unknown"))
-        year = citation.get("year", "2026")
-        url = citation.get("url", "")
+        title = citation.get("title") or "Untitled source"
+        author = citation.get("author") or "Unknown"
+        year = citation.get("year") or "2026"
+        url = citation.get("url") or ""
+        doi = citation.get("doi") or ""
+        journal = citation.get("journal") or ""
+        booktitle = citation.get("booktitle") or ""
+        volume = citation.get("volume") or ""
+        number = citation.get("number") or ""
+        pages = citation.get("pages") or ""
+        publisher = citation.get("publisher") or ""
+        doc_type = citation.get("type") or ""
+
+        # Preprints (arXiv) check
+        is_preprint = False
+        if doc_type and "arxiv" in str(doc_type).lower():
+            is_preprint = True
+        elif journal and "arxiv" in str(journal).lower():
+            is_preprint = True
+        elif publisher and "arxiv" in str(publisher).lower():
+            is_preprint = True
+        elif url and "arxiv.org" in str(url).lower():
+            is_preprint = True
+        elif citation.get("arxiv") or citation.get("arxiv_id"):
+            is_preprint = True
+
+        entry_type = "misc"
+        if not is_preprint:
+            if doc_type:
+                dt_lower = str(doc_type).lower()
+                if dt_lower in ("article", "journal-article", "journalarticle", "journal article"):
+                    entry_type = "article"
+                elif dt_lower in ("inproceedings", "proceedings-article", "proceedings", "conference-paper", "conferencepaper", "conference paper"):
+                    entry_type = "inproceedings"
+                elif dt_lower in ("book", "monograph"):
+                    entry_type = "book"
+                elif "thesis" in dt_lower or dt_lower in ("phdthesis", "mastersthesis"):
+                    entry_type = "phdthesis"
+                elif "report" in dt_lower or dt_lower in ("techreport", "technical-report"):
+                    entry_type = "techreport"
+
+            if entry_type == "misc":
+                if journal:
+                    entry_type = "article"
+                elif booktitle:
+                    entry_type = "inproceedings"
+                elif publisher:
+                    entry_type = "book"
+
+        # Escape the textual fields
+        escaped_title = escape_latex(str(title))
+        escaped_author = escape_latex(str(author))
+        escaped_journal = escape_latex(str(journal))
+        escaped_booktitle = escape_latex(str(booktitle))
+        escaped_publisher = escape_latex(str(publisher))
 
         block = [
-            f"@misc{{{key},",
-            f"  title = {{{title}}},",
-            f"  author = {{{author}}},",
+            f"@{entry_type}{{{key},",
+            f"  title = {{{escaped_title}}},",
+            f"  author = {{{escaped_author}}},",
             f"  year = {{{year}}},",
         ]
+
+        if entry_type == "article":
+            if escaped_journal:
+                block.append(f"  journal = {{{escaped_journal}}},")
+            if volume:
+                block.append(f"  volume = {{{volume}}},")
+            if number:
+                block.append(f"  number = {{{number}}},")
+            if pages:
+                block.append(f"  pages = {{{pages}}},")
+        elif entry_type == "inproceedings":
+            if escaped_booktitle:
+                block.append(f"  booktitle = {{{escaped_booktitle}}},")
+            if pages:
+                block.append(f"  pages = {{{pages}}},")
+            if publisher:
+                block.append(f"  publisher = {{{escaped_publisher}}},")
+        elif entry_type == "book":
+            if escaped_publisher:
+                block.append(f"  publisher = {{{escaped_publisher}}},")
+            if volume:
+                block.append(f"  volume = {{{volume}}},")
+            if pages:
+                block.append(f"  pages = {{{pages}}},")
+        elif entry_type == "phdthesis":
+            school = escaped_publisher or "Unknown University"
+            block.append(f"  school = {{{school}}},")
+        elif entry_type == "techreport":
+            institution = escaped_publisher or "Unknown Institution"
+            block.append(f"  institution = {{{institution}}},")
+            if number:
+                block.append(f"  number = {{{number}}},")
+
+        if doi:
+            block.append(f"  doi = {{{doi}}},")
         if url:
             # URLs in BibTeX \url should not be escaped by our general escape function
             # as \url handles special chars itself.
             block.append(f"  howpublished = {{\\url{{{url}}}}},")
+
         block.append("}")
         blocks.append("\n".join(block))
 
