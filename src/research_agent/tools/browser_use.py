@@ -132,7 +132,7 @@ class BrowserUseAdapter(BaseToolAdapter):
 
         # Disable default extensions to avoid unstable Chrome extension flags in some environments.
         browser = Browser(headless=True, enable_default_extensions=False)
-        agent = Agent(task=task, llm=llm, browser=browser, use_vision=False)
+        agent: Any = Agent(task=task, llm=llm, browser=browser, use_vision=False)
         history = agent.run_sync(max_steps=max_steps)
 
         if hasattr(history, "final_result"):
@@ -147,7 +147,7 @@ class BrowserUseAdapter(BaseToolAdapter):
 
     def _search_with_playwright(self, query: str, limit: int) -> list[_SearchCandidate]:
         try:
-            from playwright.sync_api import sync_playwright
+            from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError("playwright_not_available") from exc
 
