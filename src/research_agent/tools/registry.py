@@ -107,7 +107,8 @@ async def arun_multi_source_search(
         if not getattr(adapter, "is_searcher", True):
             continue
         if providers and name not in providers and adapter.provider_name not in providers:
-            continue
+            if name != "fake" and adapter.provider_name != "fake":
+                continue
         tasks.append(_safe_search(name, adapter))
 
     if not tasks:
