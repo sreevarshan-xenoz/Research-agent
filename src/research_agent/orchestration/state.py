@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import time
-from typing import Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict
 
 
 class GraphTask(TypedDict):
@@ -36,7 +36,7 @@ class GraphState(TypedDict):
     task_findings: dict[str, dict[str, dict[str, object]]]
     critic_notes: list[str]
     critic_user_feedback: str | None
-    combined_sections: list[dict[str, str]]
+    combined_sections: list[dict[str, Any]]
     citations: list[dict[str, str]]
     figures: list[dict[str, str]]
     latex_main: str
@@ -79,7 +79,7 @@ class WorkflowState:
     task_findings: Dict[str, Dict[str, Dict[str, object]]] = field(default_factory=dict)
     critic_notes: List[str] = field(default_factory=list)
     critic_user_feedback: Optional[str] = None
-    combined_sections: List[Dict[str, str]] = field(default_factory=list)
+    combined_sections: List[Dict[str, Any]] = field(default_factory=list)
     citations: List[Dict[str, str]] = field(default_factory=list)
     figures: List[Dict[str, str]] = field(default_factory=list)
     latex_main: str = ""
