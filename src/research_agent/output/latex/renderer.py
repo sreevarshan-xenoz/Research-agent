@@ -4,6 +4,8 @@ from pathlib import Path
 import re
 from typing import Iterable
 
+import jinja2
+
 
 def escape_latex(value: str) -> str:
     """Escapes special LaTeX characters in a string."""
@@ -31,8 +33,7 @@ def escape_latex(value: str) -> str:
     return escaped
 
 
-def _get_jinja_env() -> "jinja2.Environment":
-    import jinja2
+def _get_jinja_env() -> jinja2.Environment:
     template_dir = Path(__file__).resolve().parent / "templates"
     return jinja2.Environment(
         loader=jinja2.FileSystemLoader(template_dir),
