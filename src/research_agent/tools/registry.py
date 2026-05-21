@@ -13,6 +13,7 @@ from research_agent.tools.page_fetcher import PageFetcherAdapter
 from research_agent.tools.pubmed import PubMedAdapter
 from research_agent.tools.semantic_scholar import SemanticScholarAdapter
 from research_agent.tools.web_search import DuckDuckGoAdapter, WebSearchAdapter
+from research_agent.tools.cache import get_cached_tool_result, set_cached_tool_result
 
 
 def build_tool_registry(settings: AppSettings) -> dict[str, BaseToolAdapter]:
@@ -46,6 +47,8 @@ def build_tool_registry(settings: AppSettings) -> dict[str, BaseToolAdapter]:
         registry["openalex"] = OpenAlexAdapter()
     if "pubmed" in settings.retrieval.paper_providers:
         registry["pubmed"] = PubMedAdapter()
+    if "github" in settings.retrieval.paper_providers:
+        registry["github"] = GitHubCrawlerAdapter()
 
     return registry
 
@@ -79,6 +82,27 @@ def run_multi_source_search(
                     warnings=[f"Parallel search failed: {str(e)}"]
                 )
 
+    if "web_search" in results:
+        res = results["web_search"]
+        has_failure = not res.items or any("error" in w or "missing" in w or "unauthorized" in w for w in res.warnings)
+        if has_failure:
+            # Fall back to DuckDuckGo search
+            ddg_adapter = DuckDuckGoAdapter()
+            try:
+                ddg_res = ddg_adapter.search(query, limit=limit)
+            except Exception as e:
+                ddg_res = ToolResult(provider="duckduckgo", items=[], warnings=[str(e)])
+            if ddg_res.items and not any("error" in w or "missing" in w for w in ddg_res.warnings):
+                results["web_search"] = ddg_res
+            else:
+                # Fall back to Scraping (BrowserUseAdapter with browser_enabled=False)
+                scrape_adapter = BrowserUseAdapter(browser_enabled=False, provider_name="web_scrape")
+                try:
+                    scrape_res = scrape_adapter.search(query, limit=limit)
+                except Exception as e:
+                    scrape_res = ToolResult(provider="web_scrape", items=[], warnings=[str(e)])
+                results["web_search"] = scrape_res
+
     return results
 
 
@@ -93,7 +117,16 @@ async def arun_multi_source_search(
     
     async def _safe_search(name: str, adapter: BaseToolAdapter) -> tuple[str, ToolResult]:
         try:
+            # Check cache first
+            cached = await get_cached_tool_result(name, query, limit)
+            if cached:
+                return name, cached
+                
             res = await adapter.asearch(query, limit=limit)
+            
+            # Save to cache
+            await set_cached_tool_result(name, query, limit, res)
+            
             return name, res
         except Exception as e:
             return name, ToolResult(
@@ -115,4 +148,27 @@ async def arun_multi_source_search(
         return {}
         
     outputs = await asyncio.gather(*tasks)
-    return {name: res for name, res in outputs}
+    results = {name: res for name, res in outputs}
+
+    if "web_search" in results:
+        res = results["web_search"]
+        has_failure = not res.items or any("error" in w or "missing" in w or "unauthorized" in w for w in res.warnings)
+        if has_failure:
+            # Fall back to DuckDuckGo search
+            ddg_adapter = DuckDuckGoAdapter()
+            try:
+                ddg_res = await ddg_adapter.asearch(query, limit=limit)
+            except Exception as e:
+                ddg_res = ToolResult(provider="duckduckgo", items=[], warnings=[str(e)])
+            if ddg_res.items and not any("error" in w or "missing" in w for w in ddg_res.warnings):
+                results["web_search"] = ddg_res
+            else:
+                # Fall back to Scraping (BrowserUseAdapter with browser_enabled=False)
+                scrape_adapter = BrowserUseAdapter(browser_enabled=False, provider_name="web_scrape")
+                try:
+                    scrape_res = await scrape_adapter.asearch(query, limit=limit)
+                except Exception as e:
+                    scrape_res = ToolResult(provider="web_scrape", items=[], warnings=[str(e)])
+                results["web_search"] = scrape_res
+
+    return results
