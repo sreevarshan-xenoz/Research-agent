@@ -36,7 +36,6 @@ from research_agent.app.auth import (
     UserRead,
     UserUpdate,
     auth_backend,
-    create_db_and_tables,
     current_active_user,
     fastapi_users,
 )
@@ -118,7 +117,8 @@ class AsyncRedisSessionStore:
         self.key_prefix = "research_agent:sessions"
 
     async def get(self, user_id: str, session_id: str) -> ChatSession | None:
-        data = await self.client.hgetall(f"{self.key_prefix}:{user_id}:{session_id}")
+        coro_get: Any = self.client.hgetall(f"{self.key_prefix}:{user_id}:{session_id}")
+        data = await coro_get
         if not data:
             return None
         # Convert string representations of lists back to lists
@@ -142,7 +142,8 @@ class AsyncRedisSessionStore:
         for list_key in ["pending_questions", "clarification_answers"]:
             data[list_key] = json.dumps(data[list_key])
         
-        await self.client.hset(f"{self.key_prefix}:{session.user_id}:{session.session_id}", mapping=data)
+        coro_set: Any = self.client.hset(f"{self.key_prefix}:{session.user_id}:{session.session_id}", mapping=data)
+        await coro_set
 
     async def delete(self, user_id: str, session_id: str) -> None:
         await self.client.delete(f"{self.key_prefix}:{user_id}:{session_id}")
@@ -975,9 +976,13 @@ def create_app(
     ):
         await websocket.accept()
         # Simple token verification for WS
-        from research_agent.app.auth import get_jwt_strategy
+        from research_agent.app.auth import get_jwt_strategy, async_session_maker, UserManager
+        from fastapi_users.db import SQLAlchemyUserDatabase
         strategy = get_jwt_strategy()
-        user = await strategy.read_token(token, fastapi_users.get_user_manager)
+        async with async_session_maker() as db_session:
+            user_db: SQLAlchemyUserDatabase[User, uuid.UUID] = SQLAlchemyUserDatabase(db_session, User)
+            user_manager = UserManager(user_db)
+            user = await strategy.read_token(token, user_manager)
         if not user or not user.is_active:
              await websocket.send_json({"event": "error", "payload": {"message": "Unauthorized"}})
              await websocket.close()
