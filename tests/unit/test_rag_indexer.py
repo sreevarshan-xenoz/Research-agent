@@ -1,9 +1,9 @@
-from __future__ import annotations
-
+import pytest
 from research_agent.rag.indexer import ResearchIndex
 
 
-def test_research_index_deduplicates_repeated_chunks() -> None:
+@pytest.mark.asyncio
+async def test_research_index_deduplicates_repeated_chunks() -> None:
     index = ResearchIndex(collection_name="test_dedup")
 
     item = {
@@ -13,8 +13,8 @@ def test_research_index_deduplicates_repeated_chunks() -> None:
         "year": "2026",
     }
 
-    index.add_finding("t1", "web", item)
-    index.add_finding("t2", "web", item)
+    await index.aadd_finding("t1", "web", item)
+    await index.aadd_finding("t2", "web", item)
 
     stats = index.get_stats()
     assert stats["inserted_points"] >= 1
