@@ -1,4 +1,5 @@
 import hashlib
+from typing import Any
 
 from research_agent.models import agenerate_text
 from research_agent.observability import apublish_progress
@@ -13,7 +14,7 @@ async def combiner_node(state: GraphState) -> dict:
         detail="Synthesizing section drafts via Deep RAG",
         message="Combining findings",
     )
-    sections: list[dict[str, str]] = []
+    sections: list[dict[str, Any]] = []
     index = get_or_create_index(state["run_id"])
     contradiction_links = get_contradiction_links(state["run_id"])
 
