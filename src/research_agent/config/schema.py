@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -63,9 +63,13 @@ class ModelSettings(BaseModel):
             self.strong_model = self.subagent_cloud
         return self
 
-    @field_validator("provider_priority")
+    @field_validator("provider_priority", mode="before")
     @classmethod
-    def validate_provider_priority(cls, value: list[str]) -> list[str]:
+    def validate_provider_priority(cls, value: Any) -> list[str]:
+        if isinstance(value, str):
+            value = [item.strip() for item in value.split(",") if item.strip()]
+        if not isinstance(value, list):
+            raise ValueError("provider_priority must be a list or a comma-separated string")
         supported = {"ollama", "openrouter", "puter", "nvidia"}
         for p in value:
             if p not in supported:
