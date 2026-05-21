@@ -39,6 +39,8 @@ def export_run_artifacts(
     main_tex: str,
     bibtex: str,
     presentation_tex: str | None = None,
+    future_research_agenda: str | None = None,
+    comparison_table: str | None = None,
     peer_review_report: str | None = None,
     knowledge_graph: dict[str, Any] | None = None,
     bias_report: str | None = None,
@@ -53,6 +55,10 @@ def export_run_artifacts(
     (run_dir / "references.bib").write_text(bibtex, encoding="utf-8")
     if presentation_tex:
         (run_dir / "presentation.tex").write_text(presentation_tex, encoding="utf-8")
+    if future_research_agenda:
+        (run_dir / "future_agenda.md").write_text(future_research_agenda, encoding="utf-8")
+    if comparison_table:
+        (run_dir / "comparison_table.tex").write_text(comparison_table, encoding="utf-8")
     if peer_review_report:
         (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
     if knowledge_graph:

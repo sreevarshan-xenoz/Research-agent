@@ -15,6 +15,8 @@ from research_agent.orchestration.nodes.peer_reviewer import peer_reviewer_node
 from research_agent.orchestration.nodes.presentation import presentation_generator_node
 from research_agent.orchestration.nodes.knowledge_graph import knowledge_graph_node
 from research_agent.orchestration.nodes.bias_detector import bias_detector_node
+from research_agent.orchestration.nodes.future_work import future_work_extrapolator_node
+from research_agent.orchestration.nodes.comparison import comparison_table_node
 from research_agent.orchestration.nodes.indexing import indexing_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
@@ -45,6 +47,8 @@ __all__ = [
 	"presentation_generator_node",
 	"knowledge_graph_node",
 	"bias_detector_node",
+	"future_work_extrapolator_node",
+	"comparison_table_node",
 	"exporter_node",
 	"awaiting_user_critic_node",
 ]

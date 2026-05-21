@@ -123,6 +123,8 @@ def build_graph(
     graph.add_node("combiner", combiner_node)
     graph.add_node("knowledge_graph", knowledge_graph_node)
     graph.add_node("bias_detector", bias_detector_node)
+    graph.add_node("future_work", future_work_extrapolator_node)
+    graph.add_node("comparison_table", comparison_table_node)
     graph.add_node("figure_generator", figure_generator_node)
     graph.add_node("citation_verifier", citation_verifier_node)
     graph.add_node("composer", composer_node)

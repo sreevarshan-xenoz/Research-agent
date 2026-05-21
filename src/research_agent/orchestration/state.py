@@ -41,6 +41,9 @@ class GraphState(TypedDict):
     figures: list[dict[str, str]]
     latex_main: str
     bibtex: str
+    presentation_tex: str | None
+    future_research_agenda: str | None
+    comparison_table: str | None
     peer_review_report: str | None
     knowledge_graph: dict[str, Any] | None
     bias_report: str | None
@@ -88,6 +91,8 @@ class WorkflowState:
     latex_main: str = ""
     bibtex: str = ""
     presentation_tex: Optional[str] = None
+    future_research_agenda: Optional[str] = None
+    comparison_table: Optional[str] = None
     peer_review_report: Optional[str] = None
     knowledge_graph: Optional[Dict[str, Any]] = None
     bias_report: Optional[str] = None
@@ -134,6 +139,9 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "figures": state.figures,
         "latex_main": state.latex_main,
         "bibtex": state.bibtex,
+        "presentation_tex": state.presentation_tex,
+        "future_research_agenda": state.future_research_agenda,
+        "comparison_table": state.comparison_table,
         "peer_review_report": state.peer_review_report,
         "knowledge_graph": state.knowledge_graph,
         "bias_report": state.bias_report,
@@ -181,6 +189,9 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         figures=state.get("figures", []),
         latex_main=state["latex_main"],
         bibtex=state["bibtex"],
+        presentation_tex=state.get("presentation_tex"),
+        future_research_agenda=state.get("future_research_agenda"),
+        comparison_table=state.get("comparison_table"),
         peer_review_report=state.get("peer_review_report"),
         knowledge_graph=state.get("knowledge_graph"),
         bias_report=state.get("bias_report"),
@@ -188,7 +199,3 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         artifact_dir=state["artifact_dir"],
         run_warnings=state["run_warnings"],
     )
-
-],
-    )
-
