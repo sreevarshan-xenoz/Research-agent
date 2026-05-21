@@ -1,0 +1,49 @@
+\documentclass[final]{beamer}
+\usepackage[orientation=portrait,size=a0,scale=1.4,debug]{beamerposter}
+\usetheme{confposter}
+
+\title{ {{- topic -}} }
+\author{Research Agent v2}
+\institute{Autonomous AI Research Lab}
+
+\begin{document}
+\begin{frame}[t]
+\begin{columns}[t]
+
+\begin{column}{.45\textwidth}
+
+{% for section in sections[:3] %}
+\begin{block}{ {{- section.heading -}} }
+{{ section.content | truncate(800) }}
+\end{block}
+{% endfor %}
+
+\end{column}
+
+\begin{column}{.45\textwidth}
+
+{% for section in sections[3:6] %}
+\begin{block}{ {{- section.heading -}} }
+{{ section.content | truncate(800) }}
+\end{block}
+{% endfor %}
+
+\begin{block}{Key Findings}
+\begin{itemize}
+    \item Automated synthesis of technical literature.
+    \item Evidence-backed claims with verified citations.
+    \item Multi-agent orchestration for rigorous output.
+\end{itemize}
+\end{block}
+
+\begin{block}{References}
+\begin{tiny}
+\bibliographystyle{plain}
+\bibliography{references}
+\end{tiny}
+\end{block}
+
+\end{column}
+\end{columns}
+\end{frame}
+\end{document}

@@ -52,6 +52,7 @@ async def exporter_node(state: GraphState) -> dict:
         main_tex=state["latex_main"],
         bibtex=state["bibtex"],
         presentation_tex=state.get("presentation_tex"),
+        poster_tex=state.get("poster_tex"),
         future_research_agenda=state.get("future_research_agenda"),
         comparison_table=state.get("comparison_table"),
         peer_review_report=state.get("peer_review_report"),

@@ -39,6 +39,7 @@ def export_run_artifacts(
     main_tex: str,
     bibtex: str,
     presentation_tex: str | None = None,
+    poster_tex: str | None = None,
     future_research_agenda: str | None = None,
     comparison_table: str | None = None,
     peer_review_report: str | None = None,
@@ -56,6 +57,8 @@ def export_run_artifacts(
     (run_dir / "references.bib").write_text(bibtex, encoding="utf-8")
     if presentation_tex:
         (run_dir / "presentation.tex").write_text(presentation_tex, encoding="utf-8")
+    if poster_tex:
+        (run_dir / "poster.tex").write_text(poster_tex, encoding="utf-8")
     if future_research_agenda:
         (run_dir / "future_agenda.md").write_text(future_research_agenda, encoding="utf-8")
     if comparison_table:

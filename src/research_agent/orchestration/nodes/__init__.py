@@ -13,6 +13,7 @@ from research_agent.orchestration.nodes.exporter import exporter_node
 from research_agent.orchestration.nodes.figure_generator import figure_generator_node
 from research_agent.orchestration.nodes.peer_reviewer import peer_reviewer_node
 from research_agent.orchestration.nodes.presentation import presentation_generator_node
+from research_agent.orchestration.nodes.poster import poster_generator_node
 from research_agent.orchestration.nodes.knowledge_graph import knowledge_graph_node
 from research_agent.orchestration.nodes.bias_detector import bias_detector_node
 from research_agent.orchestration.nodes.future_work import future_work_extrapolator_node
@@ -49,6 +50,7 @@ __all__ = [
 	"hallucination_guard_node",
 	"peer_reviewer_node",
 	"presentation_generator_node",
+	"poster_generator_node",
 	"knowledge_graph_node",
 	"bias_detector_node",
 	"future_work_extrapolator_node",

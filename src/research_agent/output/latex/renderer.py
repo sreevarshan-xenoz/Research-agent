@@ -115,6 +115,30 @@ def render_beamer_tex(
     )
 
 
+def render_poster_tex(
+    *,
+    topic: str,
+    sections: list[dict[str, Any]],
+) -> str:
+    """Renders an Academic Poster .tex file."""
+    env = _get_jinja_env()
+    try:
+        template = env.get_template("poster/main.tex.j2")
+    except Exception:
+        raise FileNotFoundError("Poster template not found")
+
+    return template.render(
+        topic=escape_latex(topic),
+        sections=[
+            {
+                "heading": escape_latex(s.get("heading", "Untitled")),
+                "content": s.get("content", ""),
+            }
+            for s in sections
+        ],
+    )
+
+
 def build_bibtex(citations: Iterable[dict[str, Any]]) -> str:
     blocks: list[str] = []
     for idx, citation in enumerate(citations, start=1):

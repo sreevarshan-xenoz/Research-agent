@@ -10,20 +10,29 @@ import redis.asyncio as redis
 from research_agent.orchestration.nodes import (
     awaiting_user_critic_node,
     awaiting_user_node,
+    bias_detector_node,
     citation_verifier_node,
     clarifier_node,
     combiner_node,
+    comparison_table_node,
     composer_node,
     critic_node,
     dependency_blocked_node,
     exporter_node,
     figure_generator_node,
+    formula_normalizer_node,
+    future_work_extrapolator_node,
     get_pending_task_ids,
     get_ready_task_ids,
+    hallucination_guard_node,
     indexing_node,
     intake_node,
+    knowledge_graph_node,
     make_worker_node,
+    peer_reviewer_node,
     planner_node,
+    poster_generator_node,
+    presentation_generator_node,
     stop_node,
     workers_complete_node,
 )
@@ -132,6 +141,7 @@ def build_graph(
     graph.add_node("hallucination_guard", hallucination_guard_node)
     graph.add_node("peer_reviewer", peer_reviewer_node)
     graph.add_node("presentation", presentation_generator_node)
+    graph.add_node("poster", poster_generator_node)
     graph.add_node("exporter", exporter_node)
 
     graph.add_edge(START, "intake")
@@ -178,11 +188,17 @@ def build_graph(
     
     graph.add_edge("combiner", "knowledge_graph")
     graph.add_edge("knowledge_graph", "bias_detector")
-    graph.add_edge("bias_detector", "figure_generator")
+    graph.add_edge("bias_detector", "future_work")
+    graph.add_edge("future_work", "comparison_table")
+    graph.add_edge("comparison_table", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
-    graph.add_edge("composer", "peer_reviewer")
-    graph.add_edge("peer_reviewer", "exporter")
+    graph.add_edge("composer", "formula_normalizer")
+    graph.add_edge("formula_normalizer", "hallucination_guard")
+    graph.add_edge("hallucination_guard", "peer_reviewer")
+    graph.add_edge("peer_reviewer", "presentation")
+    graph.add_edge("presentation", "poster")
+    graph.add_edge("poster", "exporter")
     graph.add_edge("exporter", END)
     
     return graph.compile(checkpointer=checkpointer or _GLOBAL_MEMORY_SAVER, interrupt_before=interrupt_before)
