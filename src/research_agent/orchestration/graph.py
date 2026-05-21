@@ -75,7 +75,8 @@ def _route_after_critic(state: GraphState) -> str:
 
 
 def _stop_reason(state: GraphState) -> str | None:
-    if state.get("interrupted"):
+    interrupt_sig = state.get("interrupt_signal")  # type: ignore[gpu-or-other]
+    if state.get("interrupted") or (interrupt_sig is not None and hasattr(interrupt_sig, "is_set") and interrupt_sig.is_set()):
         return "user_interrupt"
 
     started_at = float(state.get("started_at", time.time()))
@@ -176,7 +177,7 @@ async def run_graph(
     
     if settings.features.session_persistence == "redis":
         redis_conn = redis.from_url(settings.redis.url)
-        checkpointer = AsyncRedisSaver(redis_conn)
+        checkpointer = AsyncRedisSaver(redis_client=redis_conn)
 
     try:
         compiled = build_graph(registry=registry, checkpointer=checkpointer)
