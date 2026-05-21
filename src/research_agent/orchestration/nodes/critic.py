@@ -1,6 +1,6 @@
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links
-from research_agent.orchestration.state import GraphState
+from research_agent.orchestration.state import GraphState, GraphTask
 
 
 async def critic_node(state: GraphState) -> dict:
@@ -17,21 +17,29 @@ async def critic_node(state: GraphState) -> dict:
     settings = load_settings()
     metadata_penalty = float(settings.retrieval.metadata_fallback_confidence_penalty)
 
-    tasks = [dict(t) for t in state["tasks"]]
+    tasks: list[GraphTask] = [t.copy() for t in state["tasks"]]
     iteration_index = state["iteration_index"] + 1
     contradiction_links = get_contradiction_links(state["run_id"])
+
+    def _get_int(provider_data: dict[str, object], key: str) -> int:
+        val = provider_data.get(key, 0)
+        if isinstance(val, (int, float)):
+            return int(val)
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+        return 0
 
     low_confidence_tasks = []
     for task in tasks:
         task_id = str(task["task_id"])
         findings = state["task_findings"].get(task_id, {})
 
-        item_count = sum(int(provider_data.get("item_count", 0)) for provider_data in findings.values())
+        item_count = sum(_get_int(provider_data, "item_count") for provider_data in findings.values())
         warning_count = sum(
-            int(provider_data.get("warning_count", 0)) for provider_data in findings.values()
+            _get_int(provider_data, "warning_count") for provider_data in findings.values()
         )
         metadata_only_count = sum(
-            int(provider_data.get("metadata_only_count", 0)) for provider_data in findings.values()
+            _get_int(provider_data, "metadata_only_count") for provider_data in findings.values()
         )
         contradiction_count = sum(
             1
@@ -85,18 +93,16 @@ async def critic_node(state: GraphState) -> dict:
                 t["status"] = "pending"
 
         depends_on_originals = [str(t["task_id"]) for t in low_confidence_tasks]
-        new_tasks = [
+        new_tasks: list[GraphTask] = [
             {
                 "task_id": f"f{iteration_index}",
                 "title": "Deep evidence recovery",
                 "objective": f"Recover missing evidence for: {state['topic']}",
                 "depends_on": depends_on_originals,
+                "status": "pending",
             }
         ]
-
-        for t in new_tasks:
-            t["status"] = "pending"
-            tasks.append(t)
+        tasks.extend(new_tasks)
 
     await apublish_progress(
         agent="Critic",
