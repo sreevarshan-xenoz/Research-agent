@@ -38,7 +38,7 @@ class ArxivAdapter(BaseToolAdapter):
 
     def search(self, query: str, limit: int = 5) -> ToolResult:
         normalized_limit = safe_limit(limit)
-        params = {
+        params: dict[str, Any] = {
             "search_query": f"all:{query}",
             "start": 0,
             "max_results": normalized_limit,
@@ -110,7 +110,7 @@ class ArxivAdapter(BaseToolAdapter):
         if not content:
             return ""
         try:
-            import fitz  # PyMuPDF
+            import fitz  # type: ignore[import-untyped]  # PyMuPDF
         except Exception:  # noqa: BLE001
             return ""
 
