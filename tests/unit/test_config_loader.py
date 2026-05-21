@@ -11,10 +11,10 @@ def test_resolve_settings_uses_example_when_default_missing() -> None:
 
 
 def test_load_settings_reads_example_values() -> None:
-    settings = load_settings()
+    settings = load_settings(settings_path="configs/settings.example.yaml", env={})
     assert settings.runtime.mode == "api_only"
     assert settings.output.default_template in settings.output.supported_templates
-    assert settings.retrieval.web_provider == "duckduckgo"
+    assert settings.retrieval.web_provider == "hybrid"
     assert settings.retrieval.paper_providers == ["arxiv", "semantic_scholar", "openalex"]
 
 
@@ -89,7 +89,7 @@ retrieval:
     )
 
     with pytest.raises(Exception):
-        load_settings(settings_path=settings_file)
+        load_settings(settings_path=settings_file, env={})
 
 
 def test_load_settings_model_alias_overrides(tmp_path: Path) -> None:
@@ -156,6 +156,6 @@ retrieval:
         encoding="utf-8",
     )
 
-    settings = load_settings(settings_path=settings_file)
+    settings = load_settings(settings_path=settings_file, env={})
 
     assert settings.retrieval.web_provider == "scrape"
