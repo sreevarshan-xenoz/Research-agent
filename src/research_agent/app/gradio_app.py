@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 
 import gradio as gr
@@ -88,7 +89,7 @@ async def run_research(topic: str, template: str) -> str:
 def build_app() -> gr.Blocks:
     settings = load_settings()
     with gr.Blocks(title="Research Agent v2", theme=gr.themes.Soft()) as demo:
-        gr.Markdown(f"# 🔬 Research Agent v2")
+        gr.Markdown("# 🔬 Research Agent v2")
         gr.Markdown(f"**Mode:** {settings.runtime.mode} | **Parallel Workers:** {settings.runtime.parallel_workers}")
         
         with gr.Row():
