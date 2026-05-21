@@ -1,9 +1,9 @@
-from __future__ import annotations
-
+import pytest
 from research_agent.orchestration.nodes.indexing import get_contradiction_links, indexing_node
 
 
-def test_indexing_detects_contradiction_links() -> None:
+@pytest.mark.asyncio
+async def test_indexing_detects_contradiction_links() -> None:
     state = {
         "run_id": "run-contradiction",
         "topic": "topic",
@@ -63,7 +63,7 @@ def test_indexing_detects_contradiction_links() -> None:
         "run_warnings": [],
     }
 
-    result = indexing_node(state)
+    result = await indexing_node(state)
     links = get_contradiction_links("run-contradiction")
 
     assert links
