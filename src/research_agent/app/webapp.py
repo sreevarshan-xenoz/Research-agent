@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from fastapi import (
     BackgroundTasks,
+    Body,
     Depends,
     FastAPI,
     File,
@@ -344,6 +345,48 @@ def create_app(
 
     if Path(static_dir).exists():
         app.mount("/web", StaticFiles(directory=static_dir), name="web")
+
+    @app.get("/api/runs/{run_id}/graph")
+    async def get_run_graph(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        checkpoint = load_latest_checkpoint(run_id)
+        if not checkpoint:
+            raise HTTPException(status_code=404, detail="Run not found")
+        
+        # Build react-flow compatible structure
+        nodes = []
+        edges = []
+        for i, task in enumerate(checkpoint.tasks):
+            nodes.append({
+                "id": task.task_id,
+                "data": {"label": task.title},
+                "position": {"x": 250, "y": i * 100},
+                "type": "researchTask"
+            })
+            for dep in task.depends_on:
+                edges.append({
+                    "id": f"e-{dep}-{task.task_id}",
+                    "source": dep,
+                    "target": task.task_id
+                })
+        
+        return {"nodes": nodes, "edges": edges}
+
+    @app.post("/api/sessions/{session_id}/critic/feedback")
+    async def post_critic_feedback(
+        session_id: str,
+        feedback: str = Body(..., embed=True),
+        user: User = Depends(current_active_user)
+    ):
+        session = await get_session(str(user.id), session_id)
+        if not session:
+             raise HTTPException(status_code=404, detail="Session not found")
+        
+        session.awaiting_critic_feedback = False
+        # The next WS message will pick this up or we can trigger it here
+        return {"success": True}
 
     return app
 
