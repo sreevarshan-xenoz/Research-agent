@@ -55,6 +55,13 @@ openrouter:
   api_key: ""                    # Set OPENROUTER_API_KEY env var
   timeout_seconds: 60
 
+# vLLM configuration
+vllm:
+  api_base: http://localhost:8000/v1
+  api_key: EMPTY
+  model: deepseek-r1
+  timeout_seconds: 120
+
 # Monitoring & observability
 observability:
   enable_tracing: false

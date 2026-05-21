@@ -62,7 +62,13 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
     model_list: list[tuple[str, dict[str, Any], str]] = []
 
     for prov in priority:
-        if prov == "ollama":
+        if prov == "vllm":
+            model_list.append((
+                f"openai/{settings.models.subagent_vllm}",
+                {"api_base": settings.vllm.api_base, "api_key": settings.vllm.api_key},
+                "vllm"
+            ))
+        elif prov == "ollama":
             model_list.append((
                 f"ollama/{settings.models.subagent_local}",
                 {"api_base": settings.ollama.api_base},

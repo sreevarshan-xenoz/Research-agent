@@ -33,17 +33,18 @@ class ModelSettings(BaseModel):
     """
     # Orchestrator (head) model
     orchestrator_model: str = "ollama/qwen3:8b"
-    orchestrator_provider: Literal["ollama", "openrouter"] = "ollama"
+    orchestrator_provider: Literal["ollama", "openrouter", "vllm"] = "ollama"
 
     # Subagent model settings
-    subagent_provider: Literal["auto", "ollama", "openrouter", "puter", "nvidia"] = "auto"
+    subagent_provider: Literal["auto", "ollama", "openrouter", "puter", "nvidia", "vllm"] = "auto"
     subagent_local: str = "deepseek-r1:8b"
     subagent_cloud: str = "openrouter/free"
     subagent_nvidia: str = "nvidia/meta/llama-3.1-405b-instruct"
+    subagent_vllm: str = "deepseek-r1"
 
     # Provider priority
     provider_priority: list[str] = Field(
-        default_factory=lambda: ["ollama", "openrouter", "puter", "nvidia"]
+        default_factory=lambda: ["ollama", "openrouter", "puter", "nvidia", "vllm"]
     )
 
     # Legacy aliases (deprecated, for backward compatibility)
@@ -190,11 +191,15 @@ class AppSettings(BaseModel):
     retrieval: RetrievalSettings
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
+    vllm: VllmSettings = Field(default_factory=VllmSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 ault_factory=AuthSettings)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+uthSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
