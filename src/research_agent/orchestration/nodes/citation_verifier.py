@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from typing import Any
-import httpx
 
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
@@ -22,7 +21,12 @@ def _task_has_support(task_id: str, task_findings: dict[str, dict[str, dict[str,
     findings = task_findings.get(task_id, {})
     item_count = 0
     for provider_data in findings.values():
-        item_count += int(provider_data.get("item_count", 0))
+        if isinstance(provider_data, dict):
+            val = provider_data.get("item_count", 0)
+            if isinstance(val, (int, float)):
+                item_count += int(val)
+            elif isinstance(val, str) and val.isdigit():
+                item_count += int(val)
     return item_count > 0
 
 
