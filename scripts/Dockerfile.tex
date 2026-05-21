@@ -1,0 +1,18 @@
+# Minimal Dockerfile for Tectonic LaTeX Compilation
+FROM rust:slim-bullseye
+
+RUN apt-get update && apt-get install -y \
+    libfontconfig1-dev \
+    libgraphite2-dev \
+    libharfbuzz-dev \
+    libicu-dev \
+    libssl-dev \
+    zlib1g-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN cargo install tectonic
+
+WORKDIR /workspace
+
+ENTRYPOINT ["tectonic"]

@@ -33,6 +33,31 @@ def _compile_pdf_with_tectonic(run_dir: Path) -> str | None:
     return None
 
 
+def _compile_pdf_with_docker(run_dir: Path) -> str | None:
+    """Attempts to compile main.tex using Tectonic inside a Docker container."""
+    if not shutil.which("docker"):
+        return None
+    
+    try:
+        # Use a pre-built image or build on-the-fly (v2 assumes 'research-agent-tex' exists)
+        subprocess.run(
+            [
+                "docker", "run", "--rm",
+                "-v", f"{run_dir.resolve()}:/workspace",
+                "research-agent-tex", "main.tex"
+            ],
+            check=True,
+            capture_output=True,
+            timeout=180
+        )
+        pdf_path = run_dir / "main.pdf"
+        if pdf_path.exists():
+            return str(pdf_path)
+    except Exception:
+        pass
+    return None
+
+
 def export_run_artifacts(
     *,
     artifact_root: str,
