@@ -31,7 +31,17 @@ _GLOBAL_FINGERPRINT_CACHE = LRUCache(capacity=50000)
 
 class ResearchIndex:
     def __init__(self, collection_name: str = "research_v1", run_id: str = ""):
-        self.client = QdrantClient(":memory:")
+        settings = get_settings()
+        location = settings.qdrant.location
+        if location == ":memory:":
+            self.client = QdrantClient(":memory:")
+        elif location.startswith("http://") or location.startswith("https://"):
+            self.client = QdrantClient(url=location)
+        else:
+            # Assume it's a file path
+            os.makedirs(location, exist_ok=True)
+            self.client = QdrantClient(path=location)
+            
         self.collection_name = collection_name
         self.run_id = run_id
         self.vector_size = 384  # Fallback for deterministic local embeddings.

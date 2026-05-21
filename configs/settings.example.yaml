@@ -7,6 +7,7 @@ runtime:
   max_runtime_minutes: 25
   max_cost_usd: 5.0
   parallel_workers: 4      # NEW: max concurrent subagent workers
+  interactive_checkpoints: false # NEW: Pause graph execution at boundaries to wait for human-in-the-loop input
 
 models:
   # Orchestrator: local model for planning, clarification, critic
@@ -40,6 +41,7 @@ output:
     - acm
     - springer
   default_columns: 2            # 1 or 2 column layout
+  default_acm_layout: sigconf   # NEW: ACM layout (sigconf or manuscript)
 
 retrieval:
   web_provider: hybrid          # duckduckgo | tavily | browser_use | hybrid
@@ -80,3 +82,7 @@ observability:
   enable_tracing: false
   enable_metrics: true
   log_level: INFO
+
+# Qdrant configuration
+qdrant:
+  location: ".runtime/qdrant"

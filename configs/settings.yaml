@@ -7,6 +7,7 @@ runtime:
   max_runtime_minutes: 25
   max_cost_usd: 5.0
   parallel_workers: 4      # NEW: max concurrent subagent workers
+  interactive_checkpoints: false # NEW: Pause graph execution at boundaries to wait for human-in-the-loop input
 
 models:
   # Orchestrator: local model for planning, clarification, critic
@@ -24,22 +25,6 @@ models:
   provider_priority:
     - nvidia
     - ollama
-
-output:
-  # v2 template names
-  default_template: ieee-2col    # ieee-1col, ieee-2col, acm, springer
-  supported_templates:
-    - ieee-1col
-    - ieee-2col
-    - acm
-    - springer
-  default_columns: 2            # 1 or 2 column layout
-
-retrieval:
-  web_provider: hybrid          # duckduckgo | tavily | browser_use | hybrid
-  web_search_depth: advanced    # fast | balanced | advanced
-  paper_providers:
-    - arxiv
     - semantic_scholar
     - openalex
   max_papers_per_section: 15
@@ -75,3 +60,7 @@ observability:
   enable_tracing: false
   enable_metrics: true
   log_level: INFO
+
+# Qdrant configuration
+qdrant:
+  location: ".runtime/qdrant"

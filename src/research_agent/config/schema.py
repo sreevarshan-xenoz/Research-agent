@@ -12,6 +12,7 @@ class RuntimeSettings(BaseModel):
     max_runtime_minutes: int = Field(default=25, ge=1)
     max_cost_usd: float = Field(default=5.0, ge=0)
     parallel_workers: int = Field(default=4, ge=1, le=8, description="Max concurrent subagent workers")
+    interactive_checkpoints: bool = Field(default=False, description="Pause graph execution at boundaries to wait for human-in-the-loop input")
 
     @field_validator("mode")
     @classmethod
@@ -85,6 +86,7 @@ class OutputSettings(BaseModel):
     )
     default_columns: Literal[1, 2] = 2
     language: str = "en"
+    default_acm_layout: str = Field(default="sigconf", description="Default ACM layout (e.g., sigconf or manuscript)")
 
     @model_validator(mode="after")
     def validate_template_config(self) -> "OutputSettings":
@@ -189,6 +191,10 @@ class AppSettings(BaseModel):
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    features: FeatureFlags = Field(default_factory=FeatureFlags)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+ault_factory=AuthSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
