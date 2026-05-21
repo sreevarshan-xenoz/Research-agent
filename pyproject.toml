@@ -29,13 +29,17 @@ dependencies = [
   "tenacity>=8.3.0",
   "websockets>=12.0",
   "redis>=5.0.0",
-  "langgraph-checkpoint-redis>=0.4.0"
+  "langgraph-checkpoint-redis>=0.4.0",
+  "fastapi-users>=13.0.0",
+  "fastapi-users-db-sqlalchemy>=6.0.0",
+  "aiosqlite>=0.20.0"
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.0",
   "pytest-cov>=5.0.0",
+  "pytest-asyncio>=0.23.0",
   "ruff>=0.6.0",
   "mypy>=1.11.0"
 ]
