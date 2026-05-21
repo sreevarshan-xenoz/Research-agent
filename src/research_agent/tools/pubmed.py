@@ -31,7 +31,7 @@ class PubMedAdapter(BaseToolAdapter):
         
         try:
             # Step 1: Search for IDs
-            search_params = {
+            search_params: dict[str, Any] = {
                 "db": "pubmed",
                 "term": query,
                 "retmax": normalized_limit,
@@ -42,7 +42,7 @@ class PubMedAdapter(BaseToolAdapter):
             
             # Simple XML parsing for IDs
             root = ET.fromstring(search_resp.text)
-            id_list = [id_elem.text for id_list_elem in root.findall("IdList") for id_elem in id_list_elem.findall("Id")]
+            id_list = [id_elem.text for id_list_elem in root.findall("IdList") for id_elem in id_list_elem.findall("Id") if id_elem.text is not None]
             
             if not id_list:
                 return ToolResult(
@@ -52,7 +52,7 @@ class PubMedAdapter(BaseToolAdapter):
                 )
 
             # Step 2: Fetch metadata for those IDs
-            summary_params = {
+            summary_params: dict[str, Any] = {
                 "db": "pubmed",
                 "id": ",".join(id_list),
                 "retmode": "json",
