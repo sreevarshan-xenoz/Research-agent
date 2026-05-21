@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
-import re
 
-from research_agent.models import agenerate_text, agenerate_json
+from research_agent.models import agenerate_json
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output.latex.renderer import render_main_tex, build_bibtex, escape_latex
-from research_agent.config import load_settings
 
 
 async def composer_node(state: GraphState) -> dict:
@@ -20,7 +17,7 @@ async def composer_node(state: GraphState) -> dict:
 
     # 1. Build a fallback body from combined_sections
     fallback_body = _build_body(state)
-    run_warnings = []
+    run_warnings: list[str] = []
 
     # 2. Attempt to use LLM to refine the body and metadata (Title, Abstract)
     language = state.get("language", "en")
