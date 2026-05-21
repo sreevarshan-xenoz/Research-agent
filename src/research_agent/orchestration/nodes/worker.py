@@ -8,6 +8,7 @@ from research_agent.observability.progress import ProgressCallback, get_progress
 from research_agent.orchestration.state import GraphState, GraphTask
 from research_agent.tools.base import BaseToolAdapter
 from research_agent.tools.registry import arun_multi_source_search
+from research_agent.rag.table_extractor import extract_tables_from_text
 
 WEB_SOURCE_TYPES = {"web", "web_scrape", "browser"}
 
@@ -49,7 +50,15 @@ async def _enrich_web_results_with_page_content(
         if fetched.items:
             page = fetched.items[0]
             if page.get("content"):
-                item["content"] = page["content"]
+                content = str(page["content"])
+                item["content"] = content
+                # Extract tables
+                try:
+                    tables = await extract_tables_from_text(content)
+                    if tables:
+                        item["tables"] = tables
+                except Exception:
+                    pass
             if not item.get("title") and page.get("title"):
                 item["title"] = page["title"]
         if fetched.warnings:
