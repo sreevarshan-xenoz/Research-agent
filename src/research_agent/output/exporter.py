@@ -38,6 +38,7 @@ def export_run_artifacts(
     run_id: str,
     main_tex: str,
     bibtex: str,
+    presentation_tex: str | None = None,
     peer_review_report: str | None = None,
     knowledge_graph: dict[str, Any] | None = None,
     bias_report: str | None = None,
@@ -50,6 +51,8 @@ def export_run_artifacts(
 
     (run_dir / "main.tex").write_text(main_tex, encoding="utf-8")
     (run_dir / "references.bib").write_text(bibtex, encoding="utf-8")
+    if presentation_tex:
+        (run_dir / "presentation.tex").write_text(presentation_tex, encoding="utf-8")
     if peer_review_report:
         (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
     if knowledge_graph:
@@ -69,6 +72,12 @@ def export_run_artifacts(
         pdf_path = _compile_pdf_with_tectonic(run_dir)
         if pdf_path:
             summary["pdf_artifact"] = "main.pdf"
+
+    summary["overleaf_url"] = build_overleaf_import_url(
+        main_tex=main_tex,
+        bibtex=bibtex,
+        project_name=f"Research: {summary.get('topic', 'Untitled')}"
+    )
 
     (run_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=True),
