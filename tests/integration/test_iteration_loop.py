@@ -1,11 +1,11 @@
-from __future__ import annotations
-
+import pytest
 from pathlib import Path
 from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
 
 
-def test_graph_iterates_on_low_confidence(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_graph_iterates_on_low_confidence(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ENABLE_NVIDIA_MODEL", "0")
     
     # Create a state where we expect low confidence (no findings initially)
@@ -17,7 +17,7 @@ def test_graph_iterates_on_low_confidence(tmp_path: Path, monkeypatch) -> None:
     )
     
     # We pass an empty registry so findings will be empty -> low confidence
-    updated = run_graph(state, registry={})
+    updated = await run_graph(state, registry={})
     
     # Since confidence was low and max_iterations=2, it should have looped once.
     # The iteration_index should be 2 (incremented twice, once in each pass through critic)
