@@ -4,10 +4,26 @@ import json
 
 from fastapi.testclient import TestClient
 
-from research_agent.app.webapp import create_app
+from research_agent.app.webapp import create_app as _create_app
 from research_agent.orchestration.graph import run_graph
 from research_agent.orchestration.state import WorkflowState
 from research_agent.tools.base import BaseToolAdapter, ToolResult
+import uuid
+from research_agent.app.auth import current_active_user, User
+
+def create_app(*args, **kwargs):
+    app = _create_app(*args, **kwargs)
+    async def mock_current_active_user() -> User:
+        return User(
+            id=uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            email="test@example.com",
+            hashed_password="...",
+            is_active=True,
+            is_superuser=False,
+            is_verified=True,
+        )
+    app.dependency_overrides[current_active_user] = mock_current_active_user
+    return app
 
 
 class FakeRunner:
