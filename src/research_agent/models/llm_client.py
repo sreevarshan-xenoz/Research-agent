@@ -61,14 +61,14 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
     priority = settings.models.provider_priority
     model_list: list[tuple[str, dict[str, Any], str]] = []
 
-    for provider in priority:
-        if provider == "ollama":
+    for prov in priority:
+        if prov == "ollama":
             model_list.append((
                 f"ollama/{settings.models.subagent_local}",
                 {"api_base": settings.ollama.api_base},
                 "ollama"
             ))
-        elif provider == "nvidia":
+        elif prov == "nvidia":
             api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("NVIDIA_NIMS_API_KEY")
             if api_key:
                 model_list.append((
@@ -76,7 +76,7 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
                     {"api_key": api_key},
                     "nvidia"
                 ))
-        elif provider == "openrouter":
+        elif prov == "openrouter":
             api_key = settings.openrouter.api_key or os.getenv("OPENROUTER_API_KEY", "")
             if api_key:
                 model_list.append((
