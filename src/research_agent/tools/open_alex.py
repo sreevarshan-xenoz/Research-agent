@@ -29,7 +29,7 @@ class OpenAlexAdapter(BaseToolAdapter):
 
     def search(self, query: str, limit: int = 5) -> ToolResult:
         normalized_limit = safe_limit(limit)
-        params = {
+        params: dict[str, Any] = {
             "search": query,
             "per_page": normalized_limit,
             "mailto": self._mailto,
