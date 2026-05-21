@@ -677,6 +677,7 @@ def create_app(
     sessions: dict[str, ChatSession] = _load_sessions()
     session_active_runs: dict[str, str] = {}
     run_interrupt_signals: dict[str, threading.Event] = {}
+    manager = ConnectionManager()
 
     app = FastAPI(title="Research Agent Web")
 
@@ -974,7 +975,7 @@ def create_app(
         session_id: str,
         token: str | None = None
     ):
-        await websocket.accept()
+        await manager.connect(websocket, session_id)
         # Simple token verification for WS
         from research_agent.app.auth import get_jwt_strategy, async_session_maker, UserManager
         from fastapi_users.db import SQLAlchemyUserDatabase
@@ -985,13 +986,13 @@ def create_app(
             user = await strategy.read_token(token, user_manager)
         if not user or not user.is_active:
              await websocket.send_json({"event": "error", "payload": {"message": "Unauthorized"}})
-             await websocket.close()
+             manager.disconnect(websocket, session_id)
              return
 
         session = await get_session(str(user.id), session_id)
         if not session:
             await websocket.send_json({"event": "error", "payload": {"message": "Session not found"}})
-            await websocket.close()
+            manager.disconnect(websocket, session_id)
             return
 
         try:
@@ -1040,7 +1041,7 @@ def create_app(
                     
                     async def emit_ws(event: str, payload: dict):
                         append_run_event(run_id=run_id, event=event, payload=payload)
-                        await websocket.send_json({"event": event, "payload": payload})
+                        await manager.broadcast(session_id, event, payload)
 
                     try:
                         updated = await _execute_research_run(
@@ -1068,16 +1069,16 @@ def create_app(
 
                 elif action == "stop":
                     await stop_session_run(session_id, user)
-                    await websocket.send_json({"event": "status", "payload": {"message": "Stop requested"}})
+                    await manager.broadcast(session_id, "status", {"message": "Stop requested"})
                 
         except WebSocketDisconnect:
-            pass
+            manager.disconnect(websocket, session_id)
         except Exception as e:
             try:
                 await websocket.send_json({"event": "error", "payload": {"message": str(e)}})
             except Exception:
                 pass
-            await websocket.close()
+            manager.disconnect(websocket, session_id)
 
     @app.post("/api/session/{session_id}/stop", response_model=StopResponse)
     async def stop_session_run(
