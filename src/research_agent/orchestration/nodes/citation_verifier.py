@@ -143,15 +143,15 @@ def _find_unsupported_sections(
 
 
 async def _autofix_citations(
-    citations: list[dict[str, str]], 
+    citations: list[dict[str, Any]], 
     mailto: str = "noreply@example.com"
-) -> tuple[list[dict[str, str]], int]:
+) -> tuple[list[dict[str, Any]], int]:
     """Attempts to repair incomplete citations using OpenAlex in parallel."""
     import asyncio
     repaired_count = 0
     adapter = OpenAlexAdapter(mailto=mailto)
     
-    async def fix_single(cite: dict[str, str]) -> dict[str, str]:
+    async def fix_single(cite: dict[str, Any]) -> dict[str, Any]:
         nonlocal repaired_count
         needs_fix = (
             cite.get("author") == "Unknown" or 
@@ -173,6 +173,9 @@ async def _autofix_citations(
                             cite["url"] = str(best_match["url"])
                         if best_match.get("year"):
                             cite["year"] = str(best_match["year"])
+                        for key_field in ("journal", "booktitle", "volume", "number", "pages", "doi", "publisher", "type"):
+                            if best_match.get(key_field):
+                                cite[key_field] = str(best_match[key_field])
                         repaired_count += 1
             except Exception:
                 pass
@@ -191,7 +194,7 @@ async def citation_verifier_node(state: GraphState) -> dict:
         detail="Extracting source records",
         message="Collecting citations",
     )
-    citations: list[dict[str, str]] = []
+    citations: list[dict[str, Any]] = []
     run_warnings = list(state["run_warnings"])
 
     filtered_sections, unsupported_task_ids, unsupported_claim_counts = _find_unsupported_sections(state)
@@ -229,6 +232,14 @@ async def citation_verifier_node(state: GraphState) -> dict:
                         "url": url,
                         "year": year,
                         "author": author,
+                        "journal": str(item.get("journal") or ""),
+                        "booktitle": str(item.get("booktitle") or ""),
+                        "volume": str(item.get("volume") or ""),
+                        "number": str(item.get("number") or ""),
+                        "pages": str(item.get("pages") or ""),
+                        "doi": str(item.get("doi") or ""),
+                        "publisher": str(item.get("publisher") or ""),
+                        "type": str(item.get("type") or ""),
                     }
                 )
 
