@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, List
 
 def aggregate_team_analytics() -> dict[str, Any]:
     """Aggregates cost and usage metrics from all completed runs in the artifacts folder."""
