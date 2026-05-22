@@ -52,6 +52,7 @@ class GraphState(TypedDict):
     bias_report: str | None
     artifact_root: str
     artifact_dir: str
+    acm_layout: str | None
     run_warnings: list[str]
 
 
@@ -102,6 +103,7 @@ class WorkflowState:
     peer_review_report: Optional[str] = None
     knowledge_graph: Optional[Dict[str, Any]] = None
     bias_report: Optional[str] = None
+    acm_layout: Optional[str] = None
     artifact_root: str = ".runtime/artifacts"
     artifact_dir: str = ""
     run_warnings: List[str] = field(default_factory=list)
@@ -156,6 +158,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "bias_report": state.bias_report,
         "artifact_root": state.artifact_root,
         "artifact_dir": state.artifact_dir,
+        "acm_layout": state.acm_layout,
         "run_warnings": state.run_warnings,
     }
 
@@ -176,7 +179,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         estimated_cost_usd=state.get("estimated_cost_usd", 0.0),
         started_at=state.get("started_at", time.time()),
         interrupted=state.get("interrupted", False),
-        stop_reason=state["stop_reason"],
+        stop_reason=state.get("stop_reason"),
         tasks=[
             SubtopicTask(
                 task_id=task["task_id"],
@@ -207,6 +210,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         peer_review_report=state.get("peer_review_report"),
         knowledge_graph=state.get("knowledge_graph"),
         bias_report=state.get("bias_report"),
+        acm_layout=state.get("acm_layout"),
         artifact_root=state["artifact_root"],
         artifact_dir=state["artifact_dir"],
         run_warnings=state["run_warnings"],
