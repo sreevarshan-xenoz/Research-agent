@@ -5,6 +5,7 @@ from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output import export_run_artifacts
 from research_agent.output.latex import validate_latex_package
+from research_agent.observability.analytics import aggregate_team_analytics
 
 
 async def exporter_node(state: GraphState) -> dict:
@@ -39,7 +40,7 @@ async def exporter_node(state: GraphState) -> dict:
         "topic": state["topic"],
         "template": state["template"],
         "phase": state["phase"],
-        "stop_reason": state["stop_reason"],
+        "stop_reason": state.get("stop_reason"),
         "critic_notes": state["critic_notes"],
         "section_confidence": state["section_confidence"],
         "warning_count": len(run_warnings),
