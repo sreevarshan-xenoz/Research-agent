@@ -10,6 +10,7 @@ from collections import OrderedDict
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
+from research_agent.config import load_settings
 from research_agent.rag.chunker import chunk_text
 
 class LRUCache(OrderedDict):
@@ -31,7 +32,7 @@ _GLOBAL_FINGERPRINT_CACHE = LRUCache(capacity=50000)
 
 class ResearchIndex:
     def __init__(self, collection_name: str = "research_v1", run_id: str = ""):
-        settings = get_settings()
+        settings = load_settings()
         location = settings.qdrant.location
         if location == ":memory:":
             self.client = QdrantClient(":memory:")
@@ -83,7 +84,7 @@ class ResearchIndex:
         # In a real scenario, we'd use sentence-transformers or NVIDIA's embedding API
         # To keep it "free first" and low-dep, we use a hash-based pseudo-embedding
         # OR we check if NVIDIA_API_KEY is available for real embeddings
-        settings = get_settings()
+        settings = load_settings()
         embedding_model = settings.retrieval.embedding_model
         
         # Try local multilingual embeddings first
@@ -94,7 +95,8 @@ class ResearchIndex:
                 # Cache the model on the class or globally to avoid reloading
                 if not hasattr(self, "_st_model"):
                     self._st_model = SentenceTransformer(embedding_model)
-                self.vector_size = self._st_model.get_sentence_embedding_dimension()
+                dim = self._st_model.get_sentence_embedding_dimension()
+                self.vector_size = dim if dim is not None else 384
                 embeddings = await asyncio.to_thread(self._st_model.encode, texts)
                 return embeddings.tolist()
             except ImportError:
