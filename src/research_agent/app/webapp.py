@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
@@ -18,7 +19,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -179,6 +180,17 @@ def create_app(
         await save_session(new_session)
         return {"session_id": sid}
 
+    @app.post("/api/session")
+    async def create_session_singular(
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        sid = f"sess-{uuid.uuid4().hex[:8]}"
+        template = body.get("template", "ieee")
+        new_session = ChatSession(session_id=sid, user_id=str(user.id), template=template)
+        await save_session(new_session)
+        return {"session_id": sid}
+
     @app.get("/api/sessions/{session_id}/history")
     async def get_session_history(
         session_id: str,
@@ -207,7 +219,7 @@ def create_app(
     ):
         from research_agent.app.voice import transcribe_voice_to_topic
         content = await file.read()
-        topic = await transcribe_voice_to_topic(content, filename=file.filename)
+        topic = await transcribe_voice_to_topic(content, filename=file.filename or "recording.wav")
         return {"topic": topic}
 
     @app.websocket("/ws/chat/{session_id}")
@@ -329,6 +341,180 @@ def create_app(
             run_interrupt_signals[session.last_run_id].set()
             return True
         return False
+
+    @app.get("/api/health")
+    async def health_check():
+        return {"status": "ok"}
+
+    @app.post("/api/chat")
+    async def chat_endpoint(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        session_id = body.get("session_id", "")
+        message = body.get("message", "").strip()
+        template = body.get("template", "ieee")
+
+        session = await get_session(str(user.id), session_id) if session_id else None
+        if not session:
+            sid = f"sess-{uuid.uuid4().hex[:8]}"
+            session = ChatSession(session_id=sid, user_id=str(user.id), template=template, original_topic=message)
+            await save_session(session)
+        else:
+            session.template = template
+            if not session.original_topic:
+                session.original_topic = message
+
+        run_id = f"run-{uuid.uuid4().hex[:8]}"
+        session.last_run_id = run_id
+        await save_session(session)
+
+        actual_graph_runner = graph_runner or run_graph
+        tool_registry_local = registry if registry is not None else build_tool_registry(settings)
+
+        initial_state = WorkflowState(
+            run_id=run_id,
+            topic=session.original_topic,
+            template=template,
+            language="en",
+            depth="balanced",
+            autonomy_mode="hybrid",
+            max_runtime_minutes=1,
+            max_cost_usd=5.0,
+            max_iterations=1,
+        )
+
+        try:
+            if asyncio.iscoroutinefunction(actual_graph_runner):
+                final_state = await actual_graph_runner(initial_state, registry=tool_registry_local)
+            else:
+                final_state = actual_graph_runner(initial_state, registry=tool_registry_local)
+
+            session.awaiting_clarification = final_state.needs_clarification or bool(final_state.clarification_questions)
+            session.pending_questions = final_state.clarification_questions
+            await save_session(session)
+
+            if final_state.needs_clarification or final_state.stop_reason == "clarification_required":
+                return {
+                    "kind": "clarification",
+                    "questions": final_state.clarification_questions,
+                }
+            else:
+                section_evidence = {}
+                if final_state.section_confidence:
+                    section_evidence = {t: {"confidence": c} for t, c in final_state.section_confidence.items()}
+                return {
+                    "kind": "result",
+                    "run_id": run_id,
+                    "section_evidence": section_evidence,
+                }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/chat/stream")
+    async def chat_stream_endpoint(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        session_id = body.get("session_id", "")
+        message = body.get("message", "").strip()
+        template = body.get("template", "ieee")
+
+        session = await get_session(str(user.id), session_id) if session_id else None
+        if not session:
+            sid = f"sess-{uuid.uuid4().hex[:8]}"
+            session = ChatSession(session_id=sid, user_id=str(user.id), template=template, original_topic=message)
+            await save_session(session)
+        else:
+            session.template = template
+            if not session.original_topic:
+                session.original_topic = message
+
+        run_id = f"run-{uuid.uuid4().hex[:8]}"
+        session.last_run_id = run_id
+        await save_session(session)
+
+        actual_graph_runner = graph_runner or run_graph
+        tool_registry_local = registry if registry is not None else build_tool_registry(settings)
+
+        async def event_stream():
+            from research_agent.observability.progress import set_progress_callback
+
+            initial_state = WorkflowState(
+                run_id=run_id,
+                topic=session.original_topic,
+                template=template,
+                language="en",
+                depth="balanced",
+                autonomy_mode="hybrid",
+                max_runtime_minutes=1,
+                max_cost_usd=5.0,
+                max_iterations=1,
+            )
+
+            # Queue for progress events from the running graph
+            event_queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+            async def progress_handler(payload: dict):
+                await event_queue.put({"event": "status", "payload": payload})
+
+            set_progress_callback(progress_handler)
+
+            async def run_graph_task():
+                try:
+                    if asyncio.iscoroutinefunction(actual_graph_runner):
+                        final_state = await actual_graph_runner(initial_state, registry=tool_registry_local)
+                    else:
+                        final_state = actual_graph_runner(initial_state, registry=tool_registry_local)
+
+                    session.awaiting_clarification = final_state.needs_clarification or bool(final_state.clarification_questions)
+                    session.pending_questions = final_state.clarification_questions
+                    await save_session(session)
+
+                    if final_state.needs_clarification or final_state.stop_reason == "clarification_required":
+                        await event_queue.put({"event": "clarification", "questions": final_state.clarification_questions})
+                    else:
+                        await event_queue.put({"event": "result", "run_id": run_id})
+                except Exception as e:
+                    await event_queue.put({"event": "error", "message": str(e)})
+                finally:
+                    await event_queue.put(None)
+
+            # Launch graph in background, stream events as they arrive
+            task = asyncio.create_task(run_graph_task())
+
+            try:
+                while True:
+                    item = await event_queue.get()
+                    if item is None:
+                        break
+                    yield json.dumps(item) + "\n"
+            finally:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.post("/api/session/{session_id}/resume")
+    async def resume_session(
+        session_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        session = await get_session(str(user.id), session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        if not session.last_run_id:
+            raise HTTPException(status_code=400, detail="No previous run to resume")
+
+        return {
+            "kind": "result",
+            "run_id": session.last_run_id,
+        }
 
     @app.get("/", response_class=HTMLResponse)
     async def get_index():
