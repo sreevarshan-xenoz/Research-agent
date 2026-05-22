@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
-from typing import Any, Optional
+from typing import Optional
 import redis.asyncio as redis
 
 from research_agent.config import load_settings
