@@ -33,6 +33,9 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
         runtime["max_cost_usd"] = float(env["MAX_COST_USD"])
     if env.get("PARALLEL_WORKERS"):
         runtime["parallel_workers"] = int(env["PARALLEL_WORKERS"])
+    if env.get("INTERACTIVE_CHECKPOINTS"):
+        val = env["INTERACTIVE_CHECKPOINTS"].lower().strip()
+        runtime["interactive_checkpoints"] = val in ("true", "1", "yes")
 
     # v2 Model Routing
     if env.get("ORCHESTRATOR_MODEL"):
@@ -82,6 +85,8 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
         output["default_template"] = env["DEFAULT_TEMPLATE"]
     if env.get("SUPPORTED_TEMPLATES"):
         output["supported_templates"] = _coerce_list(env["SUPPORTED_TEMPLATES"])
+    if env.get("DEFAULT_ACM_LAYOUT"):
+        output["default_acm_layout"] = env["DEFAULT_ACM_LAYOUT"]
 
     if env.get("WEB_PROVIDER"):
         retrieval["web_provider"] = env["WEB_PROVIDER"]

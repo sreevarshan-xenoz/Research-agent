@@ -27,6 +27,15 @@ def get_progress_callback() -> ProgressCallback | None:
     return _PROGRESS_CALLBACK.get()
 
 
+def set_progress_callback(callback: ProgressCallback | None) -> None:
+    """Set the progress callback for the current context.
+    
+    This is a convenience wrapper for the context manager-based progress_callback.
+    Used by webapp.py to register the WebSocket emit callback.
+    """
+    _PROGRESS_CALLBACK.set(callback)
+
+
 async def apublish_progress(
     *,
     agent: str,

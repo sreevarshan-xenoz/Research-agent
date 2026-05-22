@@ -14,6 +14,9 @@ from research_agent.tools.pubmed import PubMedAdapter
 from research_agent.tools.semantic_scholar import SemanticScholarAdapter
 from research_agent.tools.web_search import DuckDuckGoAdapter, WebSearchAdapter
 from research_agent.tools.cache import get_cached_tool_result, set_cached_tool_result
+from research_agent.tools.github_crawler import GitHubCrawlerAdapter
+from research_agent.tools.patent_search import PatentSearchAdapter
+from research_agent.tools.news_social import NewsSocialAdapter
 
 
 def build_tool_registry(settings: AppSettings) -> dict[str, BaseToolAdapter]:

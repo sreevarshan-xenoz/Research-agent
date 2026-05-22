@@ -159,6 +159,21 @@ class RedisSettings(BaseModel):
     timeout_seconds: int = Field(default=5, ge=1)
 
 
+class VllmSettings(BaseModel):
+    """vLLM configuration."""
+    api_base: str = "http://localhost:8000/v1"
+    api_key: str = "EMPTY"
+    model: str = "deepseek-r1"
+    timeout_seconds: int = Field(default=120, ge=30, le=300)
+
+
+class QdrantSettings(BaseModel):
+    """Qdrant vector database configuration."""
+    location: str = ".runtime/qdrant"
+    grpc_port: int = Field(default=6334, ge=1, le=65535)
+    prefer_grpc: bool = True
+
+
 class AuthSettings(BaseModel):
     """Authentication settings."""
     secret_key: str = "DEV_SECRET_DO_NOT_USE_IN_PROD"
