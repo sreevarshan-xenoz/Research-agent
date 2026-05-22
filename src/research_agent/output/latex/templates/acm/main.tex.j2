@@ -1,4 +1,5 @@
-\documentclass[sigconf]{acmart}
+\documentclass[{{ acm_layout | default('sigconf') }}]{acmart}
+\urlstyle{rm}
 \usepackage{url}
 {% if language and language != 'en' %}
 \usepackage[{{ language }}]{babel}
