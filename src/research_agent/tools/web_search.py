@@ -8,13 +8,13 @@ import httpx
 
 try:
     # Try the new package name first
-    from ddgs import DDGS  # type: ignore[import-not-found]
+    from ddgs import DDGS  # type: ignore[import-not-found,assignment]
 except Exception:
     try:
         # Fall back to the old package name
-        from duckduckgo_search import DDGS
+        from duckduckgo_search import DDGS  # type: ignore[assignment]
     except Exception:  # pragma: no cover - exercised only when optional package is absent
-        DDGS = None  # type: ignore[assignment]
+        DDGS = None  # type: ignore[assignment,misc]
 
 from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
 

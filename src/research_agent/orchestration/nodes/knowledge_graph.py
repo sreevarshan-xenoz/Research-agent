@@ -43,14 +43,18 @@ async def knowledge_graph_node(state: GraphState) -> dict:
         max_tokens=2000
     )
 
+    node_count = 0
+    if isinstance(kg_data, dict):
+        node_count = len(kg_data.get("nodes", []))
+
     await apublish_progress(
         agent="KG Extractor",
         status="complete",
-        detail=f"Extracted {len(kg_data.get('nodes', [])) if kg_data else 0} nodes",
+        detail=f"Extracted {node_count} nodes",
         message="Knowledge graph complete",
     )
     
     return {
-        "knowledge_graph": kg_data,
+        "knowledge_graph": kg_data if isinstance(kg_data, dict) else {},
         "phase": "kg_extracted"
     }
