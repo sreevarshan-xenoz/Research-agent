@@ -11,7 +11,7 @@ def test_route_after_critic_loop():
         "autonomy_mode": "autonomous",
         "stop_reason": None,
     }
-    assert _route_after_critic(state) == "loop"
+    assert _route_after_critic(state) == "replan"
 
 def test_route_after_critic_await_user():
     # Low confidence, interactive -> await_user_critic

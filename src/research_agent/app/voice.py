@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-from research_agent.models import agenerate_text
 
 async def transcribe_voice_to_topic(audio_data: bytes, filename: str = "input.wav") -> str:
     """
@@ -23,10 +21,5 @@ async def transcribe_voice_to_topic(audio_data: bytes, filename: str = "input.wa
 
 async def structure_voice_transcription(transcript: str) -> dict:
     """Uses LLM to structure a raw transcript into a structured research goal."""
-    prompt = (
-        "Convert the following raw voice transcription into a structured research topic and objective.\n\n"
-        f"Transcript: {transcript}\n\n"
-        "Output JSON: {'topic': '...', 'depth': '...'}"
-    )
-    # logic to call agenerate_json
+    # logic to call agenerate_json in production
     return {"topic": transcript, "depth": "balanced"}

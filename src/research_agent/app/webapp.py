@@ -1,50 +1,40 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
-import html
-import inspect
 import json
-import os
 from pathlib import Path
-import re
 import threading
-import time
 import uuid
-import importlib.util
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List
 
 from fastapi import (
-    BackgroundTasks,
     Body,
     Depends,
     FastAPI,
     File,
     HTTPException,
-    Request,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from research_agent.config import load_settings
-from research_agent.models import agenerate_json
-from research_agent.observability import progress
 from research_agent.observability.checkpoints import (
     append_run_event,
     load_latest_checkpoint,
-    save_checkpoint,
     _event_root,
 )
 from research_agent.orchestration.graph import run_graph
-from research_agent.orchestration.state import SubtopicTask, WorkflowState, to_graph_state
+from research_agent.orchestration.state import WorkflowState
 from research_agent.tools.registry import build_tool_registry
 from research_agent.app.auth import (
     User,
+    UserCreate,
+    UserRead,
     current_active_user,
     fastapi_users,
     auth_backend,
@@ -129,6 +119,8 @@ class StopResponse(BaseModel):
 def create_app(
     static_dir: str = "src/research_agent/app/web",
     artifact_root: str = ".runtime/artifacts",
+    graph_runner=None,
+    registry: dict[str, Any] | None = None,
 ):
     settings = load_settings()
     sessions: dict[str, ChatSession] = _load_sessions()
@@ -153,12 +145,12 @@ def create_app(
         tags=["auth"],
     )
     app.include_router(
-        fastapi_users.get_register_router(User, uuid.UUID), # type: ignore
+        fastapi_users.get_register_router(UserRead, UserCreate),
         prefix="/api/auth",
         tags=["auth"],
     )
 
-    tool_registry = build_tool_registry(settings)
+    tool_registry = registry if registry is not None else build_tool_registry(settings)
 
     async def get_session(user_id: str, session_id: str) -> ChatSession | None:
         if session_id in sessions:
@@ -288,6 +280,8 @@ def create_app(
                     autonomy_mode = (data.get("autonomy_mode") or "hybrid").strip().lower()
                     max_iterations = max(1, min(settings.runtime.max_iterations, 3))
                     
+                    actual_graph_runner = graph_runner or run_graph
+
                     async def emit_ws(event: str, payload: dict):
                         append_run_event(run_id=run_id, event=event, payload=payload)
                         await manager.broadcast(session_id, event, payload)
@@ -304,7 +298,7 @@ def create_app(
                             max_runtime_minutes=runtime_cap,
                             max_cost_usd=cost_cap,
                             max_iterations=max_iterations,
-                            graph_runner=run_graph,
+                            graph_runner=actual_graph_runner,
                             tool_registry=tool_registry,
                             emit_callback=emit_ws,
                             critic_user_feedback=critic_user_feedback

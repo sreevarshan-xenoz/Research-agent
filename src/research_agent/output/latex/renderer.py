@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Iterable
+from typing import Any, Iterable
 
 import jinja2
 
