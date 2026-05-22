@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import os
-import aiohttp
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from research_agent.tools.base import BaseToolAdapter, ToolResult
 
