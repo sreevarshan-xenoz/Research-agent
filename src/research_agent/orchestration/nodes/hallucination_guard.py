@@ -46,7 +46,7 @@ async def hallucination_guard_node(state: GraphState) -> dict:
     # Append to run warnings if hallucinations found
     run_warnings = state.get("run_warnings", [])
     if guard_report and "No hallucinations detected" not in guard_report:
-        run_warnings.append(f"Hallucination Guard Warning: Potential issues detected. See guard_report.md.")
+        run_warnings.append("Hallucination Guard Warning: Potential issues detected. See guard_report.md.")
 
     await apublish_progress(
         agent="Hallucination Guard",
