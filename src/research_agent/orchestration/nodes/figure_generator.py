@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 
 from research_agent.models import agenerate_json, agenerate_text
 from research_agent.observability import apublish_progress
