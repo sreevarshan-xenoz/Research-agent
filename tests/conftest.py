@@ -1,11 +1,12 @@
 import pytest
 
 @pytest.fixture(autouse=True)
-def mock_llm_calls(monkeypatch):
+def test_env(monkeypatch):
     """
-    Globally mock litellm.completion and clear out API keys so unit tests do not hang 
-    trying to connect to Ollama/OpenRouter or fail due to external embedding shapes.
+    Set isolated test environment: use in-memory Qdrant, clear API keys,
+    and mock litellm calls so unit tests do not hang or conflict on file locks.
     """
+    monkeypatch.setenv("QDRANT_LOCATION", ":memory:")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
     monkeypatch.delenv("NVIDIA_NIMS_API_KEY", raising=False)

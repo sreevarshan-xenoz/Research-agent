@@ -88,6 +88,9 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("DEFAULT_ACM_LAYOUT"):
         output["default_acm_layout"] = env["DEFAULT_ACM_LAYOUT"]
 
+    if env.get("QDRANT_LOCATION"):
+        data.setdefault("qdrant", {})["location"] = env["QDRANT_LOCATION"]
+
     if env.get("WEB_PROVIDER"):
         retrieval["web_provider"] = env["WEB_PROVIDER"]
     if env.get("PAPER_PROVIDERS"):
