@@ -61,15 +61,28 @@ class ArxivAdapter(BaseToolAdapter):
         )
 
     def _parse_feed(self, xml_text: str) -> list[dict[str, Any]]:
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
+        ns = {
+            "atom": "http://www.w3.org/2005/Atom",
+            "arxiv": "http://arxiv.org/schemas/atom"
+        }
         root = ET.fromstring(xml_text)
         items: list[dict[str, Any]] = []
 
         for entry in root.findall("atom:entry", ns):
             title = (entry.findtext("atom:title", default="", namespaces=ns) or "").strip()
+            title = " ".join(title.split())
             summary = (entry.findtext("atom:summary", default="", namespaces=ns) or "").strip()
             link = (entry.findtext("atom:id", default="", namespaces=ns) or "").strip()
             published = (entry.findtext("atom:published", default="", namespaces=ns) or "").strip()
+            journal_ref = (entry.findtext("arxiv:journal_ref", default="", namespaces=ns) or "").strip()
+            arxiv_doi = (entry.findtext("arxiv:doi", default="", namespaces=ns) or "").strip()
+
+            authors = []
+            for author_tag in entry.findall("atom:author", ns):
+                name_tag = author_tag.find("atom:name", ns)
+                if name_tag is not None and name_tag.text:
+                    authors.append(name_tag.text.strip())
+
             pdf_url = ""
             for link_tag in entry.findall("atom:link", ns):
                 rel = str(link_tag.attrib.get("rel", "")).strip().lower()
@@ -90,8 +103,18 @@ class ArxivAdapter(BaseToolAdapter):
                     "content": content,
                     "pdf_url": pdf_url,
                     "published": published,
+                    "year": published[:4] if published else "2026",
+                    "authors": authors,
                     "source_type": "paper",
                     "provider": "arxiv",
+                    "journal": journal_ref or "arXiv preprint",
+                    "booktitle": "",
+                    "volume": "",
+                    "number": "",
+                    "pages": "",
+                    "doi": arxiv_doi,
+                    "publisher": "",
+                    "type": "preprint",
                 }
             )
 
