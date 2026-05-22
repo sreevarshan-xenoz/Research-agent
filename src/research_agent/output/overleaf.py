@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import urllib.parse
-from typing import Any
 
 def build_overleaf_import_url(main_tex: str, bibtex: str, project_name: str) -> str:
     """
