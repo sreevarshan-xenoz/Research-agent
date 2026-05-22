@@ -36,7 +36,7 @@ class SemanticScholarAdapter(BaseToolAdapter):
         params: dict[str, Any] = {
             "query": query,
             "limit": normalized_limit,
-            "fields": "title,url,year,authors,citationCount,abstract,paperId",
+            "fields": "title,url,year,authors,citationCount,abstract,paperId,venue,publicationVenue,publicationTypes,externalIds,journal",
         }
         try:
             response = self._client.get(self._endpoint, params=params, headers=headers)
@@ -58,6 +58,33 @@ class SemanticScholarAdapter(BaseToolAdapter):
 
     @staticmethod
     def _normalize_item(row: dict[str, Any]) -> dict[str, Any]:
+        external_ids = row.get("externalIds") or {}
+        doi = external_ids.get("DOI") or ""
+        
+        journal_info = row.get("journal") or {}
+        journal_name = journal_info.get("name") or row.get("venue") or ""
+        
+        volume = journal_info.get("volume") or ""
+        pages = journal_info.get("pages") or ""
+        
+        pub_venue = row.get("publicationVenue") or {}
+        publisher = pub_venue.get("name") or ""
+        
+        pub_types = row.get("publicationTypes") or []
+        doc_type = pub_types[0] if pub_types else ""
+        
+        journal = ""
+        booktitle = ""
+        if doc_type == "JournalArticle" or (not doc_type and journal_name):
+            journal = journal_name
+        elif doc_type in ("Conference", "Proceedings"):
+            booktitle = journal_name
+        else:
+            if "proceedings" in journal_name.lower() or "conference" in journal_name.lower():
+                booktitle = journal_name
+            else:
+                journal = journal_name
+
         return {
             "title": row.get("title", ""),
             "url": row.get("url", ""),
@@ -68,4 +95,12 @@ class SemanticScholarAdapter(BaseToolAdapter):
             "authors": [author.get("name", "") for author in row.get("authors", [])],
             "source_type": "paper",
             "provider": "semantic_scholar",
+            "journal": journal,
+            "booktitle": booktitle,
+            "volume": str(volume),
+            "number": "",
+            "pages": pages,
+            "doi": doi,
+            "publisher": publisher,
+            "type": doc_type,
         }
