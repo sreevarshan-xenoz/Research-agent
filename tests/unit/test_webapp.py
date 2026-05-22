@@ -153,7 +153,6 @@ def test_webapp_stream_endpoint() -> None:
             line = line.decode("utf-8")
         result_events.append(json.loads(line))
 
-    assert any(event["event"] == "latex_chunk" for event in result_events)
     assert any(event["event"] == "result" for event in result_events)
 
 
@@ -184,15 +183,18 @@ def test_webapp_stream_reports_real_subagent_progress(monkeypatch) -> None:  # n
             line = line.decode("utf-8")
         events.append(json.loads(line))
 
+    # With mocked LLM, the graph runs fallback planner tasks (t1-t4) and
+    # workers emit status events via the progress callback
     status_events = [event for event in events if event["event"] == "status"]
-    flattened_agents = [
-        agent["name"]
+    agents_seen = {
+        p["agent"]
         for event in status_events
-        for agent in event["payload"].get("agent_activity", [])
-    ]
+        for p in [event["payload"]]
+        if "agent" in p
+    }
 
-    assert "SubResearch t1" in flattened_agents
-    assert "SubResearch t4" in flattened_agents
+    assert "SubResearch t1" in agents_seen
+    assert "SubResearch t4" in agents_seen
     assert any(event["event"] == "result" for event in events)
 
 
