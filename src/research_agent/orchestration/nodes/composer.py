@@ -65,7 +65,8 @@ async def composer_node(state: GraphState) -> dict:
         author_block="Research Agent (Autonomous)",
         abstract=abstract,
         body=body,
-        language=language
+        language=language,
+        acm_layout=state.get("acm_layout")
     )
 
     # 3. Build BibTeX
