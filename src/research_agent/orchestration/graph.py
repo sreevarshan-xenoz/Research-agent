@@ -17,7 +17,6 @@ from research_agent.orchestration.nodes import (
     comparison_table_node,
     composer_node,
     critic_node,
-    dependency_blocked_node,
     exporter_node,
     figure_generator_node,
     formula_normalizer_node,
@@ -126,7 +125,6 @@ def build_graph(
     graph.add_node("plan_validation", plan_validation_node)
     graph.add_node("worker_executor", make_worker_node(tool_registry))
     graph.add_node("workers_complete", workers_complete_node)
-    graph.add_node("workers_blocked", dependency_blocked_node)
     graph.add_node("stopped", stop_node)
     graph.add_node("indexing", indexing_node)
     graph.add_node("critic", critic_node)
@@ -167,12 +165,10 @@ def build_graph(
         {
             "complete": "workers_complete",
             "loop": "worker_executor",
-            "blocked": "workers_blocked",
             "stopped": "stopped",
         },
     )
     graph.add_edge("workers_complete", "indexing")
-    graph.add_edge("workers_blocked", "indexing")
     graph.add_edge("indexing", "critic")
 
     graph.add_conditional_edges(
