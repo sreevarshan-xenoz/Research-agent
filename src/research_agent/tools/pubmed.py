@@ -102,6 +102,14 @@ class PubMedAdapter(BaseToolAdapter):
         
         url = f"https://doi.org/{doi}" if doi else f"https://pubmed.ncbi.nlm.nih.gov/{uid}/"
 
+        journal = row.get("fulljournalname") or ""
+        volume = row.get("volume") or ""
+        number = row.get("issue") or ""
+        pages = row.get("pages") or ""
+        publisher = row.get("publisher") or ""
+        pubtypes = row.get("pubtype") or []
+        doc_type = pubtypes[0] if pubtypes else "Journal Article"
+
         return {
             "title": title,
             "url": url,
@@ -111,4 +119,12 @@ class PubMedAdapter(BaseToolAdapter):
             "authors": authors,
             "source_type": "paper",
             "provider": "pubmed",
+            "journal": journal,
+            "booktitle": "",
+            "volume": str(volume),
+            "number": str(number),
+            "pages": pages,
+            "doi": doi,
+            "publisher": publisher,
+            "type": doc_type,
         }
