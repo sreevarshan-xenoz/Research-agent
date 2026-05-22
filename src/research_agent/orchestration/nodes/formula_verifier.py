@@ -45,7 +45,8 @@ async def formula_verifier_node(state: GraphState) -> dict:
     )
 
     run_warnings = state.get("run_warnings", [])
-    if math_report and "error" in math_report.lower() or "inconsistency" in math_report.lower():
+    math_report_lower = (math_report or "").lower()
+    if math_report and ("error" in math_report_lower or "inconsistency" in math_report_lower):
          run_warnings.append("Math Verifier: Potential inconsistencies detected in formulas.")
 
     await apublish_progress(
