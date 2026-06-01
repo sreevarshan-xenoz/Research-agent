@@ -51,11 +51,15 @@ def test_generate_twitter_thread():
     sections = {"title": "My Paper", "abstract": "Important work."}
     thread = generate_twitter_thread(sections)
     assert len(thread) >= 2
-    assert thread[0].startswith("\U0001f9f5")
-    assert thread[1].startswith("\U0001f4c4")
+    assert "New Paper:" in thread[0]
+
+def test_generate_twitter_thread_with_url():
+    sections = {"title": "My Paper", "abstract": "Important work."}
+    thread = generate_twitter_thread(sections, paper_url="https://arxiv.org/abs/1234")
+    assert "https://arxiv.org/abs/1234" in thread[-1]
 
 def test_generate_all():
-    tex = r"\title{T}\begin{abstract}A\end{abstract}\section{Intro}I\end{section}"
+    tex = r"\title{T}\begin{abstract}A\end{abstract}\section{Introduction}I"
     result = generate_all(tex, "test", formats=["blog"])
     assert "blog" in result
     assert "newsletter" not in result
