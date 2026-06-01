@@ -15,17 +15,25 @@ class KaggleDatasetAdapter(BaseToolAdapter):
         items: list[dict] = []
         warnings: list[str] = []
 
-        api_key = os.getenv("KAGGLE_API_KEY", "")
+        api_key = os.getenv("KAGGLE_API_KEY") or os.getenv("KAGGLE_KEY", "")
         if not api_key:
-            warnings.append("KAGGLE_API_KEY not set, skipping Kaggle")
+            warnings.append("KAGGLE_API_KEY / KAGGLE_KEY not set, skipping Kaggle")
             return ToolResult(provider=self.provider_name, items=items, warnings=warnings)
 
-        try:
+        username = os.getenv("KAGGLE_USERNAME", "")
+        if username:
+            auth = (username, api_key)
+            headers = {}
+        else:
+            auth = None
             headers = {"Authorization": f"Bearer {api_key}"}
+
+        try:
             response = httpx.get(
                 "https://www.kaggle.com/api/v1/datasets/list",
                 params={"search": query, "sortBy": "hottest", "page": 1, "max": n},
                 headers=headers,
+                auth=auth,
                 timeout=10
             )
             if response.status_code == 200:

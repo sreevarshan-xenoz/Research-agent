@@ -17,15 +17,18 @@ class HuggingFaceDatasetAdapter(BaseToolAdapter):
         try:
             response = httpx.get(
                 self.base_url,
-                params={"search": query, "sort": "downloads", "direction": -1, "limit": n},
+                params={"search": query, "sort": "downloads", "direction": "-1", "limit": n},
                 timeout=10
             )
             response.raise_for_status()
             data = response.json()
+            if not isinstance(data, list):
+                warnings.append(f"Unexpected HuggingFace API response format")
+                return ToolResult(provider=self.provider_name, items=items, warnings=warnings)
             for ds in data[:n]:
                 items.append({
                     "name": ds.get("id", ""),
-                    "description": (ds.get("cardData") or {}).get("description", "") or ds.get("siblings", [{}])[0].get("rfilename", ""),
+                    "description": (ds.get("cardData") or {}).get("description", ""),
                     "downloads": ds.get("downloads", 0),
                     "likes": ds.get("likes", 0),
                     "tags": ds.get("tags", []),
