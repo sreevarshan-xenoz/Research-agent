@@ -8,6 +8,8 @@ import threading
 import uuid
 from typing import Any, Dict, List
 
+from contextlib import asynccontextmanager
+
 from fastapi import (
     Body,
     Depends,
@@ -23,15 +25,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from research_agent.config import load_settings
-from research_agent.observability.checkpoints import (
-    append_run_event,
-    load_latest_checkpoint,
-    _event_root,
-)
-from research_agent.orchestration.graph import run_graph
-from research_agent.orchestration.state import WorkflowState
-from research_agent.tools.registry import build_tool_registry
+import logging
+
 from research_agent.app.auth import (
     User,
     UserCreate,
@@ -40,6 +35,21 @@ from research_agent.app.auth import (
     fastapi_users,
     auth_backend,
 )
+from research_agent.config import load_settings, validate_insecure_defaults
+from research_agent.observability.checkpoints import (
+    append_run_event,
+    load_latest_checkpoint,
+    _event_root,
+)
+from research_agent.observability.logging import ErrorSeverity, log_error
+from research_agent.orchestration.graph import close_redis_pool, get_memory_diagnostics, get_redis_pool, run_graph
+from research_agent.orchestration.state import WorkflowState
+from research_agent.tools.cache import close_global_tool_cache
+from research_agent.tools.registry import build_tool_registry
+
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ChatSession:
@@ -68,7 +78,13 @@ def _load_sessions() -> dict[str, ChatSession]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return {sid: ChatSession(**s) for sid, s in data.items()}
-    except Exception:
+    except Exception as exc:
+        log_error(
+            "Failed to load sessions",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="webapp",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
         return {}
 
 
@@ -77,8 +93,13 @@ def _save_sessions(sessions: dict[str, ChatSession]) -> None:
     try:
         data = {sid: vars(s) for sid, s in sessions.items()}
         path.write_text(json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8")
-    except Exception as e:
-        print(f"Error saving sessions: {e}")
+    except Exception as exc:
+        log_error(
+            "Failed to save sessions",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="webapp",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
 
 
 class ConnectionManager:
@@ -106,7 +127,13 @@ class ConnectionManager:
             for connection in self.active_connections[session_id]:
                 try:
                     await connection.send_json(message)
-                except Exception:
+                except Exception as exc:
+                    log_error(
+                        "WebSocket broadcast failed for one connection",
+                        severity=ErrorSeverity.RECOVERABLE,
+                        component="webapp",
+                        detail=f"{type(exc).__name__}: {exc}",
+                    )
                     dead_connections.append(connection)
             for dead in dead_connections:
                 self.disconnect(dead, session_id)
@@ -124,12 +151,21 @@ def create_app(
     registry: dict[str, Any] | None = None,
 ):
     settings = load_settings()
+    validate_insecure_defaults(settings)
     sessions: dict[str, ChatSession] = _load_sessions()
     session_active_runs: dict[str, str] = {}
     run_interrupt_signals: dict[str, threading.Event] = {}
     manager = ConnectionManager()
 
-    app = FastAPI(title="Research Agent Web")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Startup: nothing special needed (connections are lazy)
+        yield
+        # Shutdown: close Redis connections gracefully
+        await close_redis_pool()
+        await close_global_tool_cache()
+
+    app = FastAPI(title="Research Agent Web", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -207,8 +243,13 @@ def create_app(
                 for line in event_path.read_text(encoding="utf-8").splitlines():
                     if line.strip():
                         events.append(json.loads(line))
-            except Exception:
-                pass
+            except Exception as exc:
+                log_error(
+                    "Failed to load session history",
+                    severity=ErrorSeverity.RECOVERABLE,
+                    component="webapp",
+                    detail=f"{type(exc).__name__}: {exc}",
+                )
         
         return {"events": events}
 
@@ -290,7 +331,7 @@ def create_app(
                     cost_cap = max(0.0, float(data.get("max_cost_usd") if data.get("max_cost_usd") is not None else settings.runtime.max_cost_usd))
                     depth = (data.get("depth") or "balanced").strip().lower()
                     autonomy_mode = (data.get("autonomy_mode") or "hybrid").strip().lower()
-                    max_iterations = max(1, min(settings.runtime.max_iterations, 3))
+                    max_iterations = max(1, settings.runtime.max_iterations)
                     
                     actual_graph_runner = graph_runner or run_graph
 
@@ -331,8 +372,13 @@ def create_app(
         except Exception as e:
             try:
                 await websocket.send_json({"event": "error", "payload": {"message": str(e)}})
-            except Exception:
-                pass
+            except Exception as send_exc:
+                log_error(
+                    "WebSocket error-handler send failed",
+                    severity=ErrorSeverity.RECOVERABLE,
+                    component="webapp",
+                    detail=f"original={e}, send={send_exc}",
+                )
             manager.disconnect(websocket, session_id)
 
     async def stop_session_run(session_id: str, user: User) -> bool:
@@ -345,6 +391,75 @@ def create_app(
     @app.get("/api/health")
     async def health_check():
         return {"status": "ok"}
+
+    @app.get("/api/health/redis")
+    async def health_redis():
+        """Health check that pings Redis and returns memory diagnostics."""
+        diagnostics = await get_memory_diagnostics()
+
+        redis_status = "not_configured"
+        redis_ping_ms = None
+
+        import time as _time
+
+        pool_initialized = bool(
+            diagnostics.get("redis_pool", {}).get("initialized", False)
+        )
+
+        if pool_initialized:
+            # Try to ping via the existing shared pool
+            pool = get_redis_pool()
+            if pool is not None:
+                import redis.asyncio as _redis_asyncio
+
+                r = _redis_asyncio.Redis(connection_pool=pool)
+                try:
+                    start = _time.monotonic()
+                    await r.ping()
+                    redis_ping_ms = round((_time.monotonic() - start) * 1000, 1)
+                    redis_status = "healthy"
+                except Exception as exc:
+                    redis_status = f"unhealthy: {exc}"
+                finally:
+                    try:
+                        await r.close()
+                    except Exception:
+                        pass
+        else:
+            # Try a standalone connection to check Redis availability
+            try:
+                _settings = load_settings()
+                redis_url = _settings.redis.url if hasattr(_settings, "redis") and hasattr(_settings.redis, "url") else None
+                if redis_url:
+                    import redis.asyncio as _redis_asyncio
+                    r = _redis_asyncio.Redis.from_url(
+                        redis_url,
+                        socket_connect_timeout=5,
+                        socket_timeout=5,
+                    )
+                    try:
+                        start = _time.monotonic()
+                        await r.ping()
+                        redis_ping_ms = round((_time.monotonic() - start) * 1000, 1)
+                        redis_status = "healthy"
+                    finally:
+                        try:
+                            await r.close()
+                        except Exception:
+                            pass
+                else:
+                    redis_status = "not_configured"
+            except Exception as exc:
+                redis_status = f"connection_failed: {exc}"
+
+        return {
+            "redis": {
+                "status": redis_status,
+                "ping_ms": redis_ping_ms,
+            },
+            "diagnostics": diagnostics,
+            "healthy": redis_status == "healthy",
+        }
 
     @app.post("/api/chat")
     async def chat_endpoint(
@@ -379,9 +494,9 @@ def create_app(
             language="en",
             depth="balanced",
             autonomy_mode="hybrid",
-            max_runtime_minutes=1,
-            max_cost_usd=5.0,
-            max_iterations=1,
+            max_runtime_minutes=settings.runtime.max_runtime_minutes,
+            max_cost_usd=settings.runtime.max_cost_usd,
+            max_iterations=settings.runtime.max_iterations,
         )
 
         try:
@@ -447,9 +562,9 @@ def create_app(
                 language="en",
                 depth="balanced",
                 autonomy_mode="hybrid",
-                max_runtime_minutes=1,
-                max_cost_usd=5.0,
-                max_iterations=1,
+                max_runtime_minutes=settings.runtime.max_runtime_minutes,
+                max_cost_usd=settings.runtime.max_cost_usd,
+                max_iterations=settings.runtime.max_iterations,
             )
 
             # Queue for progress events from the running graph
@@ -495,7 +610,7 @@ def create_app(
                     try:
                         await task
                     except asyncio.CancelledError:
-                        pass
+                        pass  # Expected on teardown — no logging needed
 
         return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -554,6 +669,37 @@ def create_app(
         
         return {"nodes": nodes, "edges": edges}
 
+    @app.post("/api/runs/{run_id}/export/blog")
+    async def export_blog(
+        run_id: str,
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        tex_path = run_dir / "main.tex"
+        if not tex_path.exists():
+            raise HTTPException(status_code=404, detail="Run artifacts not found")
+
+        tex_content = tex_path.read_text(encoding="utf-8")
+        formats = body.get("formats", ["blog", "newsletter", "twitter"])
+        topic = body.get("topic", run_id)
+
+        from research_agent.output.blog_generator import generate_all
+        output = generate_all(tex_content, topic, formats=formats)
+
+        blog_dir = run_dir / "blog"
+        blog_dir.mkdir(parents=True, exist_ok=True)
+        for fmt, content in output.items():
+            if isinstance(content, str):
+                (blog_dir / f"{fmt}.md").write_text(content, encoding="utf-8")
+            elif isinstance(content, list):
+                (blog_dir / f"{fmt}.md").write_text(
+                    "\n\n".join(content), encoding="utf-8"
+                )
+
+        return {"formats": list(output.keys()), "path": str(blog_dir)}
+
     @app.post("/api/sessions/{session_id}/critic/feedback")
     async def post_critic_feedback(
         session_id: str,
@@ -570,6 +716,7 @@ def create_app(
 
     return app
 
+
 def _compose_refined_topic(original: str, questions: list[str], answers: list[str]) -> str:
     qa_pairs = []
     for q, a in zip(questions, answers):
@@ -579,6 +726,7 @@ def _compose_refined_topic(original: str, questions: list[str], answers: list[st
         f"Original Topic: {original}\n\n"
         "Clarifications:\n" + "\n".join(qa_pairs)
     )
+
 
 async def _execute_research_run(
     run_id: str,
@@ -634,5 +782,6 @@ async def _execute_research_run(
     except Exception as e:
         await emit_callback("error", {"message": f"Run failed: {str(e)}"})
         return False
+
 
 app = create_app()
