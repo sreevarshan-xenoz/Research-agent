@@ -1,4 +1,3 @@
-import pytest
 from research_agent.chat.chunker import chunk_text_semantic
 
 def test_chunk_text_semantic():

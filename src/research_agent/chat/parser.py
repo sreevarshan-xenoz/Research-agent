@@ -24,18 +24,18 @@ def extract_text_from_pdf(pdf_path: Path) -> dict[str, Any] | None:
             "text": "\n".join(text_parts),
             "metadata": metadata,
         }
+    except Exception:
+        pass
+
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+            return {
+                "text": text,
+                "metadata": {"title": "", "author": "", "pages": len(pdf.pages)},
+            }
     except ImportError:
-        try:
-            import pdfplumber
-            with pdfplumber.open(pdf_path) as pdf:
-                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
-                return {
-                    "text": text,
-                    "metadata": {"title": "", "author": "", "pages": len(pdf.pages)},
-                }
-        except ImportError:
-            raise ImportError(
-                "No PDF library available. Install: pip install PyMuPDF or pdfplumber"
-            )
+        pass
     except Exception:
         return None
