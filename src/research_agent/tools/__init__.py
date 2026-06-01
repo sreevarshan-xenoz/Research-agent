@@ -1,6 +1,8 @@
 from research_agent.tools.arxiv import ArxivAdapter
 from research_agent.tools.base import ToolResult
 from research_agent.tools.browser_use import BrowserUseAdapter
+from research_agent.tools.huggingface import HuggingFaceDatasetAdapter
+from research_agent.tools.kaggle import KaggleDatasetAdapter
 from research_agent.tools.open_alex import OpenAlexAdapter
 from research_agent.tools.page_fetcher import PageFetcherAdapter
 from research_agent.tools.registry import (
@@ -13,6 +15,8 @@ from research_agent.tools.web_search import DuckDuckGoAdapter, WebSearchAdapter
 
 __all__ = [
     "ToolResult",
+    "HuggingFaceDatasetAdapter",
+    "KaggleDatasetAdapter",
     "BrowserUseAdapter",
     "WebSearchAdapter",
     "DuckDuckGoAdapter",

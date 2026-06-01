@@ -8,6 +8,8 @@ from research_agent.config.schema import AppSettings
 from research_agent.tools.arxiv import ArxivAdapter
 from research_agent.tools.base import BaseToolAdapter, ToolResult
 from research_agent.tools.browser_use import BrowserUseAdapter
+from research_agent.tools.huggingface import HuggingFaceDatasetAdapter
+from research_agent.tools.kaggle import KaggleDatasetAdapter
 from research_agent.tools.open_alex import OpenAlexAdapter
 from research_agent.tools.page_fetcher import PageFetcherAdapter
 from research_agent.tools.pubmed import PubMedAdapter
@@ -19,10 +21,19 @@ from research_agent.tools.patent_search import PatentSearchAdapter
 from research_agent.tools.news_social import NewsSocialAdapter
 
 
+# Global concurrency semaphore to prevent overwhelming all providers at once.
+# Multiple worker nodes may call arun_multi_source_search concurrently, so
+# this limits the total in-flight API calls across all providers.
+_global_provider_semaphore = asyncio.Semaphore(8)
+
+
 def build_tool_registry(settings: AppSettings) -> dict[str, BaseToolAdapter]:
     registry: dict[str, BaseToolAdapter] = {
         "page_fetcher": PageFetcherAdapter(),
     }
+
+    registry["huggingface"] = HuggingFaceDatasetAdapter()
+    registry["kaggle"] = KaggleDatasetAdapter()
 
     web_provider = settings.retrieval.web_provider
     if web_provider == "browser_use":
@@ -123,24 +134,25 @@ async def arun_multi_source_search(
     """Run searches across all providers in parallel using asyncio."""
     
     async def _safe_search(name: str, adapter: BaseToolAdapter) -> tuple[str, ToolResult]:
-        try:
-            # Check cache first
-            cached = await get_cached_tool_result(name, query, limit)
-            if cached:
-                return name, cached
-                
-            res = await adapter.asearch(query, limit=limit)
-            
-            # Save to cache
-            await set_cached_tool_result(name, query, limit, res)
-            
-            return name, res
-        except Exception as e:
-            return name, ToolResult(
-                provider=name,
-                items=[],
-                warnings=[f"Async search failed: {str(e)}"]
-            )
+        async with _global_provider_semaphore:
+            try:
+                # Check cache first
+                cached = await get_cached_tool_result(name, query, limit)
+                if cached:
+                    return name, cached
+
+                res = await adapter.asearch(query, limit=limit)
+
+                # Save to cache
+                await set_cached_tool_result(name, query, limit, res)
+
+                return name, res
+            except Exception as e:
+                return name, ToolResult(
+                    provider=name,
+                    items=[],
+                    warnings=[f"Async search failed: {str(e)}"]
+                )
 
     tasks = []
     for name, adapter in registry.items():
@@ -153,7 +165,7 @@ async def arun_multi_source_search(
 
     if not tasks:
         return {}
-        
+
     outputs = await asyncio.gather(*tasks)
     results = {name: res for name, res in outputs}
 
