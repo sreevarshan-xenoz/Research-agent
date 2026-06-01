@@ -21,11 +21,12 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import logging
+import shutil
 
 from research_agent.app.auth import (
     User,
@@ -713,6 +714,60 @@ def create_app(
         session.awaiting_critic_feedback = False
         # The next WS message will pick this up or we can trigger it here
         return {"success": True}
+
+    @app.post("/api/runs/{run_id}/render")
+    async def render_pdf(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        tex_path = run_dir / "main.tex"
+        if not tex_path.exists():
+            raise HTTPException(status_code=404, detail="Run artifacts not found")
+
+        from research_agent.output.pdf_renderer import get_pdf_path, compile_pdf
+
+        cached = get_pdf_path(run_dir)
+        if cached:
+            return {"status": "cached", "pdf_path": cached}
+
+        pdf_path = compile_pdf(run_dir)
+        if pdf_path:
+            return {"status": "compiled", "pdf_path": pdf_path}
+        return {"status": "failed", "detail": "No LaTeX compiler available (try installing tectonic)"}
+
+    @app.get("/api/runs/{run_id}/render/pdf")
+    async def get_rendered_pdf(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        from research_agent.output.pdf_renderer import get_pdf_path
+
+        pdf_path = get_pdf_path(run_dir)
+        if not pdf_path:
+            raise HTTPException(status_code=404, detail="PDF not found. POST /api/runs/{run_id}/render first")
+        return FileResponse(pdf_path, media_type="application/pdf", filename=f"{run_id}.pdf")
+
+    @app.get("/api/runs/{run_id}/render/status")
+    async def render_status(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        from research_agent.output.pdf_renderer import get_pdf_path
+
+        cached = get_pdf_path(run_dir)
+        tectonic_avail = shutil.which("tectonic") is not None
+        docker_avail = shutil.which("docker") is not None
+        return {
+            "cached": cached is not None,
+            "tectonic_available": tectonic_avail,
+            "docker_available": docker_avail,
+        }
 
     return app
 
