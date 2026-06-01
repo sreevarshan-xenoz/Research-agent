@@ -156,6 +156,7 @@ def create_app(
     sessions: dict[str, ChatSession] = _load_sessions()
     session_active_runs: dict[str, str] = {}
     run_interrupt_signals: dict[str, threading.Event] = {}
+    CHAT_LIBRARIES: dict[str, list[dict[str, Any]]] = {}
     manager = ConnectionManager()
 
     @asynccontextmanager
@@ -631,6 +632,67 @@ def create_app(
             "kind": "result",
             "run_id": session.last_run_id,
         }
+
+    @app.post("/api/chat/upload")
+    async def chat_upload(
+        file: UploadFile = File(...),
+        user: User = Depends(current_active_user)
+    ):
+        from research_agent.chat.parser import extract_text_from_pdf
+        library_id = f"lib-{uuid.uuid4().hex[:8]}"
+        tmp_dir = Path(".runtime/chat_uploads")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = tmp_dir / file.filename
+
+        content = await file.read()
+        tmp_path.write_bytes(content)
+
+        result = extract_text_from_pdf(tmp_path)
+        if result is None:
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
+
+        text = result["text"]
+        metadata = result["metadata"]
+        metadata["source"] = file.filename
+        metadata["library_id"] = library_id
+
+        from research_agent.chat.indexer import ChatLibraryIndex
+        index = ChatLibraryIndex(library_id)
+        chunk_count = await index.add_document(text, metadata)
+
+        CHAT_LIBRARIES[library_id] = [metadata]
+
+        return {"library_id": library_id, "chunks": chunk_count, "title": metadata.get("title", file.filename)}
+
+
+    @app.post("/api/chat/ask")
+    async def chat_ask(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        library_id = body.get("library_id", "")
+        question = body.get("question", "").strip()
+        if not library_id or not question:
+            raise HTTPException(status_code=400, detail="library_id and question are required")
+        if library_id not in CHAT_LIBRARIES:
+            raise HTTPException(status_code=404, detail="Library not found")
+
+        from research_agent.chat.ask import answer_question
+        result = await answer_question(library_id, question)
+        return result
+
+
+    @app.get("/api/chat/library")
+    async def chat_list_libraries(user: User = Depends(current_active_user)):
+        libraries = [
+            {
+                "library_id": lib_id,
+                "title": docs[0].get("title", "Untitled") if docs else "Untitled",
+                "doc_count": len(docs),
+            }
+            for lib_id, docs in CHAT_LIBRARIES.items()
+        ]
+        return {"libraries": libraries}
 
     @app.get("/", response_class=HTMLResponse)
     async def get_index():
