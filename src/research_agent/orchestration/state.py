@@ -44,6 +44,7 @@ class GraphState(TypedDict):
     presentation_tex: str | None
     poster_tex: str | None
     future_research_agenda: str | None
+    gap_analysis: list[dict[str, Any]] | None
     comparison_table: str | None
     guard_report: str | None
     math_verification_report: str | None
@@ -73,7 +74,7 @@ class WorkflowState:
     language: str = "en"
     phase: str = "intake"
     iteration_index: int = 0
-    max_iterations: int = 3
+    max_iterations: int = 4
     depth: str = "balanced"
     autonomy_mode: str = "hybrid"
     max_runtime_minutes: int = 25
@@ -97,6 +98,7 @@ class WorkflowState:
     presentation_tex: Optional[str] = None
     poster_tex: Optional[str] = None
     future_research_agenda: Optional[str] = None
+    gap_analysis: Optional[List[Dict[str, Any]]] = None
     comparison_table: Optional[str] = None
     guard_report: Optional[str] = None
     math_verification_report: Optional[str] = None
@@ -150,6 +152,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "presentation_tex": state.presentation_tex,
         "poster_tex": state.poster_tex,
         "future_research_agenda": state.future_research_agenda,
+        "gap_analysis": state.gap_analysis,
         "comparison_table": state.comparison_table,
         "guard_report": state.guard_report,
         "math_verification_report": state.math_verification_report,
@@ -171,7 +174,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         language=state.get("language", "en"),
         phase=state["phase"],
         iteration_index=state["iteration_index"],
-        max_iterations=state.get("max_iterations", 3),
+        max_iterations=state.get("max_iterations", 4),
         depth=state.get("depth", "balanced"),
         autonomy_mode=state.get("autonomy_mode", "hybrid"),
         max_runtime_minutes=state.get("max_runtime_minutes", 25),
@@ -204,6 +207,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         presentation_tex=state.get("presentation_tex"),
         poster_tex=state.get("poster_tex"),
         future_research_agenda=state.get("future_research_agenda"),
+        gap_analysis=state.get("gap_analysis"),
         comparison_table=state.get("comparison_table"),
         guard_report=state.get("guard_report"),
         math_verification_report=state.get("math_verification_report"),

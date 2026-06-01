@@ -17,6 +17,7 @@ from research_agent.orchestration.nodes.poster import poster_generator_node
 from research_agent.orchestration.nodes.knowledge_graph import knowledge_graph_node
 from research_agent.orchestration.nodes.bias_detector import bias_detector_node
 from research_agent.orchestration.nodes.future_work import future_work_extrapolator_node
+from research_agent.orchestration.nodes.gap_analyzer import gap_analyzer_node
 from research_agent.orchestration.nodes.comparison import comparison_table_node
 from research_agent.orchestration.nodes.formula_normalizer import formula_normalizer_node
 from research_agent.orchestration.nodes.hallucination_guard import hallucination_guard_node
@@ -58,6 +59,7 @@ __all__ = [
 	"knowledge_graph_node",
 	"bias_detector_node",
 	"future_work_extrapolator_node",
+	"gap_analyzer_node",
 	"comparison_table_node",
 	"exporter_node",
 	"awaiting_user_critic_node",

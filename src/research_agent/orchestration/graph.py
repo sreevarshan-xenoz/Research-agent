@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import logging
+import random
 import time
 
 from langgraph.graph import END, START, StateGraph
@@ -22,6 +25,7 @@ from research_agent.orchestration.nodes import (
     formula_normalizer_node,
     formula_verifier_node,
     future_work_extrapolator_node,
+    gap_analyzer_node,
     get_pending_task_ids,
     get_ready_task_ids,
     hallucination_guard_node,
@@ -39,6 +43,85 @@ from research_agent.orchestration.nodes import (
 )
 from research_agent.orchestration.state import GraphState, WorkflowState, from_graph_state, to_graph_state
 from research_agent.tools.base import BaseToolAdapter
+from research_agent.observability.checkpoints import cleanup_old_checkpoints
+from research_agent.observability.logging import ErrorSeverity, log_error, log_exception, get_node_timings, reset_trace_context, wrap_node_fn, set_trace_context
+
+
+logger = logging.getLogger(__name__)
+
+
+# Module-level Redis connection pool (lazily initialized, shared across runs)
+# Protected by asyncio.Lock to prevent check-then-act race on initialization.
+_redis_pool: redis.ConnectionPool | None = None
+_redis_pool_lock = asyncio.Lock()
+
+# Module-level MemorySaver instance shared across run_graph() calls so that
+# interactive checkpoint resume works. When a thread pauses at an interrupt
+# (e.g. plan_validation), the checkpoint is stored here and can be found by
+# a subsequent run_graph() call with the same thread_id.
+_memory_checkpointer: MemorySaver | None = None
+
+
+async def _create_redis_pool(url: str, max_connections: int, timeout: int) -> redis.ConnectionPool:
+    """Create a Redis connection pool with configured timeout and retry.
+
+    Implements up to 3 connection attempts with exponential backoff.
+    """
+    last_exc = None
+    for attempt in range(3):
+        try:
+            pool = redis.ConnectionPool.from_url(
+                url,
+                max_connections=max_connections,
+                socket_connect_timeout=timeout,
+                socket_timeout=timeout,
+                retry_on_timeout=True,
+                health_check_interval=30,
+            )
+            # Probe the connection
+            r = redis.Redis(connection_pool=pool)
+            await r.ping()  # type: ignore[misc]
+            await r.aclose()
+            logger.info("Redis pool created: %s (max=%d, timeout=%ds)", url, max_connections, timeout)
+            return pool
+        except Exception as exc:
+            last_exc = exc
+            wait = (2 ** attempt) + random.uniform(0, 1)
+            logger.warning(
+                "Redis connection attempt %d/3 failed: %s. Retrying in %.1fs...",
+                attempt + 1, exc, wait,
+            )
+            await asyncio.sleep(wait)
+
+    raise ConnectionError(
+        f"Could not connect to Redis after 3 attempts: {last_exc}"
+    ) from last_exc
+
+
+def get_redis_pool() -> redis.ConnectionPool | None:
+    """Return the module-level shared Redis connection pool, or None if not initialized.
+
+    The pool is lazily created by :func:`run_graph` when Redis persistence is enabled.
+    Callers should treat the returned pool as read-only and never close it directly.
+    """
+    return _redis_pool
+
+
+async def close_redis_pool() -> None:
+    """Gracefully close the module-level Redis connection pool.
+
+    Safe to call multiple times — idempotent.
+    """
+    global _redis_pool
+    pool = _redis_pool
+    if pool is not None:
+        _redis_pool = None  # Prevent reuse while closing
+        try:
+            await pool.disconnect()
+            logger.info("Redis connection pool closed")
+        except Exception:
+            logger.exception("Error closing Redis pool")
+
 
 
 def _route_after_clarifier(state: GraphState) -> str:
@@ -76,11 +159,21 @@ def _route_after_critic(state: GraphState) -> str:
 
     # If confidence is low and we haven't hit max iterations, loop back
     low_confidence = any(score < 0.35 for score in state["section_confidence"].values())
+    iteration = state["iteration_index"]
+    max_iter = state["max_iterations"]
     
-    if low_confidence and state["iteration_index"] < state["max_iterations"]:
+    if low_confidence and iteration < max_iter:
         if state.get("autonomy_mode") == "interactive":
             return "await_user_critic"
         return "replan"
+    
+    if low_confidence and iteration >= max_iter:
+        # Max iterations reached with persistent low confidence — log the stop reason
+        state["stop_reason"] = "max_iterations_reached"
+        state.setdefault("run_warnings", []).append(
+            f"critic:max_iterations_reached:iteration={iteration}:max={max_iter}"
+        )
+    
     return "combiner"
 
 
@@ -104,9 +197,6 @@ def _stop_reason(state: GraphState) -> str | None:
     return None
 
 
-_GLOBAL_MEMORY_SAVER = MemorySaver()
-
-
 async def plan_validation_node(state: GraphState) -> dict:
     return {"phase": "plan_validated"}
 
@@ -116,35 +206,39 @@ def build_graph(
     checkpointer=None,
     interrupt_before=None,
 ):
+    if checkpointer is None:
+        checkpointer = MemorySaver()
     tool_registry = {} if registry is None else registry
     graph = StateGraph(GraphState)
-    graph.add_node("intake", intake_node)
-    graph.add_node("clarifier", clarifier_node)
-    graph.add_node("await_user", awaiting_user_node)
-    graph.add_node("planner", planner_node)
-    graph.add_node("plan_validation", plan_validation_node)
-    graph.add_node("worker_executor", make_worker_node(tool_registry))
-    graph.add_node("workers_complete", workers_complete_node)
-    graph.add_node("stopped", stop_node)
-    graph.add_node("indexing", indexing_node)
-    graph.add_node("critic", critic_node)
-    graph.add_node("replanner", replanner_node)
-    graph.add_node("await_user_critic", awaiting_user_critic_node)
-    graph.add_node("combiner", combiner_node)
-    graph.add_node("knowledge_graph", knowledge_graph_node)
-    graph.add_node("bias_detector", bias_detector_node)
-    graph.add_node("future_work", future_work_extrapolator_node)
-    graph.add_node("comparison_table", comparison_table_node)
-    graph.add_node("figure_generator", figure_generator_node)
-    graph.add_node("citation_verifier", citation_verifier_node)
-    graph.add_node("composer", composer_node)
-    graph.add_node("formula_normalizer", formula_normalizer_node)
-    graph.add_node("hallucination_guard", hallucination_guard_node)
-    graph.add_node("formula_verifier", formula_verifier_node)
-    graph.add_node("peer_reviewer", peer_reviewer_node)
-    graph.add_node("presentation", presentation_generator_node)
-    graph.add_node("poster", poster_generator_node)
-    graph.add_node("exporter", exporter_node)
+    # All node functions are wrapped with NodeTimer for execution timing
+    graph.add_node("intake", wrap_node_fn("intake", intake_node))
+    graph.add_node("clarifier", wrap_node_fn("clarifier", clarifier_node))
+    graph.add_node("await_user", wrap_node_fn("await_user", awaiting_user_node))
+    graph.add_node("planner", wrap_node_fn("planner", planner_node))
+    graph.add_node("plan_validation", wrap_node_fn("plan_validation", plan_validation_node))
+    graph.add_node("worker_executor", wrap_node_fn("worker_executor", make_worker_node(tool_registry)))
+    graph.add_node("workers_complete", wrap_node_fn("workers_complete", workers_complete_node))
+    graph.add_node("stopped", wrap_node_fn("stopped", stop_node))
+    graph.add_node("indexing", wrap_node_fn("indexing", indexing_node))
+    graph.add_node("critic", wrap_node_fn("critic", critic_node))
+    graph.add_node("replanner", wrap_node_fn("replanner", replanner_node))
+    graph.add_node("await_user_critic", wrap_node_fn("await_user_critic", awaiting_user_critic_node))
+    graph.add_node("combiner", wrap_node_fn("combiner", combiner_node))
+    graph.add_node("knowledge_graph", wrap_node_fn("knowledge_graph", knowledge_graph_node))
+    graph.add_node("bias_detector", wrap_node_fn("bias_detector", bias_detector_node))
+    graph.add_node("future_work", wrap_node_fn("future_work", future_work_extrapolator_node))
+    graph.add_node("gap_analyzer", wrap_node_fn("gap_analyzer", gap_analyzer_node))
+    graph.add_node("comparison_table", wrap_node_fn("comparison_table", comparison_table_node))
+    graph.add_node("figure_generator", wrap_node_fn("figure_generator", figure_generator_node))
+    graph.add_node("citation_verifier", wrap_node_fn("citation_verifier", citation_verifier_node))
+    graph.add_node("composer", wrap_node_fn("composer", composer_node))
+    graph.add_node("formula_normalizer", wrap_node_fn("formula_normalizer", formula_normalizer_node))
+    graph.add_node("hallucination_guard", wrap_node_fn("hallucination_guard", hallucination_guard_node))
+    graph.add_node("formula_verifier", wrap_node_fn("formula_verifier", formula_verifier_node))
+    graph.add_node("peer_reviewer", wrap_node_fn("peer_reviewer", peer_reviewer_node))
+    graph.add_node("presentation", wrap_node_fn("presentation", presentation_generator_node))
+    graph.add_node("poster", wrap_node_fn("poster", poster_generator_node))
+    graph.add_node("exporter", wrap_node_fn("exporter", exporter_node))
 
     graph.add_edge(START, "intake")
     graph.add_edge("intake", "clarifier")
@@ -190,7 +284,8 @@ def build_graph(
     graph.add_edge("combiner", "knowledge_graph")
     graph.add_edge("knowledge_graph", "bias_detector")
     graph.add_edge("bias_detector", "future_work")
-    graph.add_edge("future_work", "comparison_table")
+    graph.add_edge("future_work", "gap_analyzer")
+    graph.add_edge("gap_analyzer", "comparison_table")
     graph.add_edge("comparison_table", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
@@ -203,7 +298,7 @@ def build_graph(
     graph.add_edge("poster", "exporter")
     graph.add_edge("exporter", END)
     
-    return graph.compile(checkpointer=checkpointer or _GLOBAL_MEMORY_SAVER, interrupt_before=interrupt_before)
+    return graph.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
 
 
 async def run_graph(
@@ -214,16 +309,36 @@ async def run_graph(
     from research_agent.config import load_settings
     settings = load_settings()
     
-    checkpointer = None
-    redis_conn = None
-    
-    if settings.features.session_persistence == "redis":
-        redis_conn = redis.from_url(settings.redis.url)
-        checkpointer = AsyncRedisSaver(redis_client=redis_conn)
+    # Module-level Redis connection pool (reused across runs)
+    global _redis_pool, _memory_checkpointer
 
     interrupt_before = []
     if settings.runtime.interactive_checkpoints:
         interrupt_before = ["plan_validation"]
+
+    redis_conn = None
+    checkpointer: MemorySaver | AsyncRedisSaver
+    if settings.features.session_persistence == "redis":
+        async with _redis_pool_lock:
+            if _redis_pool is None:
+                _redis_pool = await _create_redis_pool(
+                    url=settings.redis.url,
+                    max_connections=settings.redis.max_connections,
+                    timeout=settings.redis.timeout_seconds,
+                )
+        redis_conn = redis.Redis(connection_pool=_redis_pool)
+        checkpointer = AsyncRedisSaver(redis_client=redis_conn)
+        logger.info("Checkpointer created with AsyncRedisSaver (pool established)")
+    else:
+        # Shared MemorySaver enables checkpoint resume across run_graph() calls.
+        # Each thread_id isolates its own state within the same MemorySaver.
+        if _memory_checkpointer is None:
+            _memory_checkpointer = MemorySaver()
+        checkpointer = _memory_checkpointer
+
+    # Set trace context so all downstream log_error/log_exception calls
+    # automatically inherit the run_id without needing explicit trace_id=.
+    _trace_token = set_trace_context(state.run_id)
 
     try:
         compiled = build_graph(
@@ -253,5 +368,115 @@ async def run_graph(
             
         return ret_state
     finally:
-        if redis_conn:
-            await redis_conn.aclose()
+        # Return Redis client to pool (does NOT close the pool).
+        # The AsyncRedisSaver is scoped to this run_graph() call — once
+        # execution is done, the saver has flushed all checkpoints to Redis
+        # so the connection is no longer needed.
+        if redis_conn is not None:
+            try:
+                await redis_conn.aclose()
+            except Exception:
+                logger.exception("Error returning Redis client to pool")
+
+
+        # Lifecycle cleanup: purge per-run state from global caches
+        try:
+            from research_agent.orchestration.nodes.indexing import cleanup_run_state as _cleanup_indexing
+            await _cleanup_indexing(state.run_id)
+        except Exception as exc:
+            log_exception(
+                "Lifecycle cleanup failed for run %s",
+                severity=ErrorSeverity.CLEANUP,
+                component="graph",
+                trace_id=state.run_id,
+                exc=exc,
+            )
+
+        # Restore the previous trace context (if any)
+        try:
+            reset_trace_context(_trace_token)  # type: ignore[has-type]
+        except Exception:
+            pass  # best-effort restore
+
+
+async def get_memory_diagnostics() -> dict[str, object]:
+    """Return sizes of all global caches for monitoring/memory leak detection.
+
+    Returns:
+        Dict with cache names as keys and their current sizes as values.
+    """
+    pool_info: dict[str, object] = {"initialized": _redis_pool is not None}
+    if _redis_pool is not None:
+        pool_info["max_connections"] = _redis_pool.max_connections
+        # redis.ConnectionPool doesn't expose in_use_connections natively,
+        # so we just report the pool is available.
+    diagnostics: dict[str, object] = {
+        "redis_pool": pool_info,
+    }
+
+    try:
+        from research_agent.orchestration.nodes.indexing import (
+            _INDEX_CACHE,
+            _CONTRADICTION_CACHE,
+            _INDEXED_TASKS_CACHE,
+        )
+        diagnostics["index_cache_runs"] = len(_INDEX_CACHE)
+        diagnostics["contradiction_cache_runs"] = len(_CONTRADICTION_CACHE)
+        diagnostics["indexed_tasks_cache_runs"] = len(_INDEXED_TASKS_CACHE)
+    except Exception as exc:
+        log_error(
+            "Failed to read index cache diagnostics",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="graph",
+            detail=str(exc),
+        )
+
+    try:
+        from research_agent.rag.indexer import _GLOBAL_FINGERPRINT_CACHE
+        diagnostics["fingerprint_cache_size"] = len(_GLOBAL_FINGERPRINT_CACHE)
+    except Exception as exc:
+        log_error(
+            "Failed to read fingerprint cache diagnostics",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="graph",
+            detail=str(exc),
+        )
+
+    try:
+        from research_agent.app.auth import _JWT_SECRET_CACHE
+        diagnostics["jwt_secret_cached"] = _JWT_SECRET_CACHE is not None
+    except Exception as exc:
+        log_error(
+            "Failed to read auth cache diagnostics",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="graph",
+            detail=str(exc),
+        )
+
+    # Node execution timings
+    try:
+        diagnostics["node_timings"] = get_node_timings()
+    except Exception as exc:
+        log_error(
+            "Failed to read node timings",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="graph",
+            detail=str(exc),
+        )
+
+    return diagnostics
+
+
+async def clean_old_runs(max_age_days: int = 7) -> dict[str, int]:
+    """Clean up old checkpoint files and purge stale cache entries.
+
+    Args:
+        max_age_days: Maximum age in days for checkpoint files.
+
+    Returns:
+        Dict with counts of cleaned items.
+    """
+    cleaned_files = cleanup_old_checkpoints(max_age_days=max_age_days)
+    return {
+        "checkpoint_files_removed": cleaned_files,
+    }

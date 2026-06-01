@@ -732,6 +732,18 @@ def create_app(
         
         return {"nodes": nodes, "edges": edges}
 
+    @app.get("/api/runs/{run_id}/gaps")
+    async def get_gap_analysis(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root) / run_id
+        gap_path = run_dir / "gap_analysis.md"
+        if gap_path.exists():
+            return {"gap_analysis": gap_path.read_text(encoding="utf-8")}
+        raise HTTPException(status_code=404, detail="No gap analysis found for this run")
+
     @app.post("/api/runs/{run_id}/export/blog")
     async def export_blog(
         run_id: str,
