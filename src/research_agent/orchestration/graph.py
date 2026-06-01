@@ -14,6 +14,7 @@ from research_agent.orchestration.nodes import (
     awaiting_user_critic_node,
     awaiting_user_node,
     bias_detector_node,
+    citation_graph_node,
     citation_verifier_node,
     clarifier_node,
     combiner_node,
@@ -229,6 +230,7 @@ def build_graph(
     graph.add_node("future_work", wrap_node_fn("future_work", future_work_extrapolator_node))
     graph.add_node("gap_analyzer", wrap_node_fn("gap_analyzer", gap_analyzer_node))
     graph.add_node("comparison_table", wrap_node_fn("comparison_table", comparison_table_node))
+    graph.add_node("citation_graph", wrap_node_fn("citation_graph", citation_graph_node))
     graph.add_node("figure_generator", wrap_node_fn("figure_generator", figure_generator_node))
     graph.add_node("citation_verifier", wrap_node_fn("citation_verifier", citation_verifier_node))
     graph.add_node("composer", wrap_node_fn("composer", composer_node))
@@ -286,7 +288,8 @@ def build_graph(
     graph.add_edge("bias_detector", "future_work")
     graph.add_edge("future_work", "gap_analyzer")
     graph.add_edge("gap_analyzer", "comparison_table")
-    graph.add_edge("comparison_table", "figure_generator")
+    graph.add_edge("comparison_table", "citation_graph")
+    graph.add_edge("citation_graph", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
     graph.add_edge("citation_verifier", "composer")
     graph.add_edge("composer", "formula_normalizer")

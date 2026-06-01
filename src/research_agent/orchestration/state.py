@@ -50,6 +50,7 @@ class GraphState(TypedDict):
     math_verification_report: str | None
     peer_review_report: str | None
     knowledge_graph: dict[str, Any] | None
+    citation_graph_data: dict[str, Any] | None
     bias_report: str | None
     artifact_root: str
     artifact_dir: str
@@ -104,6 +105,7 @@ class WorkflowState:
     math_verification_report: Optional[str] = None
     peer_review_report: Optional[str] = None
     knowledge_graph: Optional[Dict[str, Any]] = None
+    citation_graph_data: Optional[Dict[str, Any]] = None
     bias_report: Optional[str] = None
     acm_layout: Optional[str] = None
     artifact_root: str = ".runtime/artifacts"
@@ -158,6 +160,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "math_verification_report": state.math_verification_report,
         "peer_review_report": state.peer_review_report,
         "knowledge_graph": state.knowledge_graph,
+        "citation_graph_data": state.citation_graph_data,
         "bias_report": state.bias_report,
         "artifact_root": state.artifact_root,
         "artifact_dir": state.artifact_dir,
@@ -213,6 +216,7 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         math_verification_report=state.get("math_verification_report"),
         peer_review_report=state.get("peer_review_report"),
         knowledge_graph=state.get("knowledge_graph"),
+        citation_graph_data=state.get("citation_graph_data"),
         bias_report=state.get("bias_report"),
         acm_layout=state.get("acm_layout"),
         artifact_root=state["artifact_root"],

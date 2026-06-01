@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Citation Network</title>
+<style>
+body { margin: 0; font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; }
+#graph { width: 100vw; height: 100vh; }
+.link { stroke: #4a4a8a; stroke-opacity: 0.6; }
+.node circle { stroke: #fff; stroke-width: 1.5; cursor: pointer; }
+.node text { font-size: 10px; fill: #ccc; pointer-events: none; }
+.label { position: absolute; bottom: 10px; left: 10px; color: #888; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="graph"></div>
+<div class="label">Drag nodes to explore citation network</div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+const dataUrl = '/api/runs/{run_id}/citation-graph';
+
+async function loadGraph() {
+    const runId = window.location.pathname.split('/')[2];
+    const resp = await fetch(`/api/runs/${runId}/citation-graph`);
+    const data = await resp.json();
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const svg = d3.select('#graph').append('svg')
+        .attr('width', width).attr('height', height);
+
+    const defs = svg.append('defs');
+    defs.append('marker').attr('id', 'arrowhead').attr('viewBox', '-0 -5 10 10')
+        .attr('refX', 20).attr('refY', 0).attr('markerWidth', 6).attr('markerHeight', 6)
+        .attr('orient', 'auto')
+      .append('path').attr('d', 'M 0,-5 L 10,0 L 0,5').attr('fill', '#4a4a8a');
+
+    const simulation = d3.forceSimulation(data.nodes)
+        .force('link', d3.forceLink(data.edges).id(d => d.id).distance(150))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(30));
+
+    const link = svg.append('g').selectAll('line').data(data.edges).join('line')
+        .attr('class', 'link').attr('marker-end', 'url(#arrowhead)');
+
+    const node = svg.append('g').selectAll('g').data(data.nodes).join('g').attr('class', 'node')
+        .call(d3.drag()
+            .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+            .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+            .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+    node.append('circle').attr('r', d => Math.max(5, Math.min(20, 30 - (d.year ? new Date().getFullYear() - d.year : 15))))
+        .attr('fill', d => d.group === 1 ? '#e94560' : '#0f3460');
+
+    node.append('text').attr('x', 12).attr('y', 4).text(d => d.label.length > 40 ? d.label.slice(0, 40) + '...' : d.label);
+
+    node.append('title').text(d => `${d.label}\n${d.authors}\n${d.year || ''}`);
+
+    simulation.on('tick', () => {
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+}
+
+loadGraph();
+</script>
+</body>
+</html>
