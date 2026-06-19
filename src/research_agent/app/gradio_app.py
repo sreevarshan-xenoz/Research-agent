@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import atexit
 import time
 import uuid
 
 import gradio as gr
 
-from research_agent.config import load_settings
-from research_agent.orchestration.graph import run_graph
+from research_agent.config import load_settings, validate_insecure_defaults
+from research_agent.orchestration.graph import close_redis_pool, run_graph
 from research_agent.orchestration.state import WorkflowState
 from research_agent.tools import build_tool_registry
+from research_agent.tools.cache import close_global_tool_cache
 
 
 SETTINGS = load_settings()
+validate_insecure_defaults(SETTINGS)
 TOOL_REGISTRY = build_tool_registry(SETTINGS)
 
 
@@ -25,10 +29,12 @@ async def run_research(topic: str, template: str) -> str:
     provider_info = f"Orchestrator: {settings.models.orchestrator_provider} ({settings.models.orchestrator_model})"
     worker_info = f"Workers: {settings.runtime.parallel_workers} (Parallel)"
 
+    settings = load_settings()
     initial_state = WorkflowState(
         run_id=f"run-{uuid.uuid4().hex[:8]}",
         topic=topic,
         template=template,
+        max_iterations=settings.runtime.max_iterations,
     )
     
     try:
@@ -113,6 +119,24 @@ def build_app() -> gr.Blocks:
     return demo
 
 
+def _close_redis_atexit() -> None:
+    """Close Redis connections at process exit. Wrapped to handle asyncio shutdown edge cases."""
+    try:
+        asyncio.run(close_redis_pool())
+    except RuntimeError:
+        pass
+
+
+def _close_cache_atexit() -> None:
+    try:
+        asyncio.run(close_global_tool_cache())
+    except RuntimeError:
+        pass
+
+
 if __name__ == "__main__":
+    # Register graceful shutdown of Redis connections
+    atexit.register(_close_redis_atexit)
+    atexit.register(_close_cache_atexit)
     app = build_app()
     app.launch()
