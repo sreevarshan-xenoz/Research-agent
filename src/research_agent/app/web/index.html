@@ -201,7 +201,15 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
             Copy
           </button>
-          <a id="newOverleafLink" href="https://www.overleaf.com/project/new" target="_blank" rel="noopener noreferrer" class="btn-link">Open Overleaf</a>
+          <button id="overleafPushBtn" class="btn-icon" title="Push to Overleaf">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            Push to Overleaf
+          </button>
+          <button id="overleafPullBtn" class="btn-icon hidden" title="Pull from Overleaf">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 19l-7-7 7-7"/></svg>
+            Pull
+          </button>
+          <a id="newOverleafLink" href="https://www.overleaf.com/project/new" target="_blank" rel="noopener noreferrer" class="btn-link hidden">Open Overleaf Project</a>
           <a id="bundleLink" href="#" target="_blank" rel="noopener noreferrer" class="btn-link hidden">Download Bundle</a>
           <a id="pdfLink" href="#" target="_blank" rel="noopener noreferrer" class="btn-link hidden">Download PDF</a>
         </div>
@@ -236,6 +244,94 @@
         </div>
       </form>
     </aside>
+  </div>
+
+  <!-- Overleaf Method Selector Modal -->
+  <div id="overleafModal" class="modal-overlay hidden">
+    <div class="modal-container panel">
+      <div class="modal-header">
+        <h2>Push to Overleaf</h2>
+        <button id="overleafModalClose" class="btn-icon modal-close" title="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Choose how to push your LaTeX to Overleaf:</p>
+        <div class="modal-options">
+          <label class="modal-option">
+            <input type="radio" name="overleafMethod" value="snip" checked />
+            <div class="modal-option-content">
+              <strong>Snip URL</strong>
+              <span class="option-desc">One-click browser link (best for small projects)</span>
+            </div>
+          </label>
+          <label class="modal-option">
+            <input type="radio" name="overleafMethod" value="html" />
+            <div class="modal-option-content">
+              <strong>HTML Form</strong>
+              <span class="option-desc">Auto-submitting form, no size limits</span>
+            </div>
+          </label>
+          <label class="modal-option">
+            <input type="radio" name="overleafMethod" value="git" />
+            <div class="modal-option-content">
+              <strong>Git Push</strong>
+              <span class="option-desc">Requires Overleaf Git URL and token</span>
+            </div>
+          </label>
+        </div>
+        <div id="overleafGitFields" class="modal-git-fields hidden">
+          <div class="field">
+            <label for="overleafGitUrl">Overleaf Git URL</label>
+            <input id="overleafGitUrl" type="text" placeholder="https://git.overleaf.com/xxxxxxxxxxxx" />
+          </div>
+          <div class="field">
+            <label for="overleafGitToken">Git Token <span class="muted">(optional, defaults to env)</span></label>
+            <input id="overleafGitToken" type="password" placeholder="Your Overleaf Git token" />
+          </div>
+        </div>
+        <div id="overleafPushStatus" class="modal-status hidden">
+          <div class="spinner"></div>
+          <span id="overleafPushStatusText">Pushing...</span>
+        </div>
+        <div id="overleafPushResult" class="modal-result hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="overleafModalCancel" class="secondary">Cancel</button>
+        <button id="overleafModalConfirm" class="primary">Push to Overleaf</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pull from Overleaf Modal -->
+  <div id="overleafPullModal" class="modal-overlay hidden">
+    <div class="modal-container panel">
+      <div class="modal-header">
+        <h2>Pull from Overleaf</h2>
+        <button id="overleafPullModalClose" class="btn-icon modal-close" title="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="overleafPullGitUrl">Overleaf Git URL</label>
+          <input id="overleafPullGitUrl" type="text" placeholder="https://git.overleaf.com/xxxxxxxxxxxx" />
+        </div>
+        <div class="field">
+          <label for="overleafPullGitToken">Git Token <span class="muted">(optional, defaults to env)</span></label>
+          <input id="overleafPullGitToken" type="password" placeholder="Your Overleaf Git token" />
+        </div>
+        <div id="overleafPullStatus" class="modal-status hidden">
+          <div class="spinner"></div>
+          <span id="overleafPullStatusText">Pulling...</span>
+        </div>
+        <div id="overleafPullResult" class="modal-result hidden"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="overleafPullModalCancel" class="secondary">Cancel</button>
+        <button id="overleafPullModalConfirm" class="primary">Pull from Overleaf</button>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>

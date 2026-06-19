@@ -22,6 +22,32 @@ const docEditorEl = document.getElementById("docEditor");
 const newOverleafLinkEl = document.getElementById("newOverleafLink");
 const bundleLinkEl = document.getElementById("bundleLink");
 const pdfLinkEl = document.getElementById("pdfLink");
+const overleafPushBtn = document.getElementById("overleafPushBtn");
+const overleafPullBtn = document.getElementById("overleafPullBtn");
+
+// Overleaf Push Modal
+const overleafModal = document.getElementById("overleafModal");
+const overleafModalClose = document.getElementById("overleafModalClose");
+const overleafModalCancel = document.getElementById("overleafModalCancel");
+const overleafModalConfirm = document.getElementById("overleafModalConfirm");
+const overleafGitFields = document.getElementById("overleafGitFields");
+const overleafGitUrl = document.getElementById("overleafGitUrl");
+const overleafGitToken = document.getElementById("overleafGitToken");
+const overleafPushStatus = document.getElementById("overleafPushStatus");
+const overleafPushStatusText = document.getElementById("overleafPushStatusText");
+const overleafPushResult = document.getElementById("overleafPushResult");
+const overleafMethodRadios = document.querySelectorAll('input[name="overleafMethod"]');
+
+// Overleaf Pull Modal
+const overleafPullModal = document.getElementById("overleafPullModal");
+const overleafPullModalClose = document.getElementById("overleafPullModalClose");
+const overleafPullModalCancel = document.getElementById("overleafPullModalCancel");
+const overleafPullModalConfirm = document.getElementById("overleafPullModalConfirm");
+const overleafPullGitUrl = document.getElementById("overleafPullGitUrl");
+const overleafPullGitToken = document.getElementById("overleafPullGitToken");
+const overleafPullStatus = document.getElementById("overleafPullStatus");
+const overleafPullStatusText = document.getElementById("overleafPullStatusText");
+const overleafPullResult = document.getElementById("overleafPullResult");
 const pipelineSteps = document.querySelectorAll(".pipeline-tracker .step");
 const pipelineLines = document.querySelectorAll(".pipeline-tracker .step-line");
 const workbenchStatusEl = document.getElementById("workbenchStatus");
@@ -60,6 +86,7 @@ if (docEditorEl) {
 }
 
 let sessionId = null;
+let currentRunId = null;
 let loadingMessageNode = null;
 let loadingTickerId = null;
 let authToken = localStorage.getItem("research_auth_token");
@@ -274,9 +301,16 @@ function resetWorkbench() {
   if (quill) quill.setText("Research document will appear here...");
   if (discoveryFeedEl) discoveryFeedEl.innerHTML = '<p class="small muted">Findings will stream here...</p>';
   if (evidenceExplorerEl) evidenceExplorerEl.innerHTML = '<p class="small muted">Evidence links will appear here...</p>';
-  if (newOverleafLinkEl) newOverleafLinkEl.href = "https://www.overleaf.com/project/new";
+  if (newOverleafLinkEl) {
+    newOverleafLinkEl.href = "#";
+    newOverleafLinkEl.classList.add("hidden");
+    newOverleafLinkEl.textContent = "Open Overleaf";
+  }
+  if (overleafPushBtn) overleafPushBtn.classList.add("hidden");
+  if (overleafPullBtn) overleafPullBtn.classList.add("hidden");
   if (bundleLinkEl) { bundleLinkEl.href = "#"; bundleLinkEl.classList.add("hidden"); }
   if (pdfLinkEl) { pdfLinkEl.href = "#"; pdfLinkEl.classList.add("hidden"); }
+  currentRunId = null;
   setWorkbenchStatus("idle", "idle");
   updatePipelineTracker("intake");
 }
@@ -330,7 +364,15 @@ function renderDocPreview(htmlContent) {
 }
 
 function applyOverleafUrls(overleafUrls) {
-  if (newOverleafLinkEl) newOverleafLinkEl.href = overleafUrls?.new_project || "https://www.overleaf.com/project/new";
+  if (newOverleafLinkEl) {
+    if (overleafUrls?.new_project) {
+      newOverleafLinkEl.href = overleafUrls.new_project;
+      newOverleafLinkEl.classList.remove("hidden");
+    } else {
+      newOverleafLinkEl.classList.add("hidden");
+    }
+  }
+  if (overleafPushBtn) overleafPushBtn.classList.remove("hidden");
   if (bundleLinkEl) {
     if (overleafUrls?.upload_bundle) {
       bundleLinkEl.href = overleafUrls.upload_bundle;
@@ -495,6 +537,7 @@ async function tryResumeSession() {
       renderDocPreview(payload.doc_preview_html);
       renderArtifacts(payload.artifact_urls);
       applyOverleafUrls(payload.overleaf_urls);
+      currentRunId = payload.run_id || null;
       renderEvidenceExplorer(payload.section_evidence);
       setWorkbenchStatus("ready", "success");
       switchWorkbenchTab("doc");
@@ -550,6 +593,9 @@ chatForm?.addEventListener("submit", async (e) => {
         links: { "PDF": payload.artifact_urls?.pdf, "Overleaf": payload.overleaf_urls?.new_project }
       });
       messageInput.placeholder = "Enter a new research topic...";
+      currentRunId = payload.run_id || null;
+      if (currentRunId && overleafPushBtn) overleafPushBtn.classList.remove("hidden");
+      if (currentRunId && overleafPullBtn) overleafPullBtn.classList.remove("hidden");
       const codeEl = latexStreamEl?.querySelector("code");
       if (codeEl && payload.latex_text) { codeEl.textContent = payload.latex_text; Prism.highlightElement(codeEl); }
       renderDocPreview(payload.doc_preview_html);
@@ -579,6 +625,321 @@ stopRunBtn?.addEventListener("click", async () => {
 latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));
 docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
+
+// ── Overleaf API Functions ──────────────────────────────────
+
+async function checkOverleafStatus(runId) {
+  const res = await fetch(`/api/runs/${runId}/overleaf/status`, {
+    headers: { "Authorization": `Bearer ${authToken}` }
+  });
+  if (!res.ok) throw new Error("Failed to check Overleaf status");
+  return res.json();
+}
+
+async function pushToOverleaf(runId, method, gitUrl, gitToken) {
+  const body = { method };
+  if (method === "git") {
+    if (gitUrl) body.git_url = gitUrl;
+    if (gitToken) body.git_token = gitToken;
+  }
+  const res = await fetch(`/api/runs/${runId}/overleaf/push`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${authToken}`
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Push failed" }));
+    throw new Error(err.detail || "Push failed");
+  }
+  return res.json();
+}
+
+async function pullFromOverleaf(runId, gitUrl, gitToken) {
+  const body = { git_url: gitUrl };
+  if (gitToken) body.git_token = gitToken;
+  const res = await fetch(`/api/runs/${runId}/overleaf/pull`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${authToken}`
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Pull failed" }));
+    throw new Error(err.detail || "Pull failed");
+  }
+  return res.json();
+}
+
+// ── Overleaf Push Modal Logic ──────────────────────────────
+
+function openOverleafPushModal() {
+  if (!currentRunId) {
+    appendMessage("assistant", "No research run to push. Start a research topic first.");
+    return;
+  }
+  // Reset modal state
+  overleafGitFields.classList.add("hidden");
+  overleafPushStatus.classList.add("hidden");
+  overleafPushResult.classList.add("hidden");
+  overleafPushResult.innerHTML = "";
+  overleafGitUrl.value = "";
+  overleafGitToken.value = "";
+  document.querySelector('input[name="overleafMethod"][value="snip"]').checked = true;
+  overleafModalConfirm.disabled = false;
+  overleafModalConfirm.textContent = "Push to Overleaf";
+  overleafModal.classList.remove("hidden");
+}
+
+function closeOverleafPushModal() {
+  overleafModal.classList.add("hidden");
+}
+
+// Toggle Git fields visibility
+overleafMethodRadios.forEach((radio) => {
+  radio.addEventListener("change", () => {
+    const showGit = radio.value === "git";
+    overleafGitFields.classList.toggle("hidden", !showGit);
+    overleafModalConfirm.textContent = showGit ? "Push via Git" : "Push to Overleaf";
+  });
+});
+
+overleafModalClose?.addEventListener("click", closeOverleafPushModal);
+overleafModalCancel?.addEventListener("click", closeOverleafPushModal);
+
+// Close modal on overlay click
+overleafModal?.addEventListener("click", (e) => {
+  if (e.target === overleafModal) closeOverleafPushModal();
+});
+
+overleafModalConfirm?.addEventListener("click", async () => {
+  if (!currentRunId) return;
+  const method = document.querySelector('input[name="overleafMethod"]:checked')?.value || "snip";
+  const gitUrl = overleafGitUrl?.value.trim() || "";
+  const gitToken = overleafGitToken?.value.trim() || "";
+
+  // Validate git fields
+  if (method === "git" && !gitUrl) {
+    overleafGitUrl.style.borderColor = "#f43f5e";
+    overleafGitUrl.focus();
+    return;
+  }
+  overleafGitUrl.style.borderColor = "";
+
+  // Show loading state
+  overleafModalConfirm.disabled = true;
+  overleafPushResult.classList.add("hidden");
+  overleafPushResult.innerHTML = "";
+  overleafPushStatus.classList.remove("hidden");
+  overleafPushStatusText.textContent = method === "git" ? "Pushing via Git..." : "Generating Overleaf URL...";
+
+  try {
+    const result = await pushToOverleaf(currentRunId, method, gitUrl, gitToken);
+    overleafPushStatus.classList.add("hidden");
+
+    if (result.success) {
+      if (method === "snip" && result.url) {
+        // Snip URL: show with open button
+        overleafPushResult.innerHTML = `
+          <div class="modal-result-success">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <p>Overleaf project URL generated!</p>
+            <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="btn-link">Open in Overleaf</a>
+          </div>
+        `;
+        // Also update the static link
+        if (newOverleafLinkEl) {
+          newOverleafLinkEl.href = result.url;
+          newOverleafLinkEl.classList.remove("hidden");
+          newOverleafLinkEl.textContent = "Open Overleaf Project";
+        }
+      } else if (method === "html" && result.html) {
+        // HTML form: auto-submit via a temporary form
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = result.html;
+        const form = tempDiv.querySelector("form");
+        if (form) {
+          document.body.appendChild(form);
+          form.submit();
+        }
+        overleafPushResult.innerHTML = `
+          <div class="modal-result-success">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <p>Opening Overleaf...</p>
+            <p class="small muted">If nothing happens, check your popup blocker.</p>
+          </div>
+        `;
+      } else if (method === "git" && result.success) {
+        // Git push complete
+        overleafPushResult.innerHTML = `
+          <div class="modal-result-success">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <p>Successfully pushed to Overleaf via Git!</p>
+            ${result.message ? `<p class="small muted">${result.message}</p>` : ''}
+          </div>
+        `;
+        // Show the Overleaf link if returned
+        if (result.overleaf_url && newOverleafLinkEl) {
+          newOverleafLinkEl.href = result.overleaf_url;
+          newOverleafLinkEl.classList.remove("hidden");
+        }
+      } else {
+        overleafPushResult.innerHTML = `
+          <div class="modal-result-success">
+            <p>Push complete!</p>
+            ${result.message ? `<p class="small muted">${result.message}</p>` : ''}
+          </div>
+        `;
+      }
+      appendMessage("assistant", `📤 Pushed to Overleaf (${method})`);
+    } else {
+      overleafPushResult.innerHTML = `
+        <div class="modal-result-error">
+          <p>Push failed: ${result.message || "Unknown error"}</p>
+        </div>
+      `;
+    }
+    overleafPushResult.classList.remove("hidden");
+  } catch (err) {
+    overleafPushStatus.classList.add("hidden");
+    overleafPushResult.innerHTML = `
+      <div class="modal-result-error">
+        <p>Error: ${err.message}</p>
+      </div>
+    `;
+    overleafPushResult.classList.remove("hidden");
+  } finally {
+    overleafModalConfirm.disabled = false;
+    overleafModalConfirm.textContent = "Push to Overleaf";
+  }
+});
+
+// ── Overleaf Pull Modal Logic ──────────────────────────────
+
+function openOverleafPullModal() {
+  if (!currentRunId) {
+    appendMessage("assistant", "No research run to pull into. Start a research topic first.");
+    return;
+  }
+  overleafPullStatus.classList.add("hidden");
+  overleafPullResult.classList.add("hidden");
+  overleafPullResult.innerHTML = "";
+  overleafPullGitUrl.value = "";
+  overleafPullGitToken.value = "";
+  overleafPullModalConfirm.disabled = false;
+  overleafPullModalConfirm.textContent = "Pull from Overleaf";
+  overleafPullModal.classList.remove("hidden");
+}
+
+function closeOverleafPullModal() {
+  overleafPullModal.classList.add("hidden");
+}
+
+overleafPullModalClose?.addEventListener("click", closeOverleafPullModal);
+overleafPullModalCancel?.addEventListener("click", closeOverleafPullModal);
+
+overleafPullModal?.addEventListener("click", (e) => {
+  if (e.target === overleafPullModal) closeOverleafPullModal();
+});
+
+overleafPullModalConfirm?.addEventListener("click", async () => {
+  if (!currentRunId) return;
+  const gitUrl = overleafPullGitUrl?.value.trim();
+  const gitToken = overleafPullGitToken?.value.trim() || "";
+
+  if (!gitUrl) {
+    overleafPullGitUrl.style.borderColor = "#f43f5e";
+    overleafPullGitUrl.focus();
+    return;
+  }
+  overleafPullGitUrl.style.borderColor = "";
+
+  overleafPullModalConfirm.disabled = true;
+  overleafPullResult.classList.add("hidden");
+  overleafPullResult.innerHTML = "";
+  overleafPullStatus.classList.remove("hidden");
+  overleafPullStatusText.textContent = "Pulling from Overleaf...";
+
+  try {
+    const result = await pullFromOverleaf(currentRunId, gitUrl, gitToken);
+    overleafPullStatus.classList.add("hidden");
+
+    if (result.success) {
+      // Update the editor with pulled content
+      if (result.main_tex) {
+        const codeEl = latexStreamEl?.querySelector("code");
+        if (codeEl) {
+          codeEl.textContent = result.main_tex;
+          if (typeof Prism !== 'undefined') Prism.highlightElement(codeEl);
+        }
+      }
+      overleafPullResult.innerHTML = `
+        <div class="modal-result-success">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <p>Successfully pulled from Overleaf!</p>
+          ${result.message ? `<p class="small muted">${result.message}</p>` : ''}
+        </div>
+      `;
+      appendMessage("assistant", "📥 Pulled latest changes from Overleaf");
+    } else {
+      overleafPullResult.innerHTML = `
+        <div class="modal-result-error">
+          <p>Pull failed: ${result.message || "Unknown error"}</p>
+        </div>
+      `;
+    }
+    overleafPullResult.classList.remove("hidden");
+  } catch (err) {
+    overleafPullStatus.classList.add("hidden");
+    overleafPullResult.innerHTML = `
+      <div class="modal-result-error">
+        <p>Error: ${err.message}</p>
+      </div>
+    `;
+    overleafPullResult.classList.remove("hidden");
+  } finally {
+    overleafPullModalConfirm.disabled = false;
+    overleafPullModalConfirm.textContent = "Pull from Overleaf";
+  }
+});
+
+// ── Overleaf Push/Pull Button Handlers ──────────────────────
+
+overleafPushBtn?.addEventListener("click", async () => {
+  if (!currentRunId) {
+    appendMessage("assistant", "No research run to push. Start a research topic first.");
+    return;
+  }
+  // Check status first to verify artifacts exist and show capabilities
+  try {
+    const status = await checkOverleafStatus(currentRunId);
+    if (!status.artifacts_exist) {
+      appendMessage("assistant", "No LaTeX artifacts found for this run. The research may still be in progress.");
+      return;
+    }
+    // Pre-select the push method based on what's available
+    if (!status.git_available) {
+      // If git is not available, default to snip
+      document.querySelector('input[name="overleafMethod"][value="snip"]').checked = true;
+    }
+  } catch (err) {
+    // Status check failed — still allow the modal to open
+    console.warn("Overleaf status check failed:", err);
+  }
+  openOverleafPushModal();
+});
+
+overleafPullBtn?.addEventListener("click", () => {
+  if (!currentRunId) {
+    appendMessage("assistant", "No research run to pull into. Start a research topic first.");
+    return;
+  }
+  openOverleafPullModal();
+});
 
 (async () => {
   resetWorkbench();
