@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 import os
 from typing import Callable, Iterator
+
+from research_agent.tools.rate_limiter import get_limiter
+
+
+logger = logging.getLogger(__name__)
+
+
+# Module-level rate limiter for NVIDIA LLM calls
+_nvidia_limiter = get_limiter("nvidia_llm")
 
 
 _NVIDIA_STREAM_CALLBACK: ContextVar[Callable[[str], None] | None] = ContextVar(
@@ -47,11 +57,14 @@ def generate_with_nvidia(
 
     try:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("NVIDIA text generation dependency not available: %s", exc)
         return None
 
     normalized_model = _normalize_model_name(model)
     stream_handler = on_chunk or _NVIDIA_STREAM_CALLBACK.get()
+
+    _nvidia_limiter.sync_acquire()
 
     try:
         client = ChatNVIDIA(
@@ -70,13 +83,15 @@ def generate_with_nvidia(
                 if stream_handler is not None:
                     try:
                         stream_handler(content)
-                    except Exception:  # noqa: BLE001
-                        # Ignore UI callback failures and continue generation.
-                        pass
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("NVIDIA stream callback failed: %s", exc)
 
         text = "".join(chunks).strip()
+        _nvidia_limiter.record_success()
         return text or None
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _nvidia_limiter.record_error()
+        logger.warning("NVIDIA text generation failed: %s", exc)
         return None
 
 
@@ -96,10 +111,13 @@ def generate_json_with_nvidia(
 
     try:
         from langchain_nvidia_ai_endpoints import ChatNVIDIA
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("NVIDIA JSON dependency not available: %s", exc)
         return None
 
     normalized_model = _normalize_model_name(model)
+
+    _nvidia_limiter.sync_acquire()
 
     try:
         client = ChatNVIDIA(
@@ -128,6 +146,9 @@ def generate_json_with_nvidia(
         elif "```" in text:
             text = text.split("```")[1].split("```")[0].strip()
 
+        _nvidia_limiter.record_success()
         return json.loads(text)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        _nvidia_limiter.record_error()
+        logger.warning("NVIDIA JSON generation failed: %s", exc)
         return None

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Callable, Iterator
@@ -22,6 +23,15 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from research_agent.tools.rate_limiter import get_limiter
+
+
+logger = logging.getLogger(__name__)
+
+
+# Module-level rate limiters for cloud LLM providers
+_openrouter_limiter = get_limiter("openrouter")
+_nvidia_llm_limiter = get_limiter("nvidia_llm")
 
 
 _STREAM_CALLBACK: ContextVar[Callable[[str], None] | None] = ContextVar(
@@ -40,6 +50,14 @@ def stream_callback(callback: Callable[[str], None] | None) -> Iterator[None]:
         _STREAM_CALLBACK.reset(token)
 
 
+def _resolve_api_key(key_val: Any) -> str:
+    """Extract a plain string API key from a SecretStr, env var, or raw string."""
+    from pydantic import SecretStr
+    if isinstance(key_val, SecretStr):
+        return key_val.get_secret_value()
+    return str(key_val or "")
+
+
 def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]], str | None]:
     """Resolve the model name, extra kwargs, fallbacks, and specific provider for a given role."""
     from research_agent.config import load_settings
@@ -53,7 +71,9 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
         if provider == "ollama":
             extra["api_base"] = settings.ollama.api_base
         elif provider == "openrouter":
-            extra["api_key"] = settings.openrouter.api_key or os.getenv("OPENROUTER_API_KEY", "")
+            key = _resolve_api_key(settings.openrouter.api_key) or os.getenv("OPENROUTER_API_KEY", "")
+            if key:
+                extra["api_key"] = key
         
         return model, extra, [], provider
 
@@ -63,9 +83,10 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
 
     for prov in priority:
         if prov == "vllm":
+            api_key = _resolve_api_key(settings.vllm.api_key) or os.getenv("VLLM_API_KEY", "")
             model_list.append((
                 f"openai/{settings.models.subagent_vllm}",
-                {"api_base": settings.vllm.api_base, "api_key": settings.vllm.api_key},
+                {"api_base": settings.vllm.api_base, "api_key": api_key},
                 "vllm"
             ))
         elif prov == "ollama":
@@ -75,7 +96,7 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
                 "ollama"
             ))
         elif prov == "nvidia":
-            api_key = os.getenv("NVIDIA_API_KEY") or os.getenv("NVIDIA_NIMS_API_KEY")
+            api_key = os.getenv("NVIDIA_API_KEY", "") or os.getenv("NVIDIA_NIMS_API_KEY", "")
             if api_key:
                 model_list.append((
                     settings.models.subagent_nvidia,
@@ -83,7 +104,7 @@ def _resolve_model(role: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]
                     "nvidia"
                 ))
         elif prov == "openrouter":
-            api_key = settings.openrouter.api_key or os.getenv("OPENROUTER_API_KEY", "")
+            api_key = _resolve_api_key(settings.openrouter.api_key) or os.getenv("OPENROUTER_API_KEY", "")
             if api_key:
                 model_list.append((
                     settings.models.subagent_cloud,
@@ -150,17 +171,31 @@ async def agenerate_json(
         return None
 
     if provider == "nvidia":
-        from research_agent.models.nvidia_client import generate_json_with_nvidia
-        return generate_json_with_nvidia(
-            model=model,
-            prompt=prompt,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        _nvidia_llm_limiter.sync_acquire()
+        try:
+            from research_agent.models.nvidia_client import generate_json_with_nvidia
+            result = generate_json_with_nvidia(
+                model=model,
+                prompt=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            if result is not None:
+                _nvidia_llm_limiter.record_success()
+            else:
+                _nvidia_llm_limiter.record_error()
+            return result
+        except Exception:
+            _nvidia_llm_limiter.record_error()
+            raise
 
     try:
         import litellm
         litellm.drop_params = True
+
+        # Acquire rate limiter for non-local providers
+        if provider == "openrouter":
+            await _openrouter_limiter.async_acquire()
 
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
@@ -188,7 +223,7 @@ async def agenerate_json(
 
         return json.loads(text)
     except Exception as e:
-        print(f"LLM Error (agenerate_json, role={role}): {type(e).__name__}: {str(e)}")
+        logger.warning("LLM Error (agenerate_json, role=%s): %s: %s", role, type(e).__name__, e)
         return None
 
 
@@ -210,16 +245,25 @@ async def agenerate_text(
     chunk_handler = on_chunk or _STREAM_CALLBACK.get()
 
     if provider == "nvidia":
-        from research_agent.models.nvidia_client import generate_with_nvidia
-        # NVIDIA client handles its own streaming via chunk_handler
-        return generate_with_nvidia(
-            model=model,
-            prompt=prompt,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            on_chunk=chunk_handler
-        )
+        _nvidia_llm_limiter.sync_acquire()
+        try:
+            from research_agent.models.nvidia_client import generate_with_nvidia
+            result = generate_with_nvidia(
+                model=model,
+                prompt=prompt,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                on_chunk=chunk_handler
+            )
+            if result is not None:
+                _nvidia_llm_limiter.record_success()
+            else:
+                _nvidia_llm_limiter.record_error()
+            return result
+        except Exception:
+            _nvidia_llm_limiter.record_error()
+            raise
 
     try:
         import litellm
@@ -229,6 +273,10 @@ async def agenerate_text(
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+
+        # Acquire rate limiter for non-local providers
+        if provider == "openrouter":
+            await _openrouter_limiter.async_acquire()
 
         if chunk_handler:
             async for attempt in AsyncRetrying(
@@ -259,8 +307,8 @@ async def agenerate_text(
                             await chunk_handler(delta)
                         else:
                             chunk_handler(delta)
-                    except Exception:
-                        pass
+                    except Exception as chunk_err:
+                        logger.warning("Stream chunk callback (async) failed: %s", chunk_err)
 
             text = "".join(chunks).strip()
             return text or None
@@ -284,7 +332,7 @@ async def agenerate_text(
             text = (response.choices[0].message.content or "").strip()
             return text or None
     except Exception as e:
-        print(f"LLM Error (agenerate_text, role={role}): {type(e).__name__}: {str(e)}")
+        logger.warning("LLM Error (agenerate_text, role=%s): %s: %s", role, type(e).__name__, e)
         return None
 
 
@@ -302,17 +350,31 @@ def generate_json(
         return None
 
     if provider == "nvidia":
-        from research_agent.models.nvidia_client import generate_json_with_nvidia
-        return generate_json_with_nvidia(
-            model=model,
-            prompt=prompt,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        _nvidia_llm_limiter.sync_acquire()
+        try:
+            from research_agent.models.nvidia_client import generate_json_with_nvidia
+            result = generate_json_with_nvidia(
+                model=model,
+                prompt=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            if result is not None:
+                _nvidia_llm_limiter.record_success()
+            else:
+                _nvidia_llm_limiter.record_error()
+            return result
+        except Exception:
+            _nvidia_llm_limiter.record_error()
+            raise
 
     try:
         import litellm
         litellm.drop_params = True
+
+        # Acquire rate limiter for non-local providers
+        if provider == "openrouter":
+            _openrouter_limiter.sync_acquire()
 
         for attempt in Retrying(
             stop=stop_after_attempt(3),
@@ -340,7 +402,7 @@ def generate_json(
 
         return json.loads(text)
     except Exception as e:
-        print(f"LLM Error (generate_json, role={role}): {type(e).__name__}: {str(e)}")
+        logger.warning("LLM Error (generate_json, role=%s): %s: %s", role, type(e).__name__, e)
         return None
 
 
@@ -362,15 +424,25 @@ def generate_text(
     chunk_handler = on_chunk or _STREAM_CALLBACK.get()
 
     if provider == "nvidia":
-        from research_agent.models.nvidia_client import generate_with_nvidia
-        return generate_with_nvidia(
-            model=model,
-            prompt=prompt,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            on_chunk=chunk_handler
-        )
+        _nvidia_llm_limiter.sync_acquire()
+        try:
+            from research_agent.models.nvidia_client import generate_with_nvidia
+            result = generate_with_nvidia(
+                model=model,
+                prompt=prompt,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                on_chunk=chunk_handler
+            )
+            if result is not None:
+                _nvidia_llm_limiter.record_success()
+            else:
+                _nvidia_llm_limiter.record_error()
+            return result
+        except Exception:
+            _nvidia_llm_limiter.record_error()
+            raise
 
     try:
         import litellm
@@ -380,6 +452,10 @@ def generate_text(
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+
+        # Acquire rate limiter for non-local providers
+        if provider == "openrouter":
+            _openrouter_limiter.sync_acquire()
 
         if chunk_handler:
             for attempt in Retrying(
@@ -407,8 +483,8 @@ def generate_text(
                     chunks.append(delta)
                     try:
                         chunk_handler(delta)
-                    except Exception:
-                        pass
+                    except Exception as chunk_err:
+                        logger.warning("Stream chunk callback (sync) failed: %s", chunk_err)
 
             text = "".join(chunks).strip()
             return text or None
@@ -432,5 +508,5 @@ def generate_text(
             text = (response.choices[0].message.content or "").strip()
             return text or None
     except Exception as e:
-        print(f"LLM Error (generate_text, role={role}): {type(e).__name__}: {str(e)}")
+        logger.warning("LLM Error (generate_text, role=%s): %s: %s", role, type(e).__name__, e)
         return None
