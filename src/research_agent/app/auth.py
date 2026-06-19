@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 import uuid
 from typing import Optional
 
@@ -15,7 +17,36 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 
 
-SECRET = "SECRET" # Should be in settings
+import threading
+
+
+logger = logging.getLogger(__name__)
+
+_JWT_SECRET_CACHE: str | None = None
+_JWT_SECRET_LOCK = threading.Lock()
+
+
+def _get_jwt_secret() -> str:
+    """Load JWT secret from settings or environment variable. Result is cached.
+
+    Thread-safe: uses a lock for the check-then-act lazy initialization pattern.
+    The value is deterministic, so the lock is for correctness only.
+    """
+    global _JWT_SECRET_CACHE
+    if _JWT_SECRET_CACHE is not None:
+        return _JWT_SECRET_CACHE
+    with _JWT_SECRET_LOCK:
+        # Double-check under lock
+        if _JWT_SECRET_CACHE is not None:
+            return _JWT_SECRET_CACHE
+        try:
+            from pydantic import SecretStr
+            from research_agent.config import load_settings
+            secret = load_settings().auth.secret_key
+            _JWT_SECRET_CACHE = secret.get_secret_value() if isinstance(secret, SecretStr) else str(secret)
+        except Exception:
+            _JWT_SECRET_CACHE = os.environ.get("SECRET_KEY", "DEV_SECRET_DO_NOT_USE_IN_PROD")
+        return _JWT_SECRET_CACHE
 
 
 class Base(DeclarativeBase):
@@ -58,32 +89,37 @@ async def get_user_db(session: AsyncSession = Depends(get_async_session)):
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
-    reset_password_token_secret = SECRET
-    verification_token_secret = SECRET
+    # Secrets are set dynamically in get_user_manager to avoid hardcoding
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
-        print(f"User {user.id} has registered.")
+        logger.info("User %s has registered", user.id)
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None
     ):
-        print(f"User {user.id} forgot their password. Reset token: {token}")
+        # Token is intentionally NOT logged — it's a sensitive credential.
+        # In production, send this token via email instead.
+        logger.info("Password reset requested for user %s", user.id)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None
     ):
-        print(f"Verification requested for user {user.id}. Verification token: {token}")
+        logger.info("Verification requested for user %s", user.id)
 
 
 async def get_user_manager(user_db=Depends(get_user_db)):
-    yield UserManager(user_db)
+    secret = _get_jwt_secret()
+    manager = UserManager(user_db)
+    manager.reset_password_token_secret = secret
+    manager.verification_token_secret = secret
+    yield manager
 
 
 bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 
 def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(secret=SECRET, lifetime_seconds=3600)
+    return JWTStrategy(secret=_get_jwt_secret(), lifetime_seconds=3600)
 
 
 auth_backend = AuthenticationBackend(

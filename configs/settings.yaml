@@ -58,7 +58,7 @@ openrouter:
 # vLLM configuration
 vllm:
   api_base: http://localhost:8000/v1
-  api_key: EMPTY
+  api_key: ""                    # Set VLLM_API_KEY env var if authentication is required
   model: deepseek-r1
   timeout_seconds: 120
 

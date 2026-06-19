@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, model_serializer, SecretStr
 
 
 class RuntimeSettings(BaseModel):
@@ -148,7 +148,7 @@ class OllamaSettings(BaseModel):
 
 class OpenRouterSettings(BaseModel):
     """OpenRouter configuration."""
-    api_key: str = ""
+    api_key: SecretStr = SecretStr("")
     timeout_seconds: int = Field(default=60, ge=10, le=180)
 
 
@@ -162,7 +162,7 @@ class RedisSettings(BaseModel):
 class VllmSettings(BaseModel):
     """vLLM configuration."""
     api_base: str = "http://localhost:8000/v1"
-    api_key: str = "EMPTY"
+    api_key: SecretStr = SecretStr("")
     model: str = "deepseek-r1"
     timeout_seconds: int = Field(default=120, ge=30, le=300)
 
@@ -176,7 +176,7 @@ class QdrantSettings(BaseModel):
 
 class AuthSettings(BaseModel):
     """Authentication settings."""
-    secret_key: str = "DEV_SECRET_DO_NOT_USE_IN_PROD"
+    secret_key: SecretStr = SecretStr("DEV_SECRET_DO_NOT_USE_IN_PROD")
     jwt_lifetime_seconds: int = 3600
     enable_registration: bool = True
 
@@ -189,6 +189,10 @@ class FeatureFlags(BaseModel):
     enable_session_persistence: bool = True
     pdf_export: bool = True
     multi_language: bool = False
+    survey_generator: bool = True
+    plagiarism_check: bool = True
+    research_watchdog: bool = True
+    overleaf_integration: bool = True
 
 
 class ObservabilitySettings(BaseModel):
@@ -196,6 +200,19 @@ class ObservabilitySettings(BaseModel):
     enable_tracing: bool = False
     enable_metrics: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+
+
+    @model_serializer(mode="wrap")
+    def _serialize_safe(self, handler) -> dict:
+        """Serialize settings with secrets masked for debug dumps and logging."""
+        raw = handler(self)
+        # Mask known secret fields in the serialized output
+        for section in ("auth", "openrouter", "vllm"):
+            if section in raw and isinstance(raw[section], dict):
+                for key in ("secret_key", "api_key"):
+                    if key in raw[section]:
+                        raw[section][key] = "***MASKED***"
+        return raw
 
 
 class AppSettings(BaseModel):

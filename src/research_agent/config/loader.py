@@ -88,6 +88,8 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("DEFAULT_ACM_LAYOUT"):
         output["default_acm_layout"] = env["DEFAULT_ACM_LAYOUT"]
 
+    if env.get("REDIS_URL"):
+        data.setdefault("redis", {})["url"] = env["REDIS_URL"]
     if env.get("QDRANT_LOCATION"):
         data.setdefault("qdrant", {})["location"] = env["QDRANT_LOCATION"]
 
@@ -95,6 +97,16 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
         retrieval["web_provider"] = env["WEB_PROVIDER"]
     if env.get("PAPER_PROVIDERS"):
         retrieval["paper_providers"] = _coerce_list(env["PAPER_PROVIDERS"])
+
+    # vLLM settings
+    if env.get("VLLM_API_KEY"):
+        data.setdefault("vllm", {})["api_key"] = env["VLLM_API_KEY"]
+    if env.get("VLLM_API_BASE"):
+        data.setdefault("vllm", {})["api_base"] = env["VLLM_API_BASE"]
+
+    # Auth settings
+    if env.get("SECRET_KEY"):
+        data.setdefault("auth", {})["secret_key"] = env["SECRET_KEY"]
 
     return data
 
@@ -122,6 +134,40 @@ def resolve_settings_path(settings_path: str | Path | None = None) -> Path:
     raise FileNotFoundError(
         f"No settings file found. Expected one of: {DEFAULT_SETTINGS_PATH} or {EXAMPLE_SETTINGS_PATH}"
     )
+
+
+DEV_SECRET_WARNING = """
+****************************************************************
+* WARNING: Using development JWT signing key!                 *
+* Set SECRET_KEY environment variable with a strong secret.   *
+* Generate one: python -c "import secrets;                   *
+*     print(secrets.token_urlsafe(32))"                       *
+*                                                              *
+* DO NOT DEPLOY TO PRODUCTION WITH THIS DEFAULT.              *
+****************************************************************
+"""
+
+
+def validate_insecure_defaults(settings: AppSettings) -> None:
+    """Emit warnings for known insecure default secret values.
+
+    Call once at application startup, not on every request.
+    """
+    import warnings
+
+    secret = str(settings.auth.secret_key)
+    if not secret or secret == "DEV_SECRET_DO_NOT_USE_IN_PROD":
+        warnings.warn(DEV_SECRET_WARNING, RuntimeWarning, stacklevel=2)
+
+    # Check other secrets are configured when features that need them are enabled
+    if settings.features.session_persistence == "redis":
+        if not settings.redis.url or settings.redis.url == "redis://localhost:6379":
+            warnings.warn(
+                "Session persistence is set to 'redis' but using default localhost URL. "
+                "Set redis.url in settings.yaml or REDIS_URL env var for production.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
 
 def load_settings(
