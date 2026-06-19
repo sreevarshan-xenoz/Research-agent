@@ -5,7 +5,7 @@ import asyncio
 import httpx
 from bs4 import BeautifulSoup
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult
+from research_agent.tools.base import BaseToolAdapter, ToolResult, retry_with_backoff_sync
 
 
 class PageFetcherAdapter(BaseToolAdapter):
@@ -29,13 +29,20 @@ class PageFetcherAdapter(BaseToolAdapter):
     def search(self, query: str, limit: int = 1) -> ToolResult:
         """In this case, query is the URL."""
         url = query.strip()
+
+        def _do_fetch() -> dict[str, str]:
+            resp = self._client.get(url)
+            resp.raise_for_status()
+            return {
+                "html": resp.text,
+                "title": self._extract_title(resp.text),
+            }
+
         try:
-            response = self._client.get(url)
-            response.raise_for_status()
-            content = self._clean_html(response.text)
-            
+            fetched = retry_with_backoff_sync(_do_fetch, "page_fetcher")
+            content = self._clean_html(fetched["html"])
             item = {
-                "title": self._extract_title(response.text),
+                "title": fetched["title"],
                 "url": url,
                 "content": content,
                 "source_type": "web_page",
@@ -46,7 +53,7 @@ class PageFetcherAdapter(BaseToolAdapter):
                 items=[item],
                 metadata={"url": url},
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"fetch_error:{type(exc).__name__}"],

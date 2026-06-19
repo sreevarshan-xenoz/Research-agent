@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit, retry_with_backoff_sync
 
 
 class SemanticScholarAdapter(BaseToolAdapter):
@@ -38,18 +38,22 @@ class SemanticScholarAdapter(BaseToolAdapter):
             "limit": normalized_limit,
             "fields": "title,url,year,authors,citationCount,abstract,paperId,venue,publicationVenue,publicationTypes,externalIds,journal",
         }
+
+        def _do_request() -> dict[str, Any]:
+            resp = self._client.get(self._endpoint, params=params, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+
         try:
-            response = self._client.get(self._endpoint, params=params, headers=headers)
-            response.raise_for_status()
-            payload = response.json()
-        except Exception as exc:  # noqa: BLE001
+            payload = retry_with_backoff_sync(_do_request, "semantic_scholar", api_key=self._api_key)
+            items = [self._normalize_item(row) for row in payload.get("data", [])]
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"semantic_scholar_error:{type(exc).__name__}"],
                 metadata={"query": query, "limit": normalized_limit},
             )
 
-        items = [self._normalize_item(row) for row in payload.get("data", [])]
         return ToolResult(
             provider=self.provider_name,
             items=items,

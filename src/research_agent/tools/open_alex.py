@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from typing import Any
+
 import httpx
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit, retry_with_backoff_sync
 
 
 class OpenAlexAdapter(BaseToolAdapter):
@@ -12,12 +14,12 @@ class OpenAlexAdapter(BaseToolAdapter):
 
     def __init__(
         self,
-        mailto: str = "noreply@example.com",
+        mailto: str | None = None,
         *,
         endpoint: str = "https://api.openalex.org/works",
         client: httpx.Client | None = None,
     ) -> None:
-        self._mailto = mailto
+        self._mailto = mailto or os.getenv("CONTACT_EMAIL", "noreply@example.com")
         self._endpoint = endpoint
         self._client = client or httpx.Client(
             timeout=20,
@@ -34,18 +36,22 @@ class OpenAlexAdapter(BaseToolAdapter):
             "per_page": normalized_limit,
             "mailto": self._mailto,
         }
+
+        def _do_request() -> dict[str, Any]:
+            resp = self._client.get(self._endpoint, params=params)
+            resp.raise_for_status()
+            return resp.json()
+
         try:
-            response = self._client.get(self._endpoint, params=params)
-            response.raise_for_status()
-            payload = response.json()
-        except Exception as exc:  # noqa: BLE001
+            payload = retry_with_backoff_sync(_do_request, "openalex")
+            items = [self._normalize_item(row) for row in payload.get("results", [])]
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"openalex_error:{type(exc).__name__}"],
                 metadata={"query": query, "limit": normalized_limit},
             )
 
-        items = [self._normalize_item(row) for row in payload.get("results", [])]
         return ToolResult(
             provider=self.provider_name,
             items=items,

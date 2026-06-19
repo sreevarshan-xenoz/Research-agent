@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 import httpx
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit, retry_with_backoff_sync
 
 
 class PubMedAdapter(BaseToolAdapter):
@@ -28,9 +28,8 @@ class PubMedAdapter(BaseToolAdapter):
 
     def search(self, query: str, limit: int = 5) -> ToolResult:
         normalized_limit = safe_limit(limit)
-        
-        try:
-            # Step 1: Search for IDs
+
+        def _do_search_ids() -> list[str]:
             search_params: dict[str, Any] = {
                 "db": "pubmed",
                 "term": query,
@@ -39,11 +38,16 @@ class PubMedAdapter(BaseToolAdapter):
             }
             search_resp = self._client.get(f"{self._base_url}/esearch.fcgi", params=search_params)
             search_resp.raise_for_status()
-            
-            # Simple XML parsing for IDs
             root = ET.fromstring(search_resp.text)
-            id_list = [id_elem.text for id_list_elem in root.findall("IdList") for id_elem in id_list_elem.findall("Id") if id_elem.text is not None]
-            
+            return [
+                id_elem.text for id_list_elem in root.findall("IdList")
+                for id_elem in id_list_elem.findall("Id")
+                if id_elem.text is not None
+            ]
+
+        try:
+            id_list = retry_with_backoff_sync(_do_search_ids, "pubmed")
+
             if not id_list:
                 return ToolResult(
                     provider=self.provider_name,
@@ -51,31 +55,32 @@ class PubMedAdapter(BaseToolAdapter):
                     metadata={"query": query, "limit": normalized_limit, "raw_count": 0}
                 )
 
-            # Step 2: Fetch metadata for those IDs
-            summary_params: dict[str, Any] = {
-                "db": "pubmed",
-                "id": ",".join(id_list),
-                "retmode": "json",
-            }
-            summary_resp = self._client.get(f"{self._base_url}/esummary.fcgi", params=summary_params)
-            summary_resp.raise_for_status()
-            summary_data = summary_resp.json()
-            
+            def _do_fetch_summary() -> dict[str, Any]:
+                summary_params: dict[str, Any] = {
+                    "db": "pubmed",
+                    "id": ",".join(id_list),
+                    "retmode": "json",
+                }
+                summary_resp = self._client.get(f"{self._base_url}/esummary.fcgi", params=summary_params)
+                summary_resp.raise_for_status()
+                return summary_resp.json()
+
+            summary_data = retry_with_backoff_sync(_do_fetch_summary, "pubmed")
             results = summary_data.get("result", {})
             uids = results.get("uids", [])
-            
+
             items = []
             for uid in uids:
                 item_raw = results.get(uid, {})
                 items.append(self._normalize_item(uid, item_raw))
-                
+
             return ToolResult(
                 provider=self.provider_name,
                 items=items,
                 metadata={"query": query, "limit": normalized_limit, "raw_count": len(items)},
             )
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"pubmed_error:{type(exc).__name__}"],

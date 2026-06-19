@@ -5,6 +5,7 @@ import aiohttp
 from typing import Optional
 
 from research_agent.tools.base import BaseToolAdapter, ToolResult
+from research_agent.tools.rate_limiter import get_limiter, retry_with_backoff
 
 class GitHubCrawlerAdapter(BaseToolAdapter):
     """Searches for and summarizes GitHub repositories related to research topics."""
@@ -12,6 +13,7 @@ class GitHubCrawlerAdapter(BaseToolAdapter):
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("GITHUB_TOKEN")
         self.provider_name = "github"
+        self._limiter = get_limiter("github", self.api_key)
 
     async def asearch(self, query: str, limit: int = 5) -> ToolResult:
         headers = {
@@ -21,14 +23,13 @@ class GitHubCrawlerAdapter(BaseToolAdapter):
             headers["Authorization"] = f"token {self.api_key}"
 
         # Search for repositories
-        # We append 'code' or 'implementation' to find more relevant results if not present
         search_query = query
         if "github" not in query.lower() and "code" not in query.lower():
              search_query = f"{query} implementation"
 
         url = f"https://api.github.com/search/repositories?q={search_query}&per_page={limit}"
-        
-        try:
+
+        async def _do_request() -> ToolResult:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as resp:
                     if resp.status != 200:
@@ -37,7 +38,7 @@ class GitHubCrawlerAdapter(BaseToolAdapter):
                             items=[],
                             warnings=[f"GitHub API returned status {resp.status}"]
                         )
-                    
+
                     data = await resp.json()
                     items = []
                     for repo in data.get("items", []):
@@ -50,11 +51,14 @@ class GitHubCrawlerAdapter(BaseToolAdapter):
                             "updated_at": repo.get("updated_at"),
                             "year": repo.get("updated_at", "")[:4] if repo.get("updated_at") else None,
                         })
-                    
+
                     return ToolResult(
                         provider=self.provider_name,
                         items=items
                     )
+
+        try:
+            return await retry_with_backoff(_do_request, "github", api_key=self.api_key)
         except Exception as e:
             return ToolResult(
                 provider=self.provider_name,

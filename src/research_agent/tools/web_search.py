@@ -16,7 +16,7 @@ except Exception:
     except Exception:  # pragma: no cover - exercised only when optional package is absent
         DDGS = None  # type: ignore[assignment,misc]
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit, retry_with_backoff_sync
 
 
 class WebSearchAdapter(BaseToolAdapter):
@@ -49,18 +49,22 @@ class WebSearchAdapter(BaseToolAdapter):
             "max_results": normalized_limit,
             "search_depth": "advanced",
         }
+
+        def _do_request() -> dict[str, Any]:
+            resp = self._client.post(self._endpoint, json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
         try:
-            response = self._client.post(self._endpoint, json=payload)
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:  # noqa: BLE001
+            data = retry_with_backoff_sync(_do_request, "tavily")
+            items = [self._normalize_item(row) for row in data.get("results", [])]
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"web_search_error:{type(exc).__name__}"],
                 metadata={"query": query, "limit": normalized_limit},
             )
 
-        items = [self._normalize_item(row) for row in data.get("results", [])]
         return ToolResult(
             provider=self.provider_name,
             items=items,
@@ -96,9 +100,9 @@ class DuckDuckGoAdapter(BaseToolAdapter):
                 metadata={"query": query, "limit": normalized_limit},
             )
 
-        try:
+        def _do_ddg() -> list[dict[str, Any]]:
             with DDGS() as ddgs:
-                results = list(
+                return list(
                     ddgs.text(
                         query,
                         region=self.region,
@@ -107,7 +111,10 @@ class DuckDuckGoAdapter(BaseToolAdapter):
                         max_results=normalized_limit,
                     )
                 )
-        except Exception as exc:  # noqa: BLE001
+
+        try:
+            results = retry_with_backoff_sync(_do_ddg, "duckduckgo")
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"duckduckgo_error:{type(exc).__name__}"],

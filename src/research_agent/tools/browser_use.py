@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from html import unescape
 import json
@@ -11,7 +12,10 @@ from urllib.parse import quote_plus
 import httpx
 from bs4 import BeautifulSoup
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit, retry_with_backoff_sync
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -66,6 +70,7 @@ class BrowserUseAdapter(BaseToolAdapter):
             try:
                 browser_candidates, browser_method = self._search_with_browser(query, normalized_limit)
             except Exception as exc:  # noqa: BLE001
+                logger.warning("Browser search failed: %s", exc)
                 warnings.append(f"browser_use_error:{type(exc).__name__}")
 
         for candidate in browser_candidates:
@@ -77,6 +82,7 @@ class BrowserUseAdapter(BaseToolAdapter):
             try:
                 scraping_candidates = self._search_with_scraping(query, normalized_limit)
             except Exception as exc:  # noqa: BLE001
+                logger.warning("Web scraping failed: %s", exc)
                 warnings.append(f"web_scraping_error:{type(exc).__name__}")
                 scraping_candidates = []
 
@@ -107,8 +113,8 @@ class BrowserUseAdapter(BaseToolAdapter):
     def _search_with_browser(self, query: str, limit: int) -> tuple[list[_SearchCandidate], str]:
         try:
             return self._search_with_browser_use_sdk(query, limit), "browser_use_sdk"
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Falling back from browser-use SDK to Playwright: %s", exc)
 
         return self._search_with_playwright(query, limit), "playwright"
 
@@ -116,6 +122,7 @@ class BrowserUseAdapter(BaseToolAdapter):
         try:
             from browser_use import Agent, Browser, ChatBrowserUse, ChatOpenAI
         except Exception as exc:  # noqa: BLE001
+            logger.warning("browser_use SDK not installed: %s", exc)
             raise RuntimeError("browser_use_sdk_not_available") from exc
 
         llm = self._build_browser_use_llm(ChatBrowserUse=ChatBrowserUse, ChatOpenAI=ChatOpenAI)
@@ -149,6 +156,7 @@ class BrowserUseAdapter(BaseToolAdapter):
         try:
             from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
         except Exception as exc:  # noqa: BLE001
+            logger.warning("Playwright not installed: %s", exc)
             raise RuntimeError("playwright_not_available") from exc
 
         with sync_playwright() as playwright:
@@ -212,6 +220,7 @@ class BrowserUseAdapter(BaseToolAdapter):
                 try:
                     parsed = json.loads(match.group(0))
                 except Exception:  # noqa: BLE001
+                    logger.warning("Failed to parse browser-use JSON output from regex match")
                     parsed = None
 
         if not isinstance(parsed, list):
@@ -233,9 +242,17 @@ class BrowserUseAdapter(BaseToolAdapter):
         return candidates
 
     def _search_with_scraping(self, query: str, limit: int) -> list[_SearchCandidate]:
-        response = self._client.get(self._search_base_url, params={"q": query})
-        response.raise_for_status()
-        candidates = self._extract_search_candidates(response.text, limit=limit)
+        def _do_scrape() -> str:
+            resp = self._client.get(self._search_base_url, params={"q": query})
+            resp.raise_for_status()
+            return resp.text
+
+        try:
+            html_text = retry_with_backoff_sync(_do_scrape, self._provider_name)
+        except Exception:
+            return []
+
+        candidates = self._extract_search_candidates(html_text, limit=limit)
 
         enriched: list[_SearchCandidate] = []
         for candidate in candidates:
@@ -275,13 +292,18 @@ class BrowserUseAdapter(BaseToolAdapter):
         return candidates
 
     def _fetch_page_snippet(self, url: str) -> str:
+        def _do_fetch() -> str:
+            resp = self._client.get(url, follow_redirects=True)
+            resp.raise_for_status()
+            return resp.text
+
         try:
-            response = self._client.get(url, follow_redirects=True)
-            response.raise_for_status()
-        except Exception:  # noqa: BLE001
+            html_text = retry_with_backoff_sync(_do_fetch, self._provider_name)
+        except Exception as exc:
+            logger.debug("Failed to fetch page snippet: %s", exc)
             return ""
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(html_text, "html.parser")
 
         meta_description = soup.find("meta", attrs={"name": "description"})
         if meta_description and meta_description.get("content"):

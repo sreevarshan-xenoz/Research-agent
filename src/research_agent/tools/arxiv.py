@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit, retry_with_backoff_sync
 
 
 class ArxivAdapter(BaseToolAdapter):
@@ -16,15 +16,17 @@ class ArxivAdapter(BaseToolAdapter):
         self,
         *,
         endpoint: str = "http://export.arxiv.org/api/query",
+        contact_email: str | None = None,
         extract_pdf_text: bool | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         self._endpoint = endpoint
+        email = contact_email or os.getenv("CONTACT_EMAIL", "noreply@example.com")
         self._client = client or httpx.Client(
             timeout=20,
             follow_redirects=True,
             headers={
-                "User-Agent": "ResearchAgent/0.1 (research-agent; mailto:noreply@example.com)",
+                "User-Agent": f"ResearchAgent/0.1 (research-agent; mailto:{email})",
             },
         )
         if extract_pdf_text is None:
@@ -43,11 +45,16 @@ class ArxivAdapter(BaseToolAdapter):
             "start": 0,
             "max_results": normalized_limit,
         }
+
+        def _do_request() -> httpx.Response:
+            resp = self._client.get(self._endpoint, params=params)
+            resp.raise_for_status()
+            return resp
+
         try:
-            response = self._client.get(self._endpoint, params=params)
-            response.raise_for_status()
+            response = retry_with_backoff_sync(_do_request, "arxiv")
             items = self._parse_feed(response.text)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return ToolResult(
                 provider=self.provider_name,
                 warnings=[f"arxiv_error:{type(exc).__name__}"],

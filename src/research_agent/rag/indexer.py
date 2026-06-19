@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import uuid
 import hashlib
@@ -12,6 +14,10 @@ from qdrant_client.http import models
 
 from research_agent.config import load_settings
 from research_agent.rag.chunker import chunk_text
+
+
+logger = logging.getLogger(__name__)
+
 
 class LRUCache(OrderedDict):
     """Simple LRU cache for fingerprints to prevent memory leaks."""
@@ -28,6 +34,7 @@ class LRUCache(OrderedDict):
 
 # Global fingerprint cache for cross-run deduplication
 _GLOBAL_FINGERPRINT_CACHE = LRUCache(capacity=50000)
+_FINGERPRINT_CACHE_LOCK = asyncio.Lock()
 
 
 class ResearchIndex:
@@ -47,11 +54,32 @@ class ResearchIndex:
         self.run_id = run_id
         self.vector_size = 384  # Fallback for deterministic local embeddings.
         self._collection_created = False
+        self._lock = asyncio.Lock()  # Guards _ensure_collection, _get_embeddings, _seen_fingerprints
         self._seen_fingerprints: set[str] = set()
         self._inserted_points = 0
         self._skipped_duplicates = 0
 
+    def close(self) -> None:
+        """Close the underlying Qdrant client and release connections.
+
+        Safe to call multiple times. Once closed, the instance should not be reused.
+        For :memory: and local-path modes this is a no-op.
+        """
+        try:
+            self.client.close()
+        except Exception:
+            pass
+
+    def _clear_local_fingerprints(self) -> None:
+        """Reset the instance-level seen fingerprints set.
+
+        Called after indexing to free memory. The global fingerprint cache
+        still prevents cross-run re-indexing of duplicates.
+        """
+        self._seen_fingerprints.clear()
+
     def _ensure_collection(self, vector_size: int) -> None:
+        # NOTE: Callers must hold self._lock
         if self._collection_created and vector_size == self.vector_size:
             return
 
@@ -69,10 +97,11 @@ class ResearchIndex:
         self._collection_created = True
 
     def _coerce_vector(self, vector: List[float]) -> List[float]:
-        if not self._collection_created:
-            self._ensure_collection(len(vector) or self.vector_size)
-            return vector
+        """Pad or truncate a vector to match self.vector_size.
 
+        Safe to call without a lock because _get_embeddings() always runs
+        first (under self._lock) and sets self.vector_size before returning.
+        """
         if len(vector) == self.vector_size:
             return vector
         if len(vector) > self.vector_size:
@@ -80,27 +109,31 @@ class ResearchIndex:
         return vector + [0.0] * (self.vector_size - len(vector))
 
     async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        # For v1, we use a simple deterministic "embedding" if no real model is available
-        # In a real scenario, we'd use sentence-transformers or NVIDIA's embedding API
-        # To keep it "free first" and low-dep, we use a hash-based pseudo-embedding
-        # OR we check if NVIDIA_API_KEY is available for real embeddings
+        """Compute embeddings and ensure the Qdrant collection is created.
+
+        Every path in this method calls self._ensure_collection() under
+        self._lock after the vector size is determined, guaranteeing the
+        collection exists before aadd_finding() or asearch() use it.
+        """
         settings = load_settings()
         embedding_model = settings.retrieval.embedding_model
         
         # Try local multilingual embeddings first
         if embedding_model and settings.features.multi_language:
             try:
-                import asyncio
                 from sentence_transformers import SentenceTransformer
                 # Cache the model on the class or globally to avoid reloading
-                if not hasattr(self, "_st_model"):
-                    self._st_model = SentenceTransformer(embedding_model)
-                dim = self._st_model.get_sentence_embedding_dimension()
-                self.vector_size = dim if dim is not None else 384
+                async with self._lock:
+                    if not hasattr(self, "_st_model"):
+                        self._st_model = SentenceTransformer(embedding_model)
+                    dim = self._st_model.get_sentence_embedding_dimension()
+                    if dim is not None:
+                        self.vector_size = dim
+                    self._ensure_collection(self.vector_size)
                 embeddings = await asyncio.to_thread(self._st_model.encode, texts)
                 return embeddings.tolist()
             except ImportError:
-                print("sentence-transformers not installed. Falling back to NVIDIA or deterministic embeddings.")
+                logger.info("sentence-transformers not installed. Falling back to NVIDIA or deterministic embeddings.")
 
         api_key = os.getenv("NVIDIA_API_KEY")
         enable_nvidia = os.getenv("ENABLE_NVIDIA_MODEL", "true").lower() not in ("0", "false")
@@ -109,19 +142,26 @@ class ResearchIndex:
             try:
                 from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
                 embedder = NVIDIAEmbeddings(api_key=api_key)
-                # Now using async call if available or running in thread
-                import asyncio
-                return await asyncio.to_thread(embedder.embed_documents, texts)
-            except Exception:
-                pass
+                embeddings = await asyncio.to_thread(embedder.embed_documents, texts)
+                # Ensure collection matches the real embedding dimension
+                if embeddings:
+                    async with self._lock:
+                        vs = len(embeddings[0])
+                        if vs != self.vector_size:
+                            self.vector_size = vs
+                        self._ensure_collection(self.vector_size)
+                return embeddings
+            except Exception as exc:
+                logger.warning("NVIDIA embedding failed, falling back to mock: %s: %s", type(exc).__name__, exc)
         
         # Fallback: simple deterministic projection for "semantic" search mock
-        def mock_embed(text: str) -> List[float]:
-            seed = sum(ord(c) for c in text) % 2**32
-            rng = random.Random(seed)
-            return [rng.uniform(-1, 1) for _ in range(self.vector_size)]
-            
-        return [mock_embed(t) for t in texts]
+        async with self._lock:
+            self._ensure_collection(self.vector_size)
+            def mock_embed(text: str) -> List[float]:
+                seed = sum(ord(c) for c in text) % 2**32
+                rng = random.Random(seed)
+                return [rng.uniform(-1, 1) for _ in range(self.vector_size)]
+            return [mock_embed(t) for t in texts]
 
     async def aadd_finding(self, task_id: str, provider: str, item: Dict[str, Any]):
         text = item.get("snippet") or item.get("content") or item.get("title") or ""
@@ -131,8 +171,10 @@ class ResearchIndex:
         chunks = chunk_text(text)
         if not chunks:
             return
-            
-        embeddings = [self._coerce_vector(vector) for vector in await self._get_embeddings(chunks)]
+
+        embeddings = []
+        for vector in await self._get_embeddings(chunks):
+            embeddings.append(self._coerce_vector(vector))
 
         source_url = str(item.get("url") or "")
         points = []
@@ -141,12 +183,18 @@ class ResearchIndex:
             fingerprint = hashlib.sha1(fp_raw).hexdigest()
 
             # Check both local instance cache and global cross-run cache
-            if fingerprint in self._seen_fingerprints or fingerprint in _GLOBAL_FINGERPRINT_CACHE:
-                self._skipped_duplicates += 1
-                continue
+            async with self._lock:
+                if fingerprint in self._seen_fingerprints:
+                    self._skipped_duplicates += 1
+                    continue
+            async with _FINGERPRINT_CACHE_LOCK:
+                if fingerprint in _GLOBAL_FINGERPRINT_CACHE:
+                    self._skipped_duplicates += 1
+                    continue
+                _GLOBAL_FINGERPRINT_CACHE[fingerprint] = self.run_id or "unknown"
 
-            self._seen_fingerprints.add(fingerprint)
-            _GLOBAL_FINGERPRINT_CACHE[fingerprint] = self.run_id or "unknown"
+            async with self._lock:
+                self._seen_fingerprints.add(fingerprint)
             points.append(
                 models.PointStruct(
                     id=str(uuid.uuid4()),
@@ -190,3 +238,13 @@ class ResearchIndex:
             "skipped_duplicates": self._skipped_duplicates,
             "unique_fingerprints": len(self._seen_fingerprints),
         }
+
+
+async def reset_fingerprint_cache() -> None:
+    """Reset the global fingerprint cache.
+
+    Useful for testing or when a full re-index is desired.
+    """
+    global _GLOBAL_FINGERPRINT_CACHE
+    async with _FINGERPRINT_CACHE_LOCK:
+        _GLOBAL_FINGERPRINT_CACHE = LRUCache(capacity=50000)
