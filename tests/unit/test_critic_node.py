@@ -67,10 +67,8 @@ async def test_critic_applies_metadata_fallback_penalty() -> None:
 
 @pytest.mark.asyncio
 async def test_critic_applies_contradiction_penalty(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(
-        critic_module,
-        "get_contradiction_links",
-        lambda run_id: [
+    async def _mock_get_contradiction_links(run_id: str) -> list[dict[str, str]]:
+        return [
             {
                 "task_a": "t1",
                 "task_b": "t2",
@@ -78,7 +76,12 @@ async def test_critic_applies_contradiction_penalty(monkeypatch) -> None:  # noq
                 "source_b": "B",
                 "overlap_terms": "benchmark,accuracy,performance",
             }
-        ],
+        ]
+
+    monkeypatch.setattr(
+        critic_module,
+        "get_contradiction_links",
+        _mock_get_contradiction_links,
     )
 
     state = {

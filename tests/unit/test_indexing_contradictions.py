@@ -64,7 +64,7 @@ async def test_indexing_detects_contradiction_links() -> None:
     }
 
     result = await indexing_node(state)
-    links = get_contradiction_links("run-contradiction")
+    links = await get_contradiction_links("run-contradiction")
 
     assert links
     assert any(w.startswith("indexing:contradiction_links:") for w in result["run_warnings"])
