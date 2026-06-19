@@ -37,6 +37,7 @@ from research_agent.app.auth import (
     auth_backend,
 )
 from research_agent.config import load_settings, validate_insecure_defaults
+from research_agent.output.grant_proposal import generate_grant_proposal
 from research_agent.observability.checkpoints import (
     append_run_event,
     load_latest_checkpoint,
@@ -140,6 +141,14 @@ class ConnectionManager:
                 self.disconnect(dead, session_id)
 
 
+class GrantProposalRequest(BaseModel):
+    title: str
+    pi_name: str
+    pi_institution: str
+    abstract: str
+    agency: str = "nsf"
+
+
 class StopResponse(BaseModel):
     success: bool
     message: str
@@ -161,8 +170,27 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Startup: nothing special needed (connections are lazy)
+        # Startup: start background watchdog scheduler
+        watchdog_task = None
+        if settings.features.research_watchdog:
+            try:
+                from research_agent.orchestration.watchdog import start_watchdog_scheduler
+                watchdog_task = await start_watchdog_scheduler(tool_registry)
+                logger.info("Watchdog scheduler started (interval: 3600s)")
+            except Exception as exc:
+                logger.warning("Could not start watchdog scheduler: %s", exc)
+
         yield
+
+        # Shutdown: stop watchdog scheduler
+        if watchdog_task is not None:
+            try:
+                from research_agent.orchestration.watchdog import stop_watchdog_scheduler
+                await stop_watchdog_scheduler()
+                logger.info("Watchdog scheduler stopped")
+            except Exception as exc:
+                logger.warning("Error stopping watchdog scheduler: %s", exc)
+
         # Shutdown: close Redis connections gracefully
         await close_redis_pool()
         await close_global_tool_cache()
@@ -788,6 +816,176 @@ def create_app(
 
         return {"formats": list(output.keys()), "path": str(blog_dir)}
 
+    @app.post("/api/runs/{run_id}/export/grant")
+    async def generate_grant(
+        run_id: str,
+        request: GrantProposalRequest,
+        user: User = Depends(current_active_user),
+    ):
+        artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root) / run_id
+        if not run_dir.exists():
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        findings_path = run_dir / "findings.json"
+        papers = []
+        if findings_path.exists():
+            try:
+                findings = json.loads(findings_path.read_text(encoding="utf-8"))
+                for task_id, task_data in findings.items():
+                    if isinstance(task_data, dict):
+                        for provider, provider_data in task_data.items():
+                            if isinstance(provider_data, dict):
+                                for item in provider_data.get("items", []):
+                                    if isinstance(item, dict):
+                                        papers.append(item)
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        result = generate_grant_proposal(
+            title=request.title,
+            pi_name=request.pi_name,
+            pi_institution=request.pi_institution,
+            abstract=request.abstract,
+            papers=papers,
+            agency=request.agency,
+        )
+
+        proposal_path = run_dir / "grant_proposal.md"
+        proposal_path.write_text(result, encoding="utf-8")
+        return {"grant_proposal": result}
+
+    @app.post("/api/survey")
+    async def generate_survey(
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Generate a multi-paper survey across a broad research area.
+
+        Accepts a broad research topic, automatically decomposes it into
+        sub-topics, researches each, and synthesizes a comprehensive survey
+        paper with taxonomy, timeline, and research landscape.
+        """
+        topic = body.get("topic", "").strip()
+        num_topics = max(3, min(8, int(body.get("num_topics", 5))))
+
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        from research_agent.orchestration.survey import run_survey
+
+        tool_registry_local = registry if registry is not None else build_tool_registry(settings)
+
+        try:
+            result = await run_survey(
+                broad_topic=topic,
+                registry=tool_registry_local,
+                num_topics=num_topics,
+            )
+
+            # Save survey to artifacts
+            artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
+            survey_dir = Path(artifact_root) / result.run_id
+            survey_dir.mkdir(parents=True, exist_ok=True)
+
+            (survey_dir / "survey.md").write_text(result.survey_markdown, encoding="utf-8")
+            (survey_dir / "taxonomy_table.md").write_text(result.taxonomy_table, encoding="utf-8")
+            (survey_dir / "timeline.md").write_text(result.timeline, encoding="utf-8")
+            (survey_dir / "research_landscape.md").write_text(result.research_landscape, encoding="utf-8")
+
+            return {
+                "run_id": result.run_id,
+                "topic": result.topic,
+                "sub_topics": [{"name": t.name, "description": t.description, "paper_count": len(t.key_papers)} for t in result.sub_topics],
+                "paper_count": result.paper_count,
+                "key_findings": result.key_findings,
+                "duration_seconds": result.duration_seconds,
+                "survey": result.survey_markdown,
+                "taxonomy_table": result.taxonomy_table,
+                "timeline": result.timeline,
+                "research_landscape": result.research_landscape,
+                "artifact_dir": str(survey_dir),
+                "warnings": result.warnings,
+            }
+        except Exception as e:
+            logger.exception("Survey generation failed")
+            raise HTTPException(status_code=500, detail=f"Survey generation failed: {e}")
+
+    @app.post("/api/runs/{run_id}/plagiarism-check")
+    async def plagiarism_check(
+        run_id: str,
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Run a plagiarism check on a completed run's generated content.
+
+        Compares the generated LaTeX/papers against retrieved source chunks
+        and returns similarity scores, flagged passages, and rewrite suggestions.
+        """
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        tex_path = run_dir / "main.tex"
+        if not tex_path.exists():
+            raise HTTPException(status_code=404, detail="Run artifacts not found. Run research first.")
+
+        threshold = float(body.get("threshold", 0.8))
+        include_rewrites = bool(body.get("include_rewrites", True))
+
+        tex_content = tex_path.read_text(encoding="utf-8")
+
+        # Collect source chunks from the run's findings
+        source_chunks: list[dict] = []
+        findings_path = run_dir / "findings.json"
+        if findings_path.exists():
+            try:
+                findings = json.loads(findings_path.read_text(encoding="utf-8"))
+                for task_id, task_data in findings.items():
+                    if isinstance(task_data, dict):
+                        for provider, provider_data in task_data.items():
+                            if isinstance(provider_data, dict):
+                                for item in provider_data.get("items", []):
+                                    if isinstance(item, dict):
+                                        snippet = item.get("snippet") or item.get("content") or ""
+                                        if snippet:
+                                            source_chunks.append({"text": str(snippet)})
+            except (json.JSONDecodeError, ValueError) as exc:
+                logger.warning("Could not parse findings for plagiarism check: %s", exc)
+
+        # Also check against Qdrant index if available
+        try:
+            from research_agent.rag.indexer import ResearchIndex
+            index = ResearchIndex(collection_name=f"run_{run_id}")
+            qdrant_results = await index.asearch(tex_content[:1000], limit=20)
+            for hit in qdrant_results:
+                text = hit.get("text", "")
+                if text:
+                    source_chunks.append({"text": str(text)})
+        except Exception as exc:
+            logger.warning("Qdrant lookup failed for plagiarism check: %s", exc)
+
+        from research_agent.verification.plagiarism_checker import check_plagiarism
+        from research_agent.verification.rewrite_suggester import batch_suggest_rewrites
+
+        result = check_plagiarism(tex_content, source_chunks, threshold=threshold)
+
+        if include_rewrites and result["flagged_sentences"]:
+            result["rewrite_suggestions"] = batch_suggest_rewrites(result["flagged_sentences"])
+
+        # Save report
+        report_path = run_dir / "plagiarism_report.json"
+        report_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+
+        return {
+            "run_id": run_id,
+            "overall_score": result["overall_score"],
+            "flagged_count": result["statistics"]["flagged"],
+            "total_sentences_checked": result["statistics"]["total_sentences"],
+            "exact_matches": result["statistics"]["exact_matches"],
+            "paraphrases": result["statistics"]["paraphrases"],
+            "flagged_sentences": result["flagged_sentences"],
+            "rewrite_suggestions": result.get("rewrite_suggestions", []),
+        }
+
     @app.post("/api/sessions/{session_id}/critic/feedback")
     async def post_critic_feedback(
         session_id: str,
@@ -801,6 +999,302 @@ def create_app(
         session.awaiting_critic_feedback = False
         # The next WS message will pick this up or we can trigger it here
         return {"success": True}
+
+    @app.post("/api/watchdog/subscribe")
+    async def watchdog_subscribe(
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Subscribe to a research topic for monitoring.
+
+        Creates an interest profile that the watchdog will monitor for
+        new papers at the specified interval.
+        """
+        topic = body.get("topic", "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        keywords = body.get("keywords", [])
+        if isinstance(keywords, str):
+            keywords = [k.strip() for k in keywords.split(",") if k.strip()]
+        authors = body.get("authors", [])
+        if isinstance(authors, str):
+            authors = [a.strip() for a in authors.split(",") if a.strip()]
+        venues = body.get("venues", [])
+        if isinstance(venues, str):
+            venues = [v.strip() for v in venues.split(",") if v.strip()]
+
+        check_interval = body.get("check_interval", "daily")
+        if check_interval not in ("daily", "weekly", "biweekly", "monthly"):
+            raise HTTPException(status_code=400, detail="check_interval must be daily, weekly, biweekly, or monthly")
+
+        from research_agent.app.watchdog_storage import (
+            InterestProfile,
+            get_watchdog_storage,
+        )
+
+        profile = InterestProfile(
+            profile_id=f"watch-{uuid.uuid4().hex[:8]}",
+            user_id=str(user.id),
+            topic=topic,
+            keywords=keywords,
+            authors=authors,
+            venues=venues,
+            check_interval=check_interval,
+        )
+
+        storage = get_watchdog_storage()
+        storage.save_profile(profile)
+
+        return {
+            "profile_id": profile.profile_id,
+            "topic": profile.topic,
+            "check_interval": profile.check_interval,
+            "keywords": profile.keywords,
+            "authors": profile.authors,
+            "venues": profile.venues,
+            "message": f"Now monitoring '{topic}' {check_interval}.",
+        }
+
+    @app.get("/api/watchdog/subscriptions")
+    async def watchdog_list_subscriptions(
+        user: User = Depends(current_active_user)
+    ):
+        """List all watchdog subscriptions for the current user."""
+        from research_agent.app.watchdog_storage import get_watchdog_storage
+
+        storage = get_watchdog_storage()
+        profiles = storage.get_user_profiles(str(user.id))
+
+        return {
+            "subscriptions": [
+                {
+                    "profile_id": p.profile_id,
+                    "topic": p.topic,
+                    "keywords": p.keywords,
+                    "authors": p.authors,
+                    "venues": p.venues,
+                    "check_interval": p.check_interval,
+                    "enabled": p.enabled,
+                    "last_checked_at": p.last_checked_at,
+                    "created_at": p.created_at,
+                }
+                for p in profiles
+            ],
+            "count": len(profiles),
+        }
+
+    @app.delete("/api/watchdog/subscriptions/{profile_id}")
+    async def watchdog_unsubscribe(
+        profile_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """Unsubscribe from a watchdog subscription."""
+        from research_agent.app.watchdog_storage import get_watchdog_storage
+
+        storage = get_watchdog_storage()
+        profile = storage.get_profile(profile_id)
+
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        if profile.user_id != str(user.id):
+            raise HTTPException(status_code=403, detail="Not authorized to delete this subscription")
+
+        storage.delete_profile(profile_id)
+        return {"message": f"Unsubscribed from '{profile.topic}'."}
+
+    @app.get("/api/watchdog/digests")
+    async def watchdog_list_digests(
+        limit: int = 10,
+        user: User = Depends(current_active_user)
+    ):
+        """List recent watchdog digests for the current user."""
+        from research_agent.app.watchdog_storage import get_watchdog_storage
+        from research_agent.orchestration.watchdog import format_digest_for_display
+
+        storage = get_watchdog_storage()
+        digests = storage.get_user_digests(str(user.id), limit=limit)
+
+        return {
+            "digests": [
+                {
+                    "digest_id": d.digest_id,
+                    "topic": d.topic,
+                    "summary": d.summary,
+                    "paper_count": d.paper_count,
+                    "generated_at": d.generated_at,
+                    "formatted": format_digest_for_display(d),
+                    "papers": [
+                        {
+                            "title": p.get("title", "Untitled"),
+                            "authors": p.get("authors", []),
+                            "year": p.get("year", "n.d."),
+                            "url": p.get("url", ""),
+                            "source": p.get("watchdog_provider", p.get("provider", "unknown")),
+                        }
+                        for p in d.new_papers[:20]
+                    ],
+                }
+                for d in digests
+            ],
+            "count": len(digests),
+        }
+
+    @app.post("/api/watchdog/check")
+    async def watchdog_manual_check(
+        user: User = Depends(current_active_user)
+    ):
+        """Manually trigger a watchdog check for all due profiles."""
+        from research_agent.orchestration.watchdog import run_all_due_checks
+
+        try:
+            digests = await run_all_due_checks(tool_registry)
+            return {
+                "profiles_checked": len(digests),
+                "total_new_papers": sum(d.paper_count for d in digests),
+                "digests": [
+                    {
+                        "profile_id": d.profile_id,
+                        "topic": d.topic,
+                        "paper_count": d.paper_count,
+                        "summary": d.summary,
+                    }
+                    for d in digests
+                ],
+            }
+        except Exception as exc:
+            logger.exception("Manual watchdog check failed")
+            raise HTTPException(status_code=500, detail=f"Watchdog check failed: {exc}")
+
+    @app.post("/api/runs/{run_id}/overleaf/push")
+    async def overleaf_push(
+        run_id: str,
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Push a run's generated LaTeX to Overleaf via snip URL or Git.
+
+        Returns either:
+        - A snip URL for one-click browser opening (default)
+        - A Git push result if a git_url is provided
+        """
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        tex_path = run_dir / "main.tex"
+
+        if not tex_path.exists():
+            raise HTTPException(status_code=404, detail="Run artifacts not found. Run research first.")
+
+        main_tex = tex_path.read_text(encoding="utf-8")
+        bib_path = run_dir / "references.bib"
+        bibtex = bib_path.read_text(encoding="utf-8") if bib_path.exists() else ""
+
+        project_name = body.get("project_name", f"Research: {run_id}")
+        git_url = body.get("git_url", "")
+        method = body.get("method", "snip")
+
+        from research_agent.output.overleaf import (
+            build_overleaf_import_url,
+            build_overleaf_form_html,
+            git_push_to_overleaf,
+        )
+
+        if method == "git" and git_url:
+            git_token = body.get("git_token", None)
+            result = git_push_to_overleaf(
+                git_url=git_url,
+                main_tex=main_tex,
+                bibtex=bibtex,
+                git_token=git_token,
+                commit_message=f"Update from Research Agent run {run_id}",
+            )
+            return result
+
+        elif method == "html":
+            html = build_overleaf_form_html(main_tex, bibtex, project_name=project_name)
+            return {
+                "success": True,
+                "method": "html_form",
+                "html": html,
+                "message": "Auto-submitting HTML form. Opens Overleaf in a new tab.",
+            }
+
+        else:
+            # Default: snip URL
+            url = build_overleaf_import_url(main_tex, bibtex, project_name=project_name)
+            return {
+                "success": True,
+                "method": "snip_url",
+                "url": url,
+                "message": "Click or open the URL to create an Overleaf project with your content.",
+            }
+
+    @app.get("/api/runs/{run_id}/overleaf/status")
+    async def overleaf_status(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """Check if a run's artifacts are ready for Overleaf push and if Git is configured."""
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        tex_path = run_dir / "main.tex"
+
+        from research_agent.output.overleaf import check_overleaf_config
+
+        config = check_overleaf_config()
+
+        return {
+            "run_id": run_id,
+            "artifacts_exist": tex_path.exists(),
+            "main_tex_size": len(tex_path.read_text(encoding="utf-8")) if tex_path.exists() else 0,
+            "git_available": config["git_available"],
+            "git_token_configured": config["git_token_configured"],
+            "snip_available": config["snip_available"],
+        }
+
+    @app.post("/api/runs/{run_id}/overleaf/pull")
+    async def overleaf_pull(
+        run_id: str,
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Pull LaTeX content from an Overleaf project via Git.
+
+        Requires a git_url and OVERLEAF_GIT_TOKEN to be configured.
+        """
+        git_url = body.get("git_url", "")
+        if not git_url:
+            raise HTTPException(status_code=400, detail="git_url is required")
+
+        from research_agent.output.overleaf import git_pull_from_overleaf
+
+        result = git_pull_from_overleaf(
+            git_url=git_url,
+            git_token=body.get("git_token", None),
+        )
+
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("message", "Pull failed"))
+
+        # Save pulled content back to run artifacts
+        artifact_root_local = artifact_root or ".runtime/artifacts"
+        run_dir = Path(artifact_root_local) / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        if result.get("main_tex"):
+            (run_dir / "main.tex").write_text(result["main_tex"], encoding="utf-8")
+        if result.get("bibtex"):
+            (run_dir / "references.bib").write_text(result["bibtex"], encoding="utf-8")
+
+        return result
+
+    @app.get("/api/overleaf/config")
+    async def overleaf_config_check(
+        user: User = Depends(current_active_user)
+    ):
+        """Check Overleaf integration configuration status."""
+        from research_agent.output.overleaf import check_overleaf_config
+        return check_overleaf_config()
 
     @app.post("/api/runs/{run_id}/render")
     async def render_pdf(
