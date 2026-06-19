@@ -41,3 +41,8 @@ artifacts/*
 !data/graph/.gitkeep
 !artifacts/.gitkeep
 spec/
+
+# Generated dirs
+.venv_test/
+.antigravitycli/
+package-lock.json
