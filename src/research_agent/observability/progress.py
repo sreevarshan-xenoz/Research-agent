@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Callable, Iterator, Awaitable, Union
+
+
+logger = logging.getLogger(__name__)
 
 
 ProgressCallback = Union[Callable[[dict[str, str]], None], Callable[[dict[str, str]], Awaitable[None]]]
@@ -66,8 +70,8 @@ async def apublish_progress(
                     "message": message,
                 }
             )
-    except Exception:
-        return
+    except Exception as exc:
+        logger.warning("Progress callback (async) failed: %s: %s", type(exc).__name__, exc)
 
 
 def publish_progress(
@@ -90,5 +94,5 @@ def publish_progress(
                 "message": message,
             }
         )
-    except Exception:
-        return
+    except Exception as exc:
+        logger.warning("Progress callback (sync) failed: %s: %s", type(exc).__name__, exc)

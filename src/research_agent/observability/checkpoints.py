@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 import time
 from typing import Any
 
 from research_agent.orchestration.state import SubtopicTask, WorkflowState
+
+
+logger = logging.getLogger(__name__)
 
 
 def _checkpoint_root() -> Path:
@@ -80,7 +84,7 @@ def _deserialize_state(payload: dict[str, Any]) -> WorkflowState:
         template=payload.get("template", "ieee"),
         phase=payload.get("phase", "intake"),
         iteration_index=int(payload.get("iteration_index", 0)),
-        max_iterations=int(payload.get("max_iterations", 3)),
+        max_iterations=int(payload.get("max_iterations", 4)),
         depth=payload.get("depth", "balanced"),
         autonomy_mode=payload.get("autonomy_mode", "hybrid"),
         max_runtime_minutes=int(payload.get("max_runtime_minutes", 25)),
@@ -163,6 +167,65 @@ def load_session_id() -> str | None:
     if session_file.exists():
         return session_file.read_text(encoding="utf-8").strip()
     return None
+
+
+def cleanup_old_checkpoints(max_age_days: int = 7) -> int:
+    """Delete checkpoint files older than max_age_days.
+
+    Scans all run_id directories under CHECKPOINT_ROOT and removes
+    individual checkpoint JSON files whose saved_at timestamp is
+    older than max_age_days. Empty run directories are then cleaned up.
+
+    Returns:
+        Number of checkpoint files removed.
+    """
+    now = time.time()
+    cutoff = now - (max_age_days * 86400)
+    removed = 0
+
+    root = _checkpoint_root()
+    if not root.exists():
+        return 0
+
+    for run_dir in root.iterdir():
+        if not run_dir.is_dir():
+            continue
+        for cp_file in run_dir.glob("*.json"):
+            try:
+                payload = json.loads(cp_file.read_text(encoding="utf-8"))
+                saved_at = float(payload.get("saved_at", 0))
+                if saved_at < cutoff:
+                    cp_file.unlink()
+                    removed += 1
+            except Exception as exc:
+                # If we can't parse the file, remove it anyway (corrupted)
+                logger.warning("Removing unparseable checkpoint file: %s: %s", cp_file, exc)
+                try:
+                    cp_file.unlink()
+                    removed += 1
+                except Exception as unlink_err:
+                    logger.warning("Failed to remove corrupted checkpoint: %s: %s", cp_file, unlink_err)
+
+        # Remove empty run directories
+        try:
+            if not any(run_dir.iterdir()):
+                run_dir.rmdir()
+        except Exception as exc:
+            logger.debug("Could not remove empty run directory %s: %s", run_dir, exc)
+
+    # Also clean up old event files
+    event_root = _event_root()
+    if event_root.exists():
+        for event_file in event_root.glob("*.ndjson"):
+            try:
+                age = now - event_file.stat().st_mtime
+                if age > cutoff:
+                    event_file.unlink()
+                    removed += 1
+            except Exception as exc:
+                logger.debug("Could not clean up event file %s: %s", event_file, exc)
+
+    return removed
 
 
 def append_run_event(*, run_id: str, event: str, payload: dict[str, Any]) -> Path:
