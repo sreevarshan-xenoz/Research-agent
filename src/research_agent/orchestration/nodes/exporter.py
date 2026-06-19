@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+
 from research_agent.observability import apublish_progress
+from research_agent.observability.logging import ErrorSeverity, log_error
 from research_agent.orchestration.state import GraphState
 from research_agent.output import export_run_artifacts
 from research_agent.output.latex import validate_latex_package
 from research_agent.observability.analytics import aggregate_team_analytics
+
+
+logger = logging.getLogger(__name__)
 
 
 async def exporter_node(state: GraphState) -> dict:
@@ -74,8 +80,13 @@ async def exporter_node(state: GraphState) -> dict:
     # After writing artifacts, refresh global analytics
     try:
         await asyncio.to_thread(aggregate_team_analytics)
-    except Exception:
-        pass
+    except Exception as exc:
+        log_error(
+            "Analytics aggregation failed",
+            severity=ErrorSeverity.RECOVERABLE,
+            component="exporter",
+            detail=f"{type(exc).__name__}: {exc}",
+        )
 
     return {
         "artifact_dir": artifact_dir,

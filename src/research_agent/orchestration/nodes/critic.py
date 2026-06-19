@@ -19,7 +19,7 @@ async def critic_node(state: GraphState) -> dict:
 
     tasks: list[GraphTask] = [t.copy() for t in state["tasks"]]
     iteration_index = state["iteration_index"] + 1
-    contradiction_links = get_contradiction_links(state["run_id"])
+    contradiction_links = await get_contradiction_links(state["run_id"])
 
     def _get_int(provider_data: dict[str, object], key: str) -> int:
         val = provider_data.get(key, 0)
@@ -78,11 +78,18 @@ async def critic_node(state: GraphState) -> dict:
         notes.append("Evidence confidence is acceptable for initial v1 synthesis")
     
     # If we have low confidence and capacity for more iterations, mark ONLY those tasks for re-run
+    await apublish_progress(
+        agent="Critic",
+        status="running",
+        detail=f"Iteration {iteration_index}/{state['max_iterations']}: {len(low_confidence_tasks)} low-confidence tasks",
+        message="Evaluating loop diagnostics",
+    )
+
     if low_confidence_tasks and iteration_index < state["max_iterations"]:
         await apublish_progress(
             agent="Critic",
             status="running",
-            detail=f"Resetting {len(low_confidence_tasks)} low-confidence tasks",
+            detail=f"Resetting {len(low_confidence_tasks)} low-confidence tasks for iteration {iteration_index}",
             message="Planning iteration loop",
         )
         
@@ -103,6 +110,18 @@ async def critic_node(state: GraphState) -> dict:
             }
         ]
         tasks.extend(new_tasks)
+    elif low_confidence_tasks:
+        # At max iterations but still low confidence — will be handled by routing logic
+        await apublish_progress(
+            agent="Critic",
+            status="running",
+            detail=f"Max iterations ({state['max_iterations']}) reached with {len(low_confidence_tasks)} low-confidence tasks",
+            message="Loop limit reached, proceeding to synthesis",
+        )
+        notes.append(
+            f"Max iterations ({state['max_iterations']}) reached — "
+            f"{len(low_confidence_tasks)} task(s) still have low confidence"
+        )
 
     await apublish_progress(
         agent="Critic",

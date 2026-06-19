@@ -17,8 +17,8 @@ async def combiner_node(state: GraphState) -> dict:
         message="Combining findings",
     )
     sections: list[dict[str, Any]] = []
-    index = get_or_create_index(state["run_id"])
-    contradiction_links = get_contradiction_links(state["run_id"])
+    index = await get_or_create_index(state["run_id"])
+    contradiction_links = await get_contradiction_links(state["run_id"])
 
     for task in state["tasks"]:
         task_id = str(task["task_id"])

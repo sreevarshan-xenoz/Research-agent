@@ -3,10 +3,16 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import logging
+
 from research_agent.observability import apublish_progress
+from research_agent.observability.logging import ErrorSeverity, log_error
 from research_agent.orchestration.state import GraphState
 from research_agent.tools.open_alex import OpenAlexAdapter
 from research_agent.config import load_settings
+
+
+logger = logging.getLogger(__name__)
 
 
 def _first_author(item: dict[str, Any]) -> str:
@@ -177,12 +183,19 @@ async def _autofix_citations(
                             if best_match.get(key_field):
                                 cite[key_field] = str(best_match[key_field])
                         repaired_count += 1
-            except Exception:
-                pass
+            except Exception as exc:
+                log_error(
+                    "Citation auto-fix failed",
+                    severity=ErrorSeverity.EXTERNAL_DEPENDENCY,
+                    component="citation_verifier",
+                    detail=f"{type(exc).__name__}: {exc}",
+                )
         return cite
 
-    fixed_citations = await asyncio.gather(*(fix_single(c) for c in citations))
-    return list(fixed_citations), repaired_count
+    fixed_citations = await asyncio.gather(*(fix_single(c) for c in citations), return_exceptions=True)
+    # Filter out any exceptions that bubbled up
+    clean_citations: list[dict[str, Any]] = [c for c in fixed_citations if not isinstance(c, BaseException)]  # type: ignore[arg-type]
+    return clean_citations, repaired_count
 
 
 async def citation_verifier_node(state: GraphState) -> dict:

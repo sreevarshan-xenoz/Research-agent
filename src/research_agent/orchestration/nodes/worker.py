@@ -3,12 +3,18 @@ from __future__ import annotations
 import asyncio
 from typing import Any, cast
 
+import logging
+
 from research_agent.observability import apublish_progress
+from research_agent.observability.logging import ErrorSeverity, log_error
 from research_agent.observability.progress import ProgressCallback, get_progress_callback
 from research_agent.orchestration.state import GraphState, GraphTask
 from research_agent.tools.base import BaseToolAdapter
 from research_agent.tools.registry import arun_multi_source_search
 from research_agent.rag.table_extractor import extract_tables_from_text
+
+
+logger = logging.getLogger(__name__)
 
 WEB_SOURCE_TYPES = {"web", "web_scrape", "browser"}
 
@@ -57,8 +63,13 @@ async def _enrich_web_results_with_page_content(
                     tables = await extract_tables_from_text(content)
                     if tables:
                         item["tables"] = tables
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log_error(
+                        "Table extraction failed",
+                        severity=ErrorSeverity.RECOVERABLE,
+                        component="worker",
+                        detail=type(exc).__name__,
+                    )
             if not item.get("title") and page.get("title"):
                 item["title"] = page["title"]
         if fetched.warnings:
@@ -113,8 +124,13 @@ async def _emit_progress(
                     }
                 )
             return
-        except Exception:
-            pass
+        except Exception as exc:
+            log_error(
+                "Progress callback failed",
+                severity=ErrorSeverity.RECOVERABLE,
+                component="worker",
+                detail=f"{type(exc).__name__}: {exc}",
+            )
 
     await apublish_progress(agent=agent, status=status, detail=detail, message=message)
 
@@ -164,6 +180,13 @@ class WorkerPool:
                     await _enrich_web_results_with_page_content(result_map, registry)
                 except Exception as enrichment_exc:
                     task_warnings.append(f"enrichment_error:{str(enrichment_exc)}")
+                    log_error(
+                        "Page enrichment failed for task %s",
+                        severity=ErrorSeverity.RECOVERABLE,
+                        component="worker",
+                        trace_id=task_id,
+                        detail=str(enrichment_exc),
+                    )
                 
                 # Format findings
                 task_finding = {
@@ -187,8 +210,7 @@ class WorkerPool:
                         task_warnings.append(f"{provider}:{warning}")
                         
             except Exception as search_exc:
-                import traceback
-                traceback.print_exc()
+                logger.exception("Catastrophic search failure for task %s", task_id)
                 task_warnings.append(f"search_catastrophic_error:{str(search_exc)}")
                 task_finding = {"error": {"items": [], "warnings": [str(search_exc)], "item_count": 0}}
             
@@ -238,12 +260,22 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
             for t in ready_tasks
         ]
         
-        results = await asyncio.gather(*execution_tasks)
+        results = await asyncio.gather(*execution_tasks, return_exceptions=True)
 
         # Rough cost estimator
         estimated_cost_usd += len(ready_tasks) * registry_provider_count * 0.01
             
-        for task_id, task_finding, task_warnings in results:
+        for result in results:
+            if isinstance(result, BaseException):
+                run_warnings.append(f"worker_task_fatal:{result}")
+                log_error(
+                    "Worker task raised exception",
+                    severity=ErrorSeverity.FATAL,
+                    component="worker",
+                    detail=str(result),
+                )
+                continue
+            task_id, task_finding, task_warnings = result
             findings[task_id] = task_finding
             run_warnings.extend(task_warnings)
 
