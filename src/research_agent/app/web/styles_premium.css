@@ -345,7 +345,7 @@ button:active {
   100% { text-shadow: 0 0 0 transparent; }
 }
 
-.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel {
+.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel, .datasets-panel {
   display: none;
   flex-direction: column;
   overflow: hidden;
@@ -355,9 +355,28 @@ button:active {
   flex: 1;
 }
 
-.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active {
+.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active, .datasets-panel.active {
   display: flex;
 }
+
+.dataset-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dataset-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
 
 
 
