@@ -29,6 +29,7 @@ from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
 from research_agent.orchestration.nodes.code_execution import code_execution_node
 from research_agent.orchestration.nodes.dataset_discovery import dataset_discovery_node
+from research_agent.orchestration.nodes.grant_proposal import grant_proposal_node
 from research_agent.orchestration.nodes.worker import (
 	get_pending_task_ids,
 	get_ready_task_ids,
@@ -69,6 +70,7 @@ __all__ = [
 	"awaiting_user_critic_node",
 	"code_execution_node",
 	"dataset_discovery_node",
+	"grant_proposal_node",
 ]
 
 
