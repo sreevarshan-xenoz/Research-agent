@@ -345,7 +345,7 @@ button:active {
   100% { text-shadow: 0 0 0 transparent; }
 }
 
-.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel, .datasets-panel {
+.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel, .datasets-panel, .proposal-panel {
   display: none;
   flex-direction: column;
   overflow: hidden;
@@ -355,9 +355,10 @@ button:active {
   flex: 1;
 }
 
-.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active, .datasets-panel.active {
+.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active, .datasets-panel.active, .proposal-panel.active {
   display: flex;
 }
+
 
 .dataset-card {
   background: rgba(255, 255, 255, 0.03);
