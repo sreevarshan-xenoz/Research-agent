@@ -187,7 +187,9 @@
         <button id="blogTabBtn" class="tab-btn" type="button">Blog & Social</button>
         <button id="citationTabBtn" class="tab-btn" type="button">Citation Graph</button>
         <button id="datasetsTabBtn" class="tab-btn" type="button">Datasets</button>
+        <button id="proposalTabBtn" class="tab-btn" type="button">Grant Proposal</button>
       </header>
+
 
 
 
@@ -302,6 +304,59 @@
           <!-- Discovered datasets cards will render here -->
         </div>
       </section>
+
+      <section id="proposalWorkbench" class="panel proposal-panel" style="display: flex; flex-direction: column; min-height: 500px; position: relative; overflow: hidden; padding: 16px;">
+        <div class="doc-header" style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); margin-bottom: 12px;">
+          <span class="doc-label" style="font-weight: 500;">Grant Proposal Generator</span>
+          <div id="proposalStatusText" class="mono small" style="opacity: 0.7;">No active run loaded</div>
+        </div>
+        
+        <div id="proposalFormBlock" class="hidden" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 16px;">
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+              <label for="proposalPIName" style="font-size: 0.8rem; opacity: 0.7;">PI Name</label>
+              <input id="proposalPIName" type="text" value="Dr. Alex Researcher" style="background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: #fff; padding: 6px 8px; font-size: 0.85rem;" />
+            </div>
+            <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+              <label for="proposalPIInstitution" style="font-size: 0.8rem; opacity: 0.7;">PI Institution</label>
+              <input id="proposalPIInstitution" type="text" value="Stanford University" style="background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: #fff; padding: 6px 8px; font-size: 0.85rem;" />
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+              <label for="proposalAgency" style="font-size: 0.8rem; opacity: 0.7;">Target Funding Agency</label>
+              <select id="proposalAgency" style="background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: #fff; padding: 6px 8px; font-size: 0.85rem;">
+                <option value="nsf">National Science Foundation (NSF)</option>
+                <option value="nih">National Institutes of Health (NIH)</option>
+                <option value="erc">European Research Council (ERC)</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px;">
+              <label for="proposalTitle" style="font-size: 0.8rem; opacity: 0.7;">Project Title</label>
+              <input id="proposalTitle" type="text" style="background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: #fff; padding: 6px 8px; font-size: 0.85rem;" />
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label for="proposalAbstract" style="font-size: 0.8rem; opacity: 0.7;">Project Abstract / Summary</label>
+            <textarea id="proposalAbstract" rows="3" style="background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: #fff; padding: 6px 8px; font-size: 0.85rem; resize: vertical;"></textarea>
+          </div>
+          
+          <div style="display: flex; justify-content: flex-end;">
+            <button id="generateProposalBtn" class="btn-icon primary" style="background: var(--primary-glow); padding: 8px 16px; border-radius: var(--radius-sm); border: none; font-size: 0.85rem;" type="button">Generate Proposal</button>
+          </div>
+        </div>
+
+        <div class="proposal-content-container hidden" id="proposalContentContainer" style="position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+          <div id="proposalContentArea" class="mono small" style="white-space: pre-wrap; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); overflow-y: auto; flex: 1; min-height: 350px;">
+          </div>
+          <button id="copyProposalBtn" class="btn-icon" style="position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--glass-border);" type="button">
+            Copy
+          </button>
+        </div>
+      </section>
+
 
 
 
