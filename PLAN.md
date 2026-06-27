@@ -165,11 +165,11 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Researchers need grant proposals. Leveraging existing research output to auto-generate proposal drafts saves significant time.
 
 **What to build:**
-- [ ] New `grant_proposal.py` node
-- [ ] Takes topic + generated sections + peer review
-- [ ] Generates: Title, Abstract, Problem Statement, Methodology, Timeline, Budget Justification, Expected Impact
-- [ ] Export as PDF/Markdown/LaTeX
-- [ ] Templates for NSF, NIH, ERC formats
+- [x] New `grant_proposal.py` node
+- [x] Takes topic + generated sections + peer review
+- [x] Generates: Title, Abstract, Problem Statement, Methodology, Timeline, Budget Justification, Expected Impact
+- [x] Export as PDF/Markdown/LaTeX
+- [x] Templates for NSF, NIH, ERC formats
 
 **Feasibility:** Medium. Reuses LLM + LaTeX infrastructure. Domain-specific templates needed.
 
