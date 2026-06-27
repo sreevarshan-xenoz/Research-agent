@@ -15,8 +15,12 @@ const sendBtn = document.getElementById("sendBtn");
 const agentPanelEl = document.getElementById("agentPanel");
 const latexTabBtn = document.getElementById("latexTabBtn");
 const docTabBtn = document.getElementById("docTabBtn");
+const previewTabBtn = document.getElementById("previewTabBtn");
+const blogTabBtn = document.getElementById("blogTabBtn");
 const latexWorkbenchEl = document.getElementById("latexWorkbench");
 const docWorkbenchEl = document.getElementById("docWorkbench");
+const previewWorkbenchEl = document.getElementById("previewWorkbench");
+const blogWorkbenchEl = document.getElementById("blogWorkbench");
 const latexStreamEl = document.getElementById("latexStream");
 const docEditorEl = document.getElementById("docEditor");
 const newOverleafLinkEl = document.getElementById("newOverleafLink");
@@ -24,6 +28,32 @@ const bundleLinkEl = document.getElementById("bundleLink");
 const pdfLinkEl = document.getElementById("pdfLink");
 const overleafPushBtn = document.getElementById("overleafPushBtn");
 const overleafPullBtn = document.getElementById("overleafPullBtn");
+
+// Preview Elements
+const renderPdfBtn = document.getElementById("renderPdfBtn");
+const renderStatusText = document.getElementById("renderStatusText");
+const pdfPreviewIframe = document.getElementById("pdfPreviewIframe");
+const pdfPlaceholder = document.getElementById("pdfPlaceholder");
+
+// Blog & Social Elements
+const generateBlogBtn = document.getElementById("generateBlogBtn");
+const blogStatusText = document.getElementById("blogStatusText");
+const blogSubTabBtn = document.getElementById("blogSubTabBtn");
+const newsletterSubTabBtn = document.getElementById("newsletterSubTabBtn");
+const twitterSubTabBtn = document.getElementById("twitterSubTabBtn");
+const blogContentArea = document.getElementById("blogContentArea");
+const copyBlogContentBtn = document.getElementById("copyBlogContentBtn");
+
+// Multi-mode Elements
+const surveyConfigBlock = document.getElementById("surveyConfigBlock");
+const libraryConfigBlock = document.getElementById("libraryConfigBlock");
+const surveyNumTopics = document.getElementById("surveyNumTopics");
+const pdfUploadInput = document.getElementById("pdfUploadInput");
+const uploadStatusText = document.getElementById("uploadStatusText");
+const librarySelect = document.getElementById("librarySelect");
+const runModeRadios = document.querySelectorAll('input[name="runMode"]');
+
+
 
 // Overleaf Push Modal
 const overleafModal = document.getElementById("overleafModal");
@@ -91,6 +121,9 @@ let loadingMessageNode = null;
 let loadingTickerId = null;
 let authToken = localStorage.getItem("research_auth_token");
 let authMode = "login"; // "login" or "register"
+let blogData = null;
+let activeBlogSubTab = "blog";
+
 
 class WebSocketManager {
   constructor() {
@@ -207,14 +240,22 @@ function checkAuth() {
 }
 
 function switchWorkbenchTab(tab) {
-  const isDoc = tab === "doc";
-  if (docTabBtn) docTabBtn.classList.toggle("active", isDoc);
-  if (latexTabBtn) latexTabBtn.classList.toggle("active", !isDoc);
+  if (docTabBtn) docTabBtn.classList.toggle("active", tab === "doc");
+  if (latexTabBtn) latexTabBtn.classList.toggle("active", tab === "latex");
+  if (previewTabBtn) previewTabBtn.classList.toggle("active", tab === "preview");
+  if (blogTabBtn) blogTabBtn.classList.toggle("active", tab === "blog");
+
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
-  if (docPanel) docPanel.classList.toggle("active", isDoc);
-  if (latexPanel) latexPanel.classList.toggle("active", !isDoc);
+  const previewPanel = document.querySelector(".preview-panel");
+  const blogPanel = document.querySelector(".blog-panel");
+
+  if (docPanel) docPanel.classList.toggle("active", tab === "doc");
+  if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
+  if (previewPanel) previewPanel.classList.toggle("active", tab === "preview");
+  if (blogPanel) blogPanel.classList.toggle("active", tab === "blog");
 }
+
 
 function setDocStatus(status, text) {
   if (!docStatusEl) return;
@@ -313,7 +354,22 @@ function resetWorkbench() {
   currentRunId = null;
   setWorkbenchStatus("idle", "idle");
   updatePipelineTracker("intake");
+
+  // Reset PDF render preview elements
+  if (pdfPreviewIframe) {
+    pdfPreviewIframe.src = "";
+    pdfPreviewIframe.classList.add("hidden");
+  }
+  if (pdfPlaceholder) pdfPlaceholder.classList.remove("hidden");
+  if (renderStatusText) renderStatusText.textContent = "";
+
+  // Reset Blog Export elements
+  blogData = null;
+  activeBlogSubTab = "blog";
+  if (blogContentArea) blogContentArea.textContent = "No content generated yet. Click \"Generate Blog & Social\".";
+  if (blogStatusText) blogStatusText.textContent = "";
 }
+
 
 function renderEvidenceExplorer(sectionEvidence) {
   if (!evidenceExplorerEl) return;
@@ -556,6 +612,152 @@ async function sendMessageStream(text, onEvent) {
     max_runtime_minutes: Number.parseInt(runtimeCapInput?.value),
     max_cost_usd: Number.parseFloat(costCapInput?.value),
   });
+// Mode Toggle Handlers
+runModeRadios.forEach(radio => {
+  radio.addEventListener("change", (e) => {
+    const mode = e.target.value;
+    surveyConfigBlock?.classList.toggle("hidden", mode !== "survey");
+    libraryConfigBlock?.classList.toggle("hidden", mode !== "chat");
+    
+    if (mode === "paper") {
+      messageInput.placeholder = "Enter a research topic...";
+    } else if (mode === "survey") {
+      messageInput.placeholder = "Enter a broad research area to survey...";
+    } else if (mode === "chat") {
+      messageInput.placeholder = "Ask a question about the active document...";
+      loadUserLibraries();
+    }
+  });
+});
+
+async function loadUserLibraries() {
+  try {
+    const res = await fetch("/api/chat/library", {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (librarySelect && data.libraries) {
+      librarySelect.innerHTML = '<option value="">Select an indexed document</option>';
+      data.libraries.forEach(lib => {
+        const opt = document.createElement("option");
+        opt.value = lib.library_id;
+        opt.textContent = `${lib.title || "Untitled"} (${lib.doc_count} docs)`;
+        librarySelect.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    console.error("Failed to load libraries:", err);
+  }
+}
+
+pdfUploadInput?.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  if (uploadStatusText) uploadStatusText.textContent = "Uploading & indexing...";
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  try {
+    const res = await fetch("/api/chat/upload", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Upload failed.");
+    }
+    if (uploadStatusText) uploadStatusText.textContent = "Indexed successfully!";
+    await loadUserLibraries();
+    if (librarySelect && data.library_id) {
+      librarySelect.value = data.library_id;
+    }
+  } catch (err) {
+    if (uploadStatusText) uploadStatusText.textContent = `Upload failed: ${err.message}`;
+    console.error(err);
+  }
+});
+
+async function runSurveyFlow(topic) {
+  const numTopics = Number.parseInt(surveyNumTopics?.value) || 5;
+  startGeneratingUI();
+  setWorkbenchStatus("running", "survey planning");
+  updatePipelineTracker("intake");
+  try {
+    const res = await fetch("/api/survey", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ topic, num_topics: numTopics })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Survey generation failed.");
+    }
+    currentRunId = data.run_id || null;
+    if (currentRunId && overleafPushBtn) overleafPushBtn.classList.remove("hidden");
+    if (currentRunId && overleafPullBtn) overleafPullBtn.classList.remove("hidden");
+    
+    renderDocPreview(
+      `<h1>Literature Survey: ${data.topic}</h1>` +
+      `<p><strong>Sub-topics:</strong> ${data.sub_topics.map(t => t.name).join(", ")}</p>` +
+      `<hr/>` +
+      `<h2>Timeline</h2><div style="font-family: monospace; white-space: pre-wrap; font-size: 0.9em; line-height: 1.5;">${data.timeline}</div><hr/>` +
+      `<h2>Taxonomy</h2><div style="font-family: monospace; white-space: pre-wrap; font-size: 0.9em; line-height: 1.5;">${data.taxonomy_table}</div><hr/>` +
+      `<h2>Research Landscape</h2><div style="font-family: monospace; white-space: pre-wrap; font-size: 0.9em; line-height: 1.5;">${data.research_landscape}</div><hr/>` +
+      `<h2>Survey Paper</h2><div>${data.survey}</div>`
+    );
+    
+    const codeEl = latexStreamEl?.querySelector("code");
+    if (codeEl && data.survey) {
+      codeEl.textContent = data.survey;
+      if (typeof Prism !== 'undefined') Prism.highlightElement(codeEl);
+    }
+    
+    appendMessage("assistant", `Multi-paper survey on "${data.topic}" generated successfully. Collected and synthesized findings from ${data.paper_count} papers across ${data.sub_topics.length} sub-topics in ${data.duration_seconds.toFixed(0)} seconds.`);
+    setWorkbenchStatus("ready", "success");
+    updatePipelineTracker("completed");
+    switchWorkbenchTab("doc");
+  } catch (err) {
+    appendMessage("assistant", `Survey generation failed: ${err.message}`);
+    setWorkbenchStatus("error", "error");
+  } finally {
+    stopGeneratingUI();
+  }
+}
+
+async function runLibraryChatFlow(question) {
+  const libraryId = librarySelect?.value;
+  if (!libraryId) {
+    appendMessage("assistant", "Please upload a PDF document and select it in the dropdown first.");
+    return;
+  }
+  startGeneratingUI();
+  try {
+    const res = await fetch("/api/chat/ask", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ library_id: libraryId, question })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Q&A request failed.");
+    }
+    appendMessage("assistant", data.answer || data.response || "No response received.");
+  } catch (err) {
+    appendMessage("assistant", `Q&A failed: ${err.message}`);
+  } finally {
+    stopGeneratingUI();
+  }
 }
 
 chatForm?.addEventListener("submit", async (e) => {
@@ -564,49 +766,62 @@ chatForm?.addEventListener("submit", async (e) => {
   if (!text) return;
   appendMessage("user", text);
   messageInput.value = "";
-  startGeneratingUI();
-  try {
-    let payload = null;
-    await new Promise((resolve, reject) => {
-      sendMessageStream(text, (eventData) => {
-        if (eventData.event === "status") {
-          if (eventData.payload.phase) updatePipelineTracker(eventData.payload.phase);
-          renderAgentActivity(eventData.payload.agent_activity || []);
-        } else if (eventData.event === "latex_chunk") {
-          appendLatexChunk(eventData.payload.chunk);
-        } else if (eventData.event === "result" || eventData.event === "clarification" || eventData.event === "critic_feedback") {
-          payload = eventData.payload; resolve();
-        } else if (eventData.event === "error") reject(new Error(eventData.payload.message));
-      }).catch(reject);
-    });
-    if (payload.kind === "clarification") {
-      appendMessage("assistant", payload.assistant_message, { persona: payload.persona });
-      messageInput.placeholder = "Please clarify details...";
-      setWorkbenchStatus("waiting", "clarification");
-    } else if (payload.kind === "critic_feedback") {
-      appendMessage("assistant", payload.assistant_message, { persona: payload.persona });
-      messageInput.placeholder = "Provide guidance to the agent...";
-      setWorkbenchStatus("waiting", "critic review");
-    } else {
-      appendMessage("assistant", payload.assistant_message, {
-        persona: payload.persona,
-        links: { "PDF": payload.artifact_urls?.pdf, "Overleaf": payload.overleaf_urls?.new_project }
+
+  const activeMode = document.querySelector('input[name="runMode"]:checked')?.value || "paper";
+  if (activeMode === "survey") {
+    await runSurveyFlow(text);
+  } else if (activeMode === "chat") {
+    await runLibraryChatFlow(text);
+  } else {
+    startGeneratingUI();
+    try {
+      let payload = null;
+      await new Promise((resolve, reject) => {
+        sendMessageStream(text, (eventData) => {
+          if (eventData.event === "status") {
+            if (eventData.payload.phase) updatePipelineTracker(eventData.payload.phase);
+            renderAgentActivity(eventData.payload.agent_activity || []);
+          } else if (eventData.event === "latex_chunk") {
+            appendLatexChunk(eventData.payload.chunk);
+          } else if (eventData.event === "result" || eventData.event === "clarification" || eventData.event === "critic_feedback") {
+            payload = eventData.payload; resolve();
+          } else if (eventData.event === "error") reject(new Error(eventData.payload.message));
+        }).catch(reject);
       });
-      messageInput.placeholder = "Enter a new research topic...";
-      currentRunId = payload.run_id || null;
-      if (currentRunId && overleafPushBtn) overleafPushBtn.classList.remove("hidden");
-      if (currentRunId && overleafPullBtn) overleafPullBtn.classList.remove("hidden");
-      const codeEl = latexStreamEl?.querySelector("code");
-      if (codeEl && payload.latex_text) { codeEl.textContent = payload.latex_text; Prism.highlightElement(codeEl); }
-      renderDocPreview(payload.doc_preview_html);
-      renderArtifacts(payload.artifact_urls);
-      setWorkbenchStatus("ready", "success");
-      updatePipelineTracker("completed");
-      switchWorkbenchTab("doc");
+      if (payload.kind === "clarification") {
+        appendMessage("assistant", payload.assistant_message, { persona: payload.persona });
+        messageInput.placeholder = "Please clarify details...";
+        setWorkbenchStatus("waiting", "clarification");
+      } else if (payload.kind === "critic_feedback") {
+        appendMessage("assistant", payload.assistant_message, { persona: payload.persona });
+        messageInput.placeholder = "Provide guidance to the agent...";
+        setWorkbenchStatus("waiting", "critic review");
+      } else {
+        appendMessage("assistant", payload.assistant_message, {
+          persona: payload.persona,
+          links: { "PDF": payload.artifact_urls?.pdf, "Overleaf": payload.overleaf_urls?.new_project }
+        });
+        messageInput.placeholder = "Enter a new research topic...";
+        currentRunId = payload.run_id || null;
+        if (currentRunId && overleafPushBtn) overleafPushBtn.classList.remove("hidden");
+        if (currentRunId && overleafPullBtn) overleafPullBtn.classList.remove("hidden");
+        const codeEl = latexStreamEl?.querySelector("code");
+        if (codeEl && payload.latex_text) { codeEl.textContent = payload.latex_text; Prism.highlightElement(codeEl); }
+        renderDocPreview(payload.doc_preview_html);
+        renderArtifacts(payload.artifact_urls);
+        setWorkbenchStatus("ready", "success");
+        updatePipelineTracker("completed");
+        switchWorkbenchTab("doc");
+      }
+    } catch (err) {
+      appendMessage("assistant", `Error: ${err.message}`);
+      setWorkbenchStatus("error", "error");
+    } finally {
+      stopGeneratingUI();
     }
-  } catch (err) { appendMessage("assistant", `Error: ${err.message}`); setWorkbenchStatus("error", "error"); }
-  finally { stopGeneratingUI(); }
+  }
 });
+
 
 newSessionBtn?.addEventListener("click", () => {
   sessionId = null; localStorage.removeItem("research_session_id");
@@ -624,7 +839,141 @@ stopRunBtn?.addEventListener("click", async () => {
 
 latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));
 docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
+previewTabBtn?.addEventListener("click", () => switchWorkbenchTab("preview"));
+blogTabBtn?.addEventListener("click", () => switchWorkbenchTab("blog"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
+
+// Preview PDF Handlers
+renderPdfBtn?.addEventListener("click", () => {
+  compilePdfForRun(currentRunId);
+});
+
+async function compilePdfForRun(runId) {
+  if (!runId) {
+    alert("Please run a research topic first.");
+    return;
+  }
+  if (renderPdfBtn) renderPdfBtn.disabled = true;
+  if (renderStatusText) renderStatusText.textContent = "Compiling LaTeX to PDF...";
+  try {
+    const res = await fetch(`/api/runs/${runId}/render`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${authToken}`
+      }
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "PDF compilation failed.");
+    }
+    if (data.status === "compiled" || data.pdf_path) {
+      if (renderStatusText) renderStatusText.textContent = "PDF Rendered successfully!";
+      if (pdfPreviewIframe) {
+        pdfPreviewIframe.src = `/api/runs/${runId}/render/pdf?t=${Date.now()}`;
+        pdfPreviewIframe.classList.remove("hidden");
+      }
+      if (pdfPlaceholder) pdfPlaceholder.classList.add("hidden");
+    } else {
+      if (renderStatusText) renderStatusText.textContent = `Rendering error: ${data.message || "Unknown error"}`;
+    }
+  } catch (err) {
+    if (renderStatusText) renderStatusText.textContent = `Error: ${err.message}`;
+    console.error(err);
+  } finally {
+    if (renderPdfBtn) renderPdfBtn.disabled = false;
+  }
+}
+
+// Blog & Social Handlers
+generateBlogBtn?.addEventListener("click", () => {
+  generateBlogPosts(currentRunId);
+});
+
+async function generateBlogPosts(runId) {
+  if (!runId) {
+    alert("Please run a research topic first.");
+    return;
+  }
+  if (generateBlogBtn) generateBlogBtn.disabled = true;
+  if (blogStatusText) blogStatusText.textContent = "Generating blog copy...";
+  try {
+    const res = await fetch(`/api/runs/${runId}/export/blog`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        formats: ["blog", "newsletter", "twitter"]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Blog generation failed.");
+    }
+    blogData = data.outputs || data;
+    if (blogStatusText) blogStatusText.textContent = "Generated successfully!";
+    displayActiveBlogTab();
+  } catch (err) {
+    if (blogStatusText) blogStatusText.textContent = `Error: ${err.message}`;
+    console.error(err);
+  } finally {
+    if (generateBlogBtn) generateBlogBtn.disabled = false;
+  }
+}
+
+function displayActiveBlogTab() {
+  if (!blogData || !blogContentArea) return;
+  
+  if (blogSubTabBtn) blogSubTabBtn.classList.toggle("active", activeBlogSubTab === "blog");
+  if (newsletterSubTabBtn) newsletterSubTabBtn.classList.toggle("active", activeBlogSubTab === "newsletter");
+  if (twitterSubTabBtn) twitterSubTabBtn.classList.toggle("active", activeBlogSubTab === "twitter");
+  
+  let content = "No content available.";
+  if (activeBlogSubTab === "blog") {
+    content = blogData.blog || blogData.blog_markdown || "Blog post markdown not generated.";
+  } else if (activeBlogSubTab === "newsletter") {
+    content = blogData.newsletter || blogData.newsletter_summary || "Newsletter summary not generated.";
+  } else if (activeBlogSubTab === "twitter") {
+    const threads = blogData.twitter || blogData.twitter_thread || "Twitter thread not generated.";
+    if (Array.isArray(threads)) {
+      content = threads.map((tweet, idx) => `[Tweet ${idx + 1}]\n${tweet}`).join("\n\n");
+    } else {
+      content = threads;
+    }
+  }
+  
+  blogContentArea.textContent = content;
+}
+
+blogSubTabBtn?.addEventListener("click", () => {
+  activeBlogSubTab = "blog";
+  displayActiveBlogTab();
+});
+
+newsletterSubTabBtn?.addEventListener("click", () => {
+  activeBlogSubTab = "newsletter";
+  displayActiveBlogTab();
+});
+
+twitterSubTabBtn?.addEventListener("click", () => {
+  activeBlogSubTab = "twitter";
+  displayActiveBlogTab();
+});
+
+copyBlogContentBtn?.addEventListener("click", () => {
+  if (!blogContentArea) return;
+  const content = blogContentArea.textContent;
+  if (!content || content.startsWith("No content generated")) return;
+  navigator.clipboard.writeText(content).then(() => {
+    const originalText = copyBlogContentBtn.textContent;
+    copyBlogContentBtn.textContent = "Copied!";
+    setTimeout(() => {
+      copyBlogContentBtn.textContent = originalText;
+    }, 2000);
+  }).catch((err) => console.error("Clipboard copy failed:", err));
+});
+
 
 // ── Overleaf API Functions ──────────────────────────────────
 
