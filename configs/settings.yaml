@@ -20,19 +20,25 @@ models:
   subagent_cloud: openrouter/free
   subagent_nvidia: moonshotai/kimi-k2-instruct-0905
 
-  # Provider priority order (list)
-  # Options: ollama, openrouter, nvidia
   provider_priority:
     - nvidia
     - ollama
+
+retrieval:
+  web_provider: hybrid
+  web_search_depth: advanced
+  paper_providers:
+    - arxiv
     - semantic_scholar
     - openalex
+    - pubmed
   max_papers_per_section: 15
   chunk_size: 1024
   chunk_overlap: 128
   allow_metadata_fallback: true
   metadata_fallback_confidence_penalty: 0.15
-  enable_fuzzy_dedup: true       # SHA1 fingerprint dedup across runs
+  enable_fuzzy_dedup: true
+
 
 # NEW v2 feature flags
 features:
