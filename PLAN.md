@@ -180,12 +180,13 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Trending topics and analytics help users decide what to research.
 
 **What to build:**
-- [ ] Aggregate search across ArXiv / Semantic Scholar for recent papers
-- [ ] Topic trend analysis (rising/falling keywords)
-- [ ] Dashboard UI with charts (paper count over time, top authors, top institutions)
-- [ ] Weekly trend report email
+- [x] Aggregate search across ArXiv / Semantic Scholar for recent papers
+- [x] Topic trend analysis (rising/falling keywords)
+- [x] Dashboard UI with charts (paper count over time, top authors, top institutions)
+- [x] Weekly trend report email
 
 **Feasibility:** Low. Heavy data pipeline. Requires significant infrastructure.
+
 
 ---
 
