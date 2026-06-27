@@ -149,15 +149,16 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Connecting research questions to relevant datasets from Hugging Face and Kaggle bridges the gap between theory and experimentation.
 
 **What to build:**
-- [ ] New `tools/huggingface.py` adapter — search datasets by topic
-- [ ] New `tools/kaggle.py` adapter — search Kaggle datasets
-- [ ] New node `dataset_discovery.py` — identifies relevant datasets for the research topic
-- [ ] Include dataset links, descriptions, and download counts in artifacts
-- [ ] UI: "Datasets" tab showing discovered datasets
+- [x] New `tools/huggingface.py` adapter — search datasets by topic
+- [x] New `tools/kaggle.py` adapter — search Kaggle datasets
+- [x] New node `dataset_discovery.py` — identifies relevant datasets for the research topic
+- [x] Include dataset links, descriptions, and download counts in artifacts
+- [x] UI: "Datasets" tab showing discovered datasets
 
 **Feasibility:** High. Simple API queries. Reuse existing tool pattern.
 
 ---
+
 
 ## Priority 9: Grant Proposal Generator (P3 — Medium Value, Low-Medium Complexity)
 
