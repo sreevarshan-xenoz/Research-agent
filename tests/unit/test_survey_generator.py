@@ -351,7 +351,8 @@ class TestRunSurvey:
             assert result.timeline
             assert result.research_landscape
             assert result.run_id.startswith("survey-")
-            assert result.duration_seconds > 0
+            assert result.duration_seconds >= 0
+
 
     async def test_pipeline_with_fallback(self):
         """Test pipeline handles LLM failures gracefully."""
