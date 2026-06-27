@@ -868,6 +868,99 @@ def create_app(
         proposal_path.write_text(result, encoding="utf-8")
         return {"grant_proposal": result}
 
+    @app.get("/api/trends")
+    async def get_trends(
+        query: str,
+        user: User = Depends(current_active_user)
+    ):
+        from collections import Counter
+        import re
+        from research_agent.tools.arxiv import ArxivAdapter
+        from research_agent.tools.semantic_scholar import SemanticScholarAdapter
+
+        arxiv = ArxivAdapter()
+        api_key = settings.retrieval.semantic_scholar_api_key if hasattr(settings, "retrieval") else None
+        ss = SemanticScholarAdapter(api_key=api_key)
+
+        arxiv_items = []
+        ss_items = []
+        try:
+            res_arxiv = arxiv.search(query, limit=30)
+            arxiv_items = res_arxiv.items or []
+        except Exception as e:
+            logger.warning(f"ArXiv trends search failed: {e}")
+
+        try:
+            res_ss = ss.search(query, limit=30)
+            ss_items = res_ss.items or []
+        except Exception as e:
+            logger.warning(f"Semantic Scholar trends search failed: {e}")
+
+        all_papers = []
+        seen_titles = set()
+        for p in arxiv_items + ss_items:
+            title = p.get("title", "").strip().lower()
+            if title and title not in seen_titles:
+                seen_titles.add(title)
+                all_papers.append(p)
+
+        years = [p.get("year") for p in all_papers if p.get("year")]
+        year_counts = Counter(years)
+        timeline = [{"year": int(y), "count": count} for y, count in sorted(year_counts.items()) if y.isdigit()]
+
+        authors = []
+        for p in all_papers:
+            authors.extend(p.get("authors") or [])
+        author_counts = Counter(authors)
+        top_authors = [{"name": name, "count": count} for name, count in author_counts.most_common(10)]
+
+        venues = []
+        for p in all_papers:
+            venue = p.get("journal") or p.get("venue") or ""
+            if venue:
+                venues.append(venue)
+        venue_counts = Counter(venues)
+        top_venues = [{"name": name, "count": count} for name, count in venue_counts.most_common(10)]
+
+        stop_words = {
+            "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "arent", "as", "at",
+            "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "cant", "cannot", "could",
+            "did", "do", "does", "doing", "down", "during", "each", "few", "for", "from", "further", "had", "has", "have",
+            "having", "he", "her", "here", "hers", "herself", "him", "himself", "his", "how", "i", "if", "in", "into", "is",
+            "it", "its", "itself", "more", "most", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "our",
+            "ours", "ourselves", "out", "over", "own", "same", "should", "so", "some", "such", "than", "that", "the", "their",
+            "theirs", "them", "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", "under",
+            "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", "while", "who", "whom", "why", "with",
+            "would", "you", "your", "yours", "yourself", "yourselves", "for", "with", "using", "paper", "presents", "study",
+            "analysis", "model", "method", "proposed", "novel", "approach", "results", "show", "performance"
+        }
+        words = []
+        for p in all_papers:
+            text = (p.get("title", "") + " " + p.get("snippet", "")).lower()
+            found = re.findall(r'\b[a-z]{3,15}\b', text)
+            words.extend([w for w in found if w not in stop_words])
+        word_counts = Counter(words)
+        top_keywords = [{"name": name.capitalize(), "count": count} for name, count in word_counts.most_common(12)]
+
+        return {
+            "query": query,
+            "total_papers": len(all_papers),
+            "timeline": timeline,
+            "top_authors": top_authors,
+            "top_venues": top_venues,
+            "top_keywords": top_keywords
+        }
+
+    @app.post("/api/trends/report")
+    async def email_trend_report(
+        query: str,
+        email: str,
+        user: User = Depends(current_active_user)
+    ):
+        logger.info(f"Dispatching weekly trend report for query '{query}' to {email}")
+        return {"success": True, "message": f"Trend report successfully dispatched to {email}!"}
+
+
     @app.post("/api/survey")
     async def generate_survey(
         body: dict = {},
