@@ -267,7 +267,7 @@ def create_app(
             raise HTTPException(status_code=404, detail="Session not found")
         
         events = []
-        event_path = _event_root() / f"{session.last_run_id}.ndjson"
+        event_path = _event_root() / f"{session.last_run_id}.ndjson"  # type: ignore[operator]
         if event_path.exists():
             try:
                 for line in event_path.read_text(encoding="utf-8").splitlines():
@@ -670,7 +670,8 @@ def create_app(
         library_id = f"lib-{uuid.uuid4().hex[:8]}"
         tmp_dir = Path(".runtime/chat_uploads")
         tmp_dir.mkdir(parents=True, exist_ok=True)
-        tmp_path = tmp_dir / file.filename
+        filename = file.filename or "uploaded_document.pdf"
+        tmp_path = tmp_dir / filename
 
         content = await file.read()
         tmp_path.write_bytes(content)
@@ -681,8 +682,10 @@ def create_app(
 
         text = result["text"]
         metadata = result["metadata"]
-        metadata["source"] = file.filename
+        metadata["source"] = filename
+
         metadata["library_id"] = library_id
+
 
         from research_agent.chat.indexer import ChatLibraryIndex
         index = ChatLibraryIndex(library_id)
@@ -765,7 +768,6 @@ def create_app(
         run_id: str,
         user: User = Depends(current_active_user)
     ):
-        artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
         run_dir = Path(artifact_root) / run_id
         graph_path = run_dir / "citation_graph.json"
         if graph_path.exists():
@@ -778,7 +780,6 @@ def create_app(
         run_id: str,
         user: User = Depends(current_active_user)
     ):
-        artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
         run_dir = Path(artifact_root) / run_id
         gap_path = run_dir / "gap_analysis.md"
         if gap_path.exists():
@@ -822,7 +823,6 @@ def create_app(
         request: GrantProposalRequest,
         user: User = Depends(current_active_user),
     ):
-        artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
         run_dir = Path(artifact_root) / run_id
         if not run_dir.exists():
             raise HTTPException(status_code=404, detail="Run not found")
@@ -884,7 +884,6 @@ def create_app(
             )
 
             # Save survey to artifacts
-            artifact_root = settings.runtime.artifact_root or ".runtime/artifacts"
             survey_dir = Path(artifact_root) / result.run_id
             survey_dir.mkdir(parents=True, exist_ok=True)
 
