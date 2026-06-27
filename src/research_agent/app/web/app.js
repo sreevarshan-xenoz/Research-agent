@@ -19,12 +19,15 @@ const previewTabBtn = document.getElementById("previewTabBtn");
 const blogTabBtn = document.getElementById("blogTabBtn");
 const citationTabBtn = document.getElementById("citationTabBtn");
 const datasetsTabBtn = document.getElementById("datasetsTabBtn");
+const proposalTabBtn = document.getElementById("proposalTabBtn");
 const latexWorkbenchEl = document.getElementById("latexWorkbench");
 const docWorkbenchEl = document.getElementById("docWorkbench");
 const previewWorkbenchEl = document.getElementById("previewWorkbench");
 const blogWorkbenchEl = document.getElementById("blogWorkbench");
 const citationWorkbenchEl = document.getElementById("citationWorkbench");
 const datasetsWorkbenchEl = document.getElementById("datasetsWorkbench");
+const proposalWorkbenchEl = document.getElementById("proposalWorkbench");
+
 
 
 const latexStreamEl = document.getElementById("latexStream");
@@ -66,6 +69,18 @@ const citationInfoYear = document.getElementById("citationInfoYear");
 const citationInfoUrl = document.getElementById("citationInfoUrl");
 const datasetsStatusText = document.getElementById("datasetsStatusText");
 const datasetsContainer = document.getElementById("datasetsContainer");
+const proposalPIName = document.getElementById("proposalPIName");
+const proposalPIInstitution = document.getElementById("proposalPIInstitution");
+const proposalAgency = document.getElementById("proposalAgency");
+const proposalTitle = document.getElementById("proposalTitle");
+const proposalAbstract = document.getElementById("proposalAbstract");
+const generateProposalBtn = document.getElementById("generateProposalBtn");
+const proposalContentContainer = document.getElementById("proposalContentContainer");
+const proposalContentArea = document.getElementById("proposalContentArea");
+const copyProposalBtn = document.getElementById("copyProposalBtn");
+const proposalStatusText = document.getElementById("proposalStatusText");
+const proposalFormBlock = document.getElementById("proposalFormBlock");
+
 
 
 
@@ -262,6 +277,7 @@ function switchWorkbenchTab(tab) {
   if (blogTabBtn) blogTabBtn.classList.toggle("active", tab === "blog");
   if (citationTabBtn) citationTabBtn.classList.toggle("active", tab === "citation");
   if (datasetsTabBtn) datasetsTabBtn.classList.toggle("active", tab === "datasets");
+  if (proposalTabBtn) proposalTabBtn.classList.toggle("active", tab === "proposal");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
@@ -269,6 +285,7 @@ function switchWorkbenchTab(tab) {
   const blogPanel = document.querySelector(".blog-panel");
   const citationPanel = document.querySelector(".citation-panel");
   const datasetsPanel = document.querySelector(".datasets-panel");
+  const proposalPanel = document.querySelector(".proposal-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
   if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
@@ -276,11 +293,14 @@ function switchWorkbenchTab(tab) {
   if (blogPanel) blogPanel.classList.toggle("active", tab === "blog");
   if (citationPanel) citationPanel.classList.toggle("active", tab === "citation");
   if (datasetsPanel) datasetsPanel.classList.toggle("active", tab === "datasets");
+  if (proposalPanel) proposalPanel.classList.toggle("active", tab === "proposal");
 
   if (tab === "citation") {
     loadCitationGraph();
   } else if (tab === "datasets") {
     loadDiscoveredDatasets();
+  } else if (tab === "proposal") {
+    loadProposalTab();
   }
 }
 
@@ -405,6 +425,14 @@ function resetWorkbench() {
   // Reset Datasets elements
   if (datasetsStatusText) datasetsStatusText.textContent = "No active run loaded";
   if (datasetsContainer) datasetsContainer.innerHTML = "";
+
+  // Reset Proposal elements
+  if (proposalStatusText) proposalStatusText.textContent = "No active run loaded";
+  if (proposalFormBlock) proposalFormBlock.classList.add("hidden");
+  if (proposalContentContainer) proposalContentContainer.classList.add("hidden");
+  if (proposalContentArea) proposalContentArea.textContent = "";
+  if (proposalTitle) proposalTitle.value = "";
+  if (proposalAbstract) proposalAbstract.value = "";
 }
 
 
@@ -880,7 +908,9 @@ previewTabBtn?.addEventListener("click", () => switchWorkbenchTab("preview"));
 blogTabBtn?.addEventListener("click", () => switchWorkbenchTab("blog"));
 citationTabBtn?.addEventListener("click", () => switchWorkbenchTab("citation"));
 datasetsTabBtn?.addEventListener("click", () => switchWorkbenchTab("datasets"));
+proposalTabBtn?.addEventListener("click", () => switchWorkbenchTab("proposal"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
+
 
 
 
@@ -1509,6 +1539,96 @@ function renderDiscoveredDatasets(datasets) {
     `;
   }).join("");
 }
+
+function loadProposalTab() {
+  if (!currentRunId) {
+    if (proposalStatusText) proposalStatusText.textContent = "No active run loaded yet.";
+    if (proposalFormBlock) proposalFormBlock.classList.add("hidden");
+    if (proposalContentContainer) proposalContentContainer.classList.add("hidden");
+    return;
+  }
+  
+  if (proposalStatusText) proposalStatusText.textContent = "Ready to generate proposal";
+  if (proposalFormBlock) proposalFormBlock.classList.remove("hidden");
+  
+  if (proposalTitle && !proposalTitle.value) {
+    const text = messageInput?.value.trim();
+    proposalTitle.value = text || "Research Project Proposal";
+  }
+  if (proposalAbstract && !proposalAbstract.value) {
+    if (quill) {
+      const docText = quill.getText().trim();
+      if (docText && !docText.startsWith("Research document")) {
+        proposalAbstract.value = docText.split("\n").slice(0, 8).join("\n");
+      }
+    }
+  }
+}
+
+generateProposalBtn?.addEventListener("click", async () => {
+  if (!currentRunId) return;
+  
+  const title = proposalTitle?.value.trim();
+  const piName = proposalPIName?.value.trim() || "Dr. Alex Researcher";
+  const piInstitution = proposalPIInstitution?.value.trim() || "Stanford University";
+  const abstract = proposalAbstract?.value.trim() || "";
+  const agency = proposalAgency?.value || "nsf";
+  
+  if (!title) {
+    alert("Please provide a Project Title.");
+    return;
+  }
+  
+  if (proposalStatusText) proposalStatusText.textContent = "Generating grant proposal...";
+  generateProposalBtn.disabled = true;
+  generateProposalBtn.textContent = "Generating...";
+  
+  try {
+    const res = await fetch(`/api/runs/${currentRunId}/export/grant`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        title,
+        pi_name: piName,
+        pi_institution: piInstitution,
+        abstract,
+        agency
+      })
+    });
+    
+    if (!res.ok) {
+      throw new Error("Failed to generate proposal.");
+    }
+    const data = await res.json();
+    
+    if (proposalStatusText) proposalStatusText.textContent = `Proposal generated for ${agency.toUpperCase()}`;
+    if (proposalContentContainer) proposalContentContainer.classList.remove("hidden");
+    if (proposalContentArea) {
+      proposalContentArea.textContent = data.grant_proposal || "No content returned.";
+    }
+  } catch (err) {
+    if (proposalStatusText) proposalStatusText.textContent = `Generation failed: ${err.message}`;
+    alert(err.message);
+  } finally {
+    generateProposalBtn.disabled = false;
+    generateProposalBtn.textContent = "Generate Proposal";
+  }
+});
+
+copyProposalBtn?.addEventListener("click", () => {
+  const content = proposalContentArea?.textContent;
+  if (!content) return;
+  navigator.clipboard.writeText(content).then(() => {
+    const origText = copyProposalBtn.textContent;
+    copyProposalBtn.textContent = "Copied!";
+    setTimeout(() => { copyProposalBtn.textContent = origText; }, 2000);
+  }).catch(err => {
+    console.error("Clipboard copy failed:", err);
+  });
+});
 
 (async () => {
   resetWorkbench();
