@@ -17,10 +17,13 @@ const latexTabBtn = document.getElementById("latexTabBtn");
 const docTabBtn = document.getElementById("docTabBtn");
 const previewTabBtn = document.getElementById("previewTabBtn");
 const blogTabBtn = document.getElementById("blogTabBtn");
+const citationTabBtn = document.getElementById("citationTabBtn");
 const latexWorkbenchEl = document.getElementById("latexWorkbench");
 const docWorkbenchEl = document.getElementById("docWorkbench");
 const previewWorkbenchEl = document.getElementById("previewWorkbench");
 const blogWorkbenchEl = document.getElementById("blogWorkbench");
+const citationWorkbenchEl = document.getElementById("citationWorkbench");
+
 const latexStreamEl = document.getElementById("latexStream");
 const docEditorEl = document.getElementById("docEditor");
 const newOverleafLinkEl = document.getElementById("newOverleafLink");
@@ -52,6 +55,13 @@ const pdfUploadInput = document.getElementById("pdfUploadInput");
 const uploadStatusText = document.getElementById("uploadStatusText");
 const librarySelect = document.getElementById("librarySelect");
 const runModeRadios = document.querySelectorAll('input[name="runMode"]');
+const citationGraphStatus = document.getElementById("citationGraphStatus");
+const citationNodeInfo = document.getElementById("citationNodeInfo");
+const citationInfoTitle = document.getElementById("citationInfoTitle");
+const citationInfoAuthors = document.getElementById("citationInfoAuthors");
+const citationInfoYear = document.getElementById("citationInfoYear");
+const citationInfoUrl = document.getElementById("citationInfoUrl");
+
 
 
 
@@ -244,16 +254,23 @@ function switchWorkbenchTab(tab) {
   if (latexTabBtn) latexTabBtn.classList.toggle("active", tab === "latex");
   if (previewTabBtn) previewTabBtn.classList.toggle("active", tab === "preview");
   if (blogTabBtn) blogTabBtn.classList.toggle("active", tab === "blog");
+  if (citationTabBtn) citationTabBtn.classList.toggle("active", tab === "citation");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
   const previewPanel = document.querySelector(".preview-panel");
   const blogPanel = document.querySelector(".blog-panel");
+  const citationPanel = document.querySelector(".citation-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
   if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
   if (previewPanel) previewPanel.classList.toggle("active", tab === "preview");
   if (blogPanel) blogPanel.classList.toggle("active", tab === "blog");
+  if (citationPanel) citationPanel.classList.toggle("active", tab === "citation");
+
+  if (tab === "citation") {
+    loadCitationGraph();
+  }
 }
 
 
@@ -368,6 +385,11 @@ function resetWorkbench() {
   activeBlogSubTab = "blog";
   if (blogContentArea) blogContentArea.textContent = "No content generated yet. Click \"Generate Blog & Social\".";
   if (blogStatusText) blogStatusText.textContent = "";
+
+  // Reset Citation Graph elements
+  if (citationGraphStatus) citationGraphStatus.textContent = "No active run loaded";
+  if (citationNodeInfo) citationNodeInfo.classList.add("hidden");
+  if (typeof d3 !== "undefined") d3.select("#citationGraphSvg").selectAll("*").remove();
 }
 
 
@@ -841,7 +863,9 @@ latexTabBtn?.addEventListener("click", () => switchWorkbenchTab("latex"));
 docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
 previewTabBtn?.addEventListener("click", () => switchWorkbenchTab("preview"));
 blogTabBtn?.addEventListener("click", () => switchWorkbenchTab("blog"));
+citationTabBtn?.addEventListener("click", () => switchWorkbenchTab("citation"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
+
 
 // Preview PDF Handlers
 renderPdfBtn?.addEventListener("click", () => {
@@ -1289,6 +1313,130 @@ overleafPullBtn?.addEventListener("click", () => {
   }
   openOverleafPullModal();
 });
+
+async function loadCitationGraph() {
+  if (!currentRunId) {
+    if (citationGraphStatus) citationGraphStatus.textContent = "No active run loaded yet.";
+    return;
+  }
+  if (citationGraphStatus) citationGraphStatus.textContent = "Loading citation network...";
+  try {
+    const res = await fetch(`/api/runs/${currentRunId}/citation-graph`, {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) {
+      throw new Error("No citation data found.");
+    }
+    const data = await res.json();
+    if (citationGraphStatus) citationGraphStatus.textContent = `Citation Network: ${data.nodes.length} papers, ${data.edges.length} connections`;
+    drawCitationGraph(data);
+  } catch (err) {
+    if (citationGraphStatus) citationGraphStatus.textContent = `Failed to load graph: ${err.message}`;
+    if (typeof d3 !== "undefined") d3.select("#citationGraphSvg").selectAll("*").remove();
+  }
+}
+
+function drawCitationGraph(data) {
+  if (typeof d3 === "undefined") {
+    console.error("D3 library is not loaded.");
+    return;
+  }
+
+  const svg = d3.select("#citationGraphSvg");
+  svg.selectAll("*").remove();
+
+  if (!data || !data.nodes || data.nodes.length === 0) {
+    if (citationGraphStatus) citationGraphStatus.textContent = "No citation graph data available for this run.";
+    return;
+  }
+
+  const width = svg.node().clientWidth || 600;
+  const height = svg.node().clientHeight || 400;
+
+  const g = svg.append("g");
+
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 8])
+    .on("zoom", (event) => {
+      g.attr("transform", event.transform);
+    });
+
+  svg.call(zoom);
+
+  const simulation = d3.forceSimulation(data.nodes)
+    .force("link", d3.forceLink(data.edges).id(d => d.id).distance(100))
+    .force("charge", d3.forceManyBody().strength(-150))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collision", d3.forceCollide().radius(25));
+
+  const link = g.append("g")
+    .attr("stroke", "rgba(255, 255, 255, 0.15)")
+    .attr("stroke-width", 1.5)
+    .selectAll("line")
+    .data(data.edges)
+    .join("line");
+
+  const node = g.append("g")
+    .selectAll("circle")
+    .data(data.nodes)
+    .join("circle")
+    .attr("r", d => d.group === 1 ? 8 : 6)
+    .attr("fill", d => d.group === 1 ? "var(--primary, #00d2ff)" : "#ff007f")
+    .attr("stroke", "rgba(255, 255, 255, 0.4)")
+    .attr("stroke-width", 1.5)
+    .style("cursor", "pointer")
+    .call(d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended));
+
+  node.on("click", (event, d) => {
+    if (citationNodeInfo) citationNodeInfo.classList.remove("hidden");
+    if (citationInfoTitle) citationInfoTitle.textContent = d.label || "Untitled Paper";
+    if (citationInfoAuthors) citationInfoAuthors.textContent = d.authors ? `Authors: ${d.authors}` : "Authors: N/A";
+    if (citationInfoYear) citationInfoYear.textContent = d.year ? `Year: ${d.year}` : "";
+    if (citationInfoUrl) {
+      if (d.url) {
+        citationInfoUrl.href = d.url;
+        citationInfoUrl.style.display = "inline";
+      } else {
+        citationInfoUrl.style.display = "none";
+      }
+    }
+  });
+
+  node.append("title")
+    .text(d => d.label);
+
+  simulation.on("tick", () => {
+    link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+    node
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y);
+  });
+
+  function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+
+  function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+  }
+
+  function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  }
+}
 
 (async () => {
   resetWorkbench();
