@@ -24,8 +24,10 @@ def extract_text_from_pdf(pdf_path: Path) -> dict[str, Any] | None:
             "text": "\n".join(text_parts),
             "metadata": metadata,
         }
-    except Exception:
+    except ImportError:
         pass
+    except Exception:
+        return None
 
     try:
         import pdfplumber
@@ -36,6 +38,6 @@ def extract_text_from_pdf(pdf_path: Path) -> dict[str, Any] | None:
                 "metadata": {"title": "", "author": "", "pages": len(pdf.pages)},
             }
     except ImportError:
-        pass
+        return None
     except Exception:
         return None
