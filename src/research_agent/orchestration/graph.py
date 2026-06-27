@@ -41,6 +41,7 @@ from research_agent.orchestration.nodes import (
     replanner_node,
     stop_node,
     workers_complete_node,
+    code_execution_node,
 )
 from research_agent.orchestration.state import GraphState, WorkflowState, from_graph_state, to_graph_state
 from research_agent.tools.base import BaseToolAdapter
@@ -241,6 +242,8 @@ def build_graph(
     graph.add_node("presentation", wrap_node_fn("presentation", presentation_generator_node))
     graph.add_node("poster", wrap_node_fn("poster", poster_generator_node))
     graph.add_node("exporter", wrap_node_fn("exporter", exporter_node))
+    graph.add_node("code_execution", wrap_node_fn("code_execution", code_execution_node))
+
 
     graph.add_edge(START, "intake")
     graph.add_edge("intake", "clarifier")
@@ -299,7 +302,9 @@ def build_graph(
     graph.add_edge("peer_reviewer", "presentation")
     graph.add_edge("presentation", "poster")
     graph.add_edge("poster", "exporter")
-    graph.add_edge("exporter", END)
+    graph.add_edge("exporter", "code_execution")
+    graph.add_edge("code_execution", END)
+
     
     return graph.compile(checkpointer=checkpointer, interrupt_before=interrupt_before)
 
