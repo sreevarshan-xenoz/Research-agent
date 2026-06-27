@@ -20,6 +20,7 @@ const blogTabBtn = document.getElementById("blogTabBtn");
 const citationTabBtn = document.getElementById("citationTabBtn");
 const datasetsTabBtn = document.getElementById("datasetsTabBtn");
 const proposalTabBtn = document.getElementById("proposalTabBtn");
+const trendsTabBtn = document.getElementById("trendsTabBtn");
 const latexWorkbenchEl = document.getElementById("latexWorkbench");
 const docWorkbenchEl = document.getElementById("docWorkbench");
 const previewWorkbenchEl = document.getElementById("previewWorkbench");
@@ -27,6 +28,8 @@ const blogWorkbenchEl = document.getElementById("blogWorkbench");
 const citationWorkbenchEl = document.getElementById("citationWorkbench");
 const datasetsWorkbenchEl = document.getElementById("datasetsWorkbench");
 const proposalWorkbenchEl = document.getElementById("proposalWorkbench");
+const trendsWorkbenchEl = document.getElementById("trendsWorkbench");
+
 
 
 
@@ -80,6 +83,17 @@ const proposalContentArea = document.getElementById("proposalContentArea");
 const copyProposalBtn = document.getElementById("copyProposalBtn");
 const proposalStatusText = document.getElementById("proposalStatusText");
 const proposalFormBlock = document.getElementById("proposalFormBlock");
+const trendsQueryInput = document.getElementById("trendsQueryInput");
+const searchTrendsBtn = document.getElementById("searchTrendsBtn");
+const trendsDashboardArea = document.getElementById("trendsDashboardArea");
+const trendsStatusText = document.getElementById("trendsStatusText");
+const trendsTimelineContainer = document.getElementById("trendsTimelineContainer");
+const trendsKeywordsContainer = document.getElementById("trendsKeywordsContainer");
+const trendsAuthorsContainer = document.getElementById("trendsAuthorsContainer");
+const trendsVenuesContainer = document.getElementById("trendsVenuesContainer");
+const trendsEmailInput = document.getElementById("trendsEmailInput");
+const subscribeTrendsBtn = document.getElementById("subscribeTrendsBtn");
+
 
 
 
@@ -278,6 +292,7 @@ function switchWorkbenchTab(tab) {
   if (citationTabBtn) citationTabBtn.classList.toggle("active", tab === "citation");
   if (datasetsTabBtn) datasetsTabBtn.classList.toggle("active", tab === "datasets");
   if (proposalTabBtn) proposalTabBtn.classList.toggle("active", tab === "proposal");
+  if (trendsTabBtn) trendsTabBtn.classList.toggle("active", tab === "trends");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
@@ -286,6 +301,7 @@ function switchWorkbenchTab(tab) {
   const citationPanel = document.querySelector(".citation-panel");
   const datasetsPanel = document.querySelector(".datasets-panel");
   const proposalPanel = document.querySelector(".proposal-panel");
+  const trendsPanel = document.querySelector(".trends-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
   if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
@@ -294,6 +310,7 @@ function switchWorkbenchTab(tab) {
   if (citationPanel) citationPanel.classList.toggle("active", tab === "citation");
   if (datasetsPanel) datasetsPanel.classList.toggle("active", tab === "datasets");
   if (proposalPanel) proposalPanel.classList.toggle("active", tab === "proposal");
+  if (trendsPanel) trendsPanel.classList.toggle("active", tab === "trends");
 
   if (tab === "citation") {
     loadCitationGraph();
@@ -301,8 +318,11 @@ function switchWorkbenchTab(tab) {
     loadDiscoveredDatasets();
   } else if (tab === "proposal") {
     loadProposalTab();
+  } else if (tab === "trends") {
+    loadTrendsTab();
   }
 }
+
 
 
 function setDocStatus(status, text) {
@@ -433,6 +453,15 @@ function resetWorkbench() {
   if (proposalContentArea) proposalContentArea.textContent = "";
   if (proposalTitle) proposalTitle.value = "";
   if (proposalAbstract) proposalAbstract.value = "";
+
+  // Reset Trends elements
+  if (trendsStatusText) trendsStatusText.textContent = "Enter a query to view trend analytics";
+  if (trendsDashboardArea) trendsDashboardArea.classList.add("hidden");
+  if (trendsTimelineContainer) trendsTimelineContainer.innerHTML = "";
+  if (trendsKeywordsContainer) trendsKeywordsContainer.innerHTML = "";
+  if (trendsAuthorsContainer) trendsAuthorsContainer.innerHTML = "";
+  if (trendsVenuesContainer) trendsVenuesContainer.innerHTML = "";
+  if (trendsQueryInput) trendsQueryInput.value = "";
 }
 
 
@@ -909,7 +938,9 @@ blogTabBtn?.addEventListener("click", () => switchWorkbenchTab("blog"));
 citationTabBtn?.addEventListener("click", () => switchWorkbenchTab("citation"));
 datasetsTabBtn?.addEventListener("click", () => switchWorkbenchTab("datasets"));
 proposalTabBtn?.addEventListener("click", () => switchWorkbenchTab("proposal"));
+trendsTabBtn?.addEventListener("click", () => switchWorkbenchTab("trends"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
+
 
 
 
@@ -1628,6 +1659,101 @@ copyProposalBtn?.addEventListener("click", () => {
   }).catch(err => {
     console.error("Clipboard copy failed:", err);
   });
+});
+
+function loadTrendsTab() {
+  if (trendsQueryInput && !trendsQueryInput.value && currentRunId) {
+    const topic = messageInput?.value?.trim();
+    if (topic) trendsQueryInput.value = topic;
+  }
+}
+
+function renderTrendBar(container, items, maxCount, colorVar = "var(--primary-glow)") {
+  if (!container) return;
+  if (!items || items.length === 0) {
+    container.innerHTML = '<p style="opacity: 0.5; font-size: 0.8rem; margin: 0;">No data available</p>';
+    return;
+  }
+  container.innerHTML = items.map(item => {
+    const pct = maxCount > 0 ? Math.round((item.count / maxCount) * 100) : 0;
+    const label = item.name || item.year || "Unknown";
+    return `
+      <div class="trend-bar-row">
+        <span class="trend-bar-label" title="${label}">${label}</span>
+        <div class="trend-bar-track">
+          <div class="trend-bar-fill" style="width: ${pct}%; background: ${colorVar};"></div>
+        </div>
+        <span style="font-size: 0.75rem; opacity: 0.6; min-width: 28px; text-align: right;">${item.count}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+async function searchTrends() {
+  const query = trendsQueryInput?.value?.trim();
+  if (!query) {
+    alert("Please enter a search query.");
+    return;
+  }
+
+  if (trendsStatusText) trendsStatusText.textContent = `Analyzing trends for: "${query}"...`;
+  if (searchTrendsBtn) { searchTrendsBtn.disabled = true; searchTrendsBtn.textContent = "Analyzing..."; }
+
+  try {
+    const res = await fetch(`/api/trends?query=${encodeURIComponent(query)}`, {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch trends data.");
+    const data = await res.json();
+
+    if (trendsStatusText) trendsStatusText.textContent = `Found ${data.total_papers || 0} papers for "${data.query}"`;
+    if (trendsDashboardArea) trendsDashboardArea.classList.remove("hidden");
+
+    const timelineMax = data.timeline?.length ? Math.max(...data.timeline.map(t => t.count)) : 1;
+    renderTrendBar(trendsTimelineContainer, data.timeline?.slice(-12) || [], timelineMax, "var(--primary-glow)");
+
+    const keywordMax = data.top_keywords?.length ? Math.max(...data.top_keywords.map(k => k.count)) : 1;
+    renderTrendBar(trendsKeywordsContainer, data.top_keywords || [], keywordMax, "#a78bfa");
+
+    const authorMax = data.top_authors?.length ? Math.max(...data.top_authors.map(a => a.count)) : 1;
+    renderTrendBar(trendsAuthorsContainer, data.top_authors?.slice(0, 8) || [], authorMax, "#38bdf8");
+
+    const venueMax = data.top_venues?.length ? Math.max(...data.top_venues.map(v => v.count)) : 1;
+    renderTrendBar(trendsVenuesContainer, data.top_venues?.slice(0, 8) || [], venueMax, "#34d399");
+
+  } catch (err) {
+    if (trendsStatusText) trendsStatusText.textContent = `Error: ${err.message}`;
+  } finally {
+    if (searchTrendsBtn) { searchTrendsBtn.disabled = false; searchTrendsBtn.textContent = "Analyze Trends"; }
+  }
+}
+
+searchTrendsBtn?.addEventListener("click", searchTrends);
+
+trendsQueryInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") searchTrends();
+});
+
+subscribeTrendsBtn?.addEventListener("click", async () => {
+  const email = trendsEmailInput?.value?.trim();
+  const query = trendsQueryInput?.value?.trim();
+  if (!email) { alert("Please enter your email address."); return; }
+  if (!query) { alert("Please enter a search query first."); return; }
+
+  try {
+    const res = await fetch(`/api/trends/report?query=${encodeURIComponent(query)}&email=${encodeURIComponent(email)}`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    const data = await res.json();
+    if (data.success) {
+      subscribeTrendsBtn.textContent = "Subscribed ✓";
+      subscribeTrendsBtn.disabled = true;
+      setTimeout(() => { subscribeTrendsBtn.textContent = "Subscribe"; subscribeTrendsBtn.disabled = false; }, 3000);
+    }
+  } catch (err) {
+    alert("Failed to subscribe: " + err.message);
+  }
 });
 
 (async () => {
