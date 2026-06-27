@@ -128,6 +128,7 @@ def _close_redis_atexit() -> None:
 
 
 def _close_cache_atexit() -> None:
+    """Close global tool cache at process exit."""
     try:
         asyncio.run(close_global_tool_cache())
     except RuntimeError:
