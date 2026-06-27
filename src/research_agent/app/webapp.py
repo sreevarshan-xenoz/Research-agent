@@ -775,6 +775,19 @@ def create_app(
             return data
         raise HTTPException(status_code=404, detail="No citation graph found for this run")
 
+    @app.get("/api/runs/{run_id}/datasets")
+    async def get_discovered_datasets(
+        run_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        run_dir = Path(artifact_root) / run_id
+        datasets_path = run_dir / "discovered_datasets.json"
+        if datasets_path.exists():
+            data = json.loads(datasets_path.read_text(encoding="utf-8"))
+            return data
+        return {"datasets": []}
+
+
     @app.get("/api/runs/{run_id}/gaps")
     async def get_gap_analysis(
         run_id: str,
