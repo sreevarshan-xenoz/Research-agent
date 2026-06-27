@@ -103,11 +103,11 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Generated papers with figures, tables, or statistics should be verifiable. An agent that executes code and validates results is cutting-edge.
 
 **What to build:**
-- [ ] New `code_execution.py` node — extracts code blocks from generated sections
-- [ ] Optional: Docker sandbox for safe execution
-- [ ] Verify numerical results match paper claims
-- [ ] Report discrepancies in `math_verification_report`
-- [ ] Generate runnable notebooks (.ipynb) alongside paper
+- [x] New `code_execution.py` node — extracts code blocks from generated sections
+- [x] Optional: Docker sandbox for safe execution
+- [x] Verify numerical results match paper claims
+- [x] Report discrepancies in `math_verification_report`
+- [x] Generate runnable notebooks (.ipynb) alongside paper
 
 **Feasibility:** Low-Medium. Docker sandbox is complex. Start with basic extraction + verification.
 
@@ -118,11 +118,11 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Overleaf is the de-facto LaTeX editor. Pushing artifacts directly saves a manual upload step.
 
 **What to build:**
-- [ ] New `output/overleaf.py` enhancements (exists as stub)
-- [ ] Push mode: upload `main.tex` + `references.bib` to Overleaf project via API
-- [ ] Pull mode: sync changes from Overleaf back into the agent's state
-- [ ] OAuth2 or token-based auth for Overleaf API
-- [ ] UI button: "Open in Overleaf"
+- [x] New `output/overleaf.py` enhancements (exists as stub)
+- [x] Push mode: upload `main.tex` + `references.bib` to Overleaf project via API
+- [x] Pull mode: sync changes from Overleaf back into the agent's state
+- [x] OAuth2 or token-based auth for Overleaf API
+- [x] UI button: "Open in Overleaf"
 
 **Feasibility:** Medium. Overleaf API exists but has rate limits. File already exists as stub.
 
@@ -133,11 +133,12 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** A visual graph of citations and related papers helps users understand the research landscape at a glance.
 
 **What to build:**
-- [ ] New `/api/runs/{run_id}/citation-graph` endpoint
-- [ ] Use existing citation data + OpenAlex citation links
-- [ ] Return D3.js/React-Flow compatible format (nodes = papers, edges = citations)
-- [ ] Web UI: interactive force-directed graph
-- [ ] Click paper node → show abstract, metadata
+- [x] New `/api/runs/{run_id}/citation-graph` endpoint
+- [x] Use existing citation data + OpenAlex citation links
+- [x] Return D3.js/React-Flow compatible format (nodes = papers, edges = citations)
+- [x] Web UI: interactive force-directed graph
+- [x] Click paper node → show abstract, metadata
+
 
 **Feasibility:** Medium. Visualization is new, but data is already available.
 
