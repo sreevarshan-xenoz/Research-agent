@@ -11,7 +11,6 @@ from research_agent.tools.registry import arun_multi_source_search
 from research_agent.app.watchdog_storage import (
     InterestProfile,
     WatchdogDigest,
-    WatchdogStorage,
     get_watchdog_storage,
 )
 
@@ -181,7 +180,7 @@ async def run_all_due_checks(
                 profile.topic,
                 digest.paper_count,
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("Watchdog check failed for profile '%s'", profile.profile_id)
 
     return digests
@@ -248,7 +247,7 @@ def format_digest_for_display(digest: WatchdogDigest) -> str:
         Formatted digest string with summary and paper list.
     """
     lines = [
-        f"# Research Watchdog Digest",
+        "# Research Watchdog Digest",
         f"**Topic:** {digest.topic}",
         f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(digest.generated_at))}",
         f"**Papers found:** {digest.paper_count}",
