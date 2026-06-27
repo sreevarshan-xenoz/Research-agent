@@ -26,8 +26,9 @@ async def test_graph_plans_for_specific_topic(tmp_path: Path, monkeypatch) -> No
 @pytest.mark.asyncio
 async def test_graph_routes_to_clarification_for_ambiguous_topic(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setenv("ENABLE_NVIDIA_MODEL", "0")
-    state = WorkflowState(run_id="smoke", topic="AI", task_findings={})
+    state = WorkflowState(run_id="smoke_clarify", topic="AI", task_findings={})
     updated = await run_graph(state, registry={})
+
     assert updated.phase == "awaiting_user_clarification"
     assert updated.stop_reason == "clarification_required"
     assert len(updated.clarification_questions) >= 2
