@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from research_agent.orchestration.survey import SurveyTopic
+if TYPE_CHECKING:
+    from research_agent.orchestration.survey import SurveyTopic
 
 
 def _extract_year(paper: dict[str, Any]) -> int:
@@ -395,7 +396,6 @@ def generate_research_landscape(topics: list[SurveyTopic]) -> str:
 
     for topic in topics:
         safe_name = topic.name.replace("(", "").replace(")", "").replace('"', "")
-        paper_count = len(topic.key_papers)
 
         # Add sub-topic
         lines.append(f"    {safe_name}")
