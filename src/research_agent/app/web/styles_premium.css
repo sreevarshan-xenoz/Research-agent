@@ -345,7 +345,7 @@ button:active {
   100% { text-shadow: 0 0 0 transparent; }
 }
 
-.doc-panel, .latex-panel, .preview-panel, .blog-panel {
+.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel {
   display: none;
   flex-direction: column;
   overflow: hidden;
@@ -355,9 +355,10 @@ button:active {
   flex: 1;
 }
 
-.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active {
+.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active {
   display: flex;
 }
+
 
 
 .doc-editor {
