@@ -41,10 +41,10 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Currently users must download and compile `.tex` files locally. An in-browser rendered preview makes the app feel complete and professional — users see the paper instantly after generation.
 
 **What to build:**
-- [ ] Serve compiled PDF via LaTeX rendering in Docker/tectonic
-- [ ] Or use client-side `\KaTeX` / `mathjax` for formula rendering + structural approximation
-- [ ] Display side-by-side: raw LaTeX ↔ rendered preview in the web UI
-- [ ] Update Gradio and FastAPI web apps with preview tabs
+- [x] Serve compiled PDF via LaTeX rendering in Docker/tectonic
+- [x] Or use client-side `\KaTeX` / `mathjax` for formula rendering + structural approximation
+- [x] Display side-by-side: raw LaTeX ↔ rendered preview in the web UI
+- [x] Update Gradio and FastAPI web apps with preview tabs
 
 **Feasibility:** Medium. Requires Docker/tectonic server-side, or a good client-side approximation.
 
@@ -55,12 +55,13 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Researchers want to disseminate findings beyond academic papers — to blogs, newsletters, Twitter threads. This turns the agent from a "paper factory" into a "research communication platform."
 
 **What to build:**
-- [ ] New node `blog_generator.py` that takes `latex_main` + `peer_review_report` and generates:
+- [x] New node `blog_generator.py` that takes `latex_main` + `peer_review_report` and generates:
   - Blog post (Markdown, SEO-optimized)
   - Newsletter summary (1-2 paragraphs)
   - Twitter/X thread (5-10 tweets)
-- [ ] Controls in UI: select output format
-- [ ] Export as markdown file in artifacts
+- [x] Controls in UI: select output format
+- [x] Export as markdown file in artifacts
+
 
 **Feasibility:** Very high. Single LLM call + some templating. No new infrastructure.
 
@@ -71,11 +72,11 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Researchers spend weeks writing survey papers. The agent can search across multiple topics and generate a synthesized survey with cross-referencing.
 
 **What to build:**
-- [ ] New `survey_planner.py` node — accepts multiple topics or a broad area
-- [ ] Parallel search across topics using existing tool adapters
-- [ ] Cross-paper comparison and contradiction detection (reuse existing logic)
-- [ ] Generate survey paper with taxonomy table, timeline, and research landscape
-- [ ] Extend `comparison_table_node` to handle >5 references with better formatting
+- [x] New `survey_planner.py` node — accepts multiple topics or a broad area
+- [x] Parallel search across topics using existing tool adapters
+- [x] Cross-paper comparison and contradiction detection (reuse existing logic)
+- [x] Generate survey paper with taxonomy table, timeline, and research landscape
+- [x] Extend `comparison_table_node` to handle >5 references with better formatting
 
 **Feasibility:** Medium. Reuses worker pool, indexing, combiner. New planner logic needed.
 
@@ -86,11 +87,12 @@ The project already has a **sophisticated pipeline** covering the full research 
 **Why:** Users want to upload papers (PDFs) and ask questions over them, RAG-style, without starting a full research run.
 
 **What to build:**
-- [ ] Upload PDF endpoint → parse with PyMuPDF (already a dependency)
-- [ ] Store in Qdrant (reuse existing index infrastructure)
-- [ ] New `ask.py` endpoint: accept question + query Qdrant → LLM answer with citations
-- [ ] Web UI: chat interface over library
-- [ ] Support for multiple PDFs, cross-document queries
+- [x] Upload PDF endpoint → parse with PyMuPDF (already a dependency)
+- [x] Store in Qdrant (reuse existing index infrastructure)
+- [x] New `ask.py` endpoint: accept question + query Qdrant → LLM answer with citations
+- [x] Web UI: chat interface over library
+- [x] Support for multiple PDFs, cross-document queries
+
 
 **Feasibility:** Medium. Adds new endpoint but reuses Qdrant + LLM infrastructure heavily.
 
