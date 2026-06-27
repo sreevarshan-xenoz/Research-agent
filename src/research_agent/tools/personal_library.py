@@ -1,69 +1,81 @@
 from __future__ import annotations
 
 import os
-import aiohttp
-from typing import Optional
+from typing import Any
 
-from research_agent.tools.base import BaseToolAdapter, ToolResult
-from research_agent.tools.rate_limiter import get_limiter, retry_with_backoff
+import httpx
+
+from research_agent.tools.base import BaseToolAdapter, ToolResult, safe_limit
+from research_agent.tools.rate_limiter import get_limiter, retry_with_backoff_sync
+
 
 class PersonalLibraryAdapter(BaseToolAdapter):
     """Syncs with personal research libraries (Zotero, Mendeley) via API or local export."""
-    
-    def __init__(self, zotero_api_key: Optional[str] = None, zotero_user_id: Optional[str] = None):
+    provider_name = "personal_library"
+
+    def __init__(self, zotero_api_key: str | None = None, zotero_user_id: str | None = None):
         self.api_key = zotero_api_key or os.getenv("ZOTERO_API_KEY")
         self.user_id = zotero_user_id or os.getenv("ZOTERO_USER_ID")
-        self.provider_name = "personal_library"
         self._limiter = get_limiter("personal_library")
+        self._client = httpx.Client(
+            timeout=20,
+            follow_redirects=True,
+            headers={"User-Agent": "ResearchAgent/0.1 (research-agent)"},
+        )
 
-    async def asearch(self, query: str, limit: int = 5) -> ToolResult:
+    def _parse_entries(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for entry in data:
+            meta = entry.get("data", {})
+            creators = meta.get("creators", [])
+            authors = ", ".join(
+                f"{c.get('firstName', '')} {c.get('lastName', '')}".strip()
+                for c in creators
+            )
+            items.append({
+                "title": meta.get("title"),
+                "url": meta.get("url"),
+                "snippet": meta.get("abstractNote"),
+                "authors": authors,
+                "year": meta.get("date", "")[:4] if meta.get("date") else None,
+                "publisher": meta.get("publicationTitle"),
+            })
+        return items
+
+    def search(self, query: str, limit: int = 5) -> ToolResult:
+        normalized_limit = safe_limit(limit)
+
         if not self.api_key or not self.user_id:
-             return ToolResult(
+            return ToolResult(
                 provider=self.provider_name,
                 items=[],
-                warnings=["Zotero API key or User ID not configured. Personal library sync disabled."]
+                warnings=["Zotero API key or User ID not configured. Personal library sync disabled."],
             )
 
-        url = f"https://api.zotero.org/users/{self.user_id}/items?q={query}&limit={limit}&itemType=-attachment"
+        url = f"https://api.zotero.org/users/{self.user_id}/items?q={query}&limit={normalized_limit}&itemType=-attachment"
         headers = {"Zotero-API-Key": self.api_key}
 
-        async def _do_request() -> ToolResult:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as resp:
-                    if resp.status != 200:
-                        return ToolResult(
-                            provider=self.provider_name,
-                            items=[],
-                            warnings=[f"Zotero API returned status {resp.status}"]
-                        )
-
-                    data = await resp.json()
-                    items = []
-                    for entry in data:
-                        meta = entry.get("data", {})
-                        items.append({
-                            "title": meta.get("title"),
-                            "url": meta.get("url"),
-                            "snippet": meta.get("abstractNote"),
-                            "authors": ", ".join([f"{c.get('firstName')} {c.get('lastName')}" for c in meta.get("creators", [])]),
-                            "year": meta.get("date", "")[:4] if meta.get("date") else None,
-                            "publisher": meta.get("publicationTitle"),
-                        })
-
-                    return ToolResult(
-                        provider=self.provider_name,
-                        items=items
-                    )
+        def _do_request() -> list[dict[str, Any]]:
+            resp = self._client.get(url, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
 
         try:
-            return await retry_with_backoff(_do_request, "personal_library")
+            data = retry_with_backoff_sync(_do_request, "personal_library")
+            items = self._parse_entries(data)
         except Exception as e:
             return ToolResult(
                 provider=self.provider_name,
                 items=[],
-                warnings=[f"Personal library sync failed: {str(e)}"]
+                warnings=[f"Personal library sync failed: {str(e)}"],
             )
 
-    def search(self, query: str, limit: int = 5) -> ToolResult:
+        return ToolResult(
+            provider=self.provider_name,
+            items=items,
+            metadata={"query": query, "limit": normalized_limit, "raw_count": len(items)},
+        )
+
+    async def asearch(self, query: str, limit: int = 5) -> ToolResult:
         import asyncio
-        return asyncio.run(self.asearch(query, limit))
+        return await asyncio.to_thread(self.search, query, limit=limit)
