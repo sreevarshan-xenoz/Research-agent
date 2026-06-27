@@ -27,6 +27,7 @@ from research_agent.orchestration.nodes.replanner import replanner_node
 from research_agent.orchestration.nodes.indexing import indexing_node
 from research_agent.orchestration.nodes.intake import intake_node
 from research_agent.orchestration.nodes.planner import planner_node
+from research_agent.orchestration.nodes.code_execution import code_execution_node
 from research_agent.orchestration.nodes.worker import (
 	get_pending_task_ids,
 	get_ready_task_ids,
@@ -65,6 +66,7 @@ __all__ = [
 	"citation_graph_node",
 	"exporter_node",
 	"awaiting_user_critic_node",
+	"code_execution_node",
 ]
 
 
