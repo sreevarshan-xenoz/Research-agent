@@ -18,11 +18,14 @@ const docTabBtn = document.getElementById("docTabBtn");
 const previewTabBtn = document.getElementById("previewTabBtn");
 const blogTabBtn = document.getElementById("blogTabBtn");
 const citationTabBtn = document.getElementById("citationTabBtn");
+const datasetsTabBtn = document.getElementById("datasetsTabBtn");
 const latexWorkbenchEl = document.getElementById("latexWorkbench");
 const docWorkbenchEl = document.getElementById("docWorkbench");
 const previewWorkbenchEl = document.getElementById("previewWorkbench");
 const blogWorkbenchEl = document.getElementById("blogWorkbench");
 const citationWorkbenchEl = document.getElementById("citationWorkbench");
+const datasetsWorkbenchEl = document.getElementById("datasetsWorkbench");
+
 
 const latexStreamEl = document.getElementById("latexStream");
 const docEditorEl = document.getElementById("docEditor");
@@ -61,6 +64,9 @@ const citationInfoTitle = document.getElementById("citationInfoTitle");
 const citationInfoAuthors = document.getElementById("citationInfoAuthors");
 const citationInfoYear = document.getElementById("citationInfoYear");
 const citationInfoUrl = document.getElementById("citationInfoUrl");
+const datasetsStatusText = document.getElementById("datasetsStatusText");
+const datasetsContainer = document.getElementById("datasetsContainer");
+
 
 
 
@@ -255,21 +261,26 @@ function switchWorkbenchTab(tab) {
   if (previewTabBtn) previewTabBtn.classList.toggle("active", tab === "preview");
   if (blogTabBtn) blogTabBtn.classList.toggle("active", tab === "blog");
   if (citationTabBtn) citationTabBtn.classList.toggle("active", tab === "citation");
+  if (datasetsTabBtn) datasetsTabBtn.classList.toggle("active", tab === "datasets");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
   const previewPanel = document.querySelector(".preview-panel");
   const blogPanel = document.querySelector(".blog-panel");
   const citationPanel = document.querySelector(".citation-panel");
+  const datasetsPanel = document.querySelector(".datasets-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
   if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
   if (previewPanel) previewPanel.classList.toggle("active", tab === "preview");
   if (blogPanel) blogPanel.classList.toggle("active", tab === "blog");
   if (citationPanel) citationPanel.classList.toggle("active", tab === "citation");
+  if (datasetsPanel) datasetsPanel.classList.toggle("active", tab === "datasets");
 
   if (tab === "citation") {
     loadCitationGraph();
+  } else if (tab === "datasets") {
+    loadDiscoveredDatasets();
   }
 }
 
@@ -390,6 +401,10 @@ function resetWorkbench() {
   if (citationGraphStatus) citationGraphStatus.textContent = "No active run loaded";
   if (citationNodeInfo) citationNodeInfo.classList.add("hidden");
   if (typeof d3 !== "undefined") d3.select("#citationGraphSvg").selectAll("*").remove();
+
+  // Reset Datasets elements
+  if (datasetsStatusText) datasetsStatusText.textContent = "No active run loaded";
+  if (datasetsContainer) datasetsContainer.innerHTML = "";
 }
 
 
@@ -864,7 +879,9 @@ docTabBtn?.addEventListener("click", () => switchWorkbenchTab("doc"));
 previewTabBtn?.addEventListener("click", () => switchWorkbenchTab("preview"));
 blogTabBtn?.addEventListener("click", () => switchWorkbenchTab("blog"));
 citationTabBtn?.addEventListener("click", () => switchWorkbenchTab("citation"));
+datasetsTabBtn?.addEventListener("click", () => switchWorkbenchTab("datasets"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
+
 
 
 // Preview PDF Handlers
@@ -1436,6 +1453,61 @@ function drawCitationGraph(data) {
     d.fx = null;
     d.fy = null;
   }
+}
+
+async function loadDiscoveredDatasets() {
+  if (!currentRunId) {
+    if (datasetsStatusText) datasetsStatusText.textContent = "No active run loaded yet.";
+    return;
+  }
+  if (datasetsStatusText) datasetsStatusText.textContent = "Searching relevant datasets...";
+  try {
+    const res = await fetch(`/api/runs/${currentRunId}/datasets`, {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) {
+      throw new Error("Failed to fetch datasets.");
+    }
+    const data = await res.json();
+    const list = data.datasets || [];
+    if (datasetsStatusText) datasetsStatusText.textContent = `Discovered ${list.length} related datasets`;
+    renderDiscoveredDatasets(list);
+  } catch (err) {
+    if (datasetsStatusText) datasetsStatusText.textContent = `Failed to load datasets: ${err.message}`;
+    if (datasetsContainer) datasetsContainer.innerHTML = `<p class="muted">Error: ${err.message}</p>`;
+  }
+}
+
+function renderDiscoveredDatasets(datasets) {
+  if (!datasetsContainer) return;
+  if (!datasets || datasets.length === 0) {
+    datasetsContainer.innerHTML = '<p class="muted">No datasets found matching this topic.</p>';
+    return;
+  }
+
+  datasetsContainer.innerHTML = datasets.map(ds => {
+    const providerBadge = ds.provider === "huggingface" 
+      ? '<span class="badge" style="background: #ffbd2e; color: #000;">Hugging Face</span>'
+      : '<span class="badge" style="background: #20beff; color: #000;">Kaggle</span>';
+      
+    const desc = ds.description ? ds.description : "No description provided.";
+    const likesText = ds.likes !== undefined && ds.likes !== null ? ` • Likes: ${ds.likes}` : "";
+    const downloadsText = ds.downloads ? ` • Downloads: ${ds.downloads.toLocaleString()}` : "";
+
+    return `
+      <div class="dataset-card">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+          <h4 style="margin: 0; color: #fff; font-size: 0.95rem; font-weight: 600;">${ds.name}</h4>
+          ${providerBadge}
+        </div>
+        <p style="margin: 0; font-size: 0.8rem; opacity: 0.7; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${desc}">${desc}</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; opacity: 0.5; margin-top: 4px;">
+          <span>${downloadsText}${likesText}</span>
+          <a href="${ds.url}" target="_blank" style="color: var(--primary); text-decoration: underline;">Open Dataset</a>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 (async () => {
