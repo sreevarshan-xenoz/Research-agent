@@ -345,7 +345,7 @@ button:active {
   100% { text-shadow: 0 0 0 transparent; }
 }
 
-.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel, .datasets-panel, .proposal-panel {
+.doc-panel, .latex-panel, .preview-panel, .blog-panel, .citation-panel, .datasets-panel, .proposal-panel, .trends-panel {
   display: none;
   flex-direction: column;
   overflow: hidden;
@@ -355,9 +355,38 @@ button:active {
   flex: 1;
 }
 
-.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active, .datasets-panel.active, .proposal-panel.active {
+.doc-panel.active, .latex-panel.active, .preview-panel.active, .blog-panel.active, .citation-panel.active, .datasets-panel.active, .proposal-panel.active, .trends-panel.active {
   display: flex;
 }
+
+.trend-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+}
+.trend-bar-label {
+  width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+.trend-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+}
+.trend-bar-fill {
+  height: 100%;
+  background: var(--primary-glow);
+  border-radius: var(--radius-sm);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 
 
 .dataset-card {
