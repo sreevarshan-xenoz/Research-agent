@@ -418,6 +418,17 @@ def create_app(
             return True
         return False
 
+    @app.post("/api/session/{session_id}/stop")
+    async def stop_session(
+        session_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """REST fallback to stop a running session when WebSocket is unavailable."""
+        stopped = await stop_session_run(session_id, user)
+        if stopped:
+            return {"status": "stopped", "message": "Stop signal sent"}
+        raise HTTPException(status_code=404, detail="No active run found for session")
+
     @app.get("/api/health")
     async def health_check():
         return {"status": "ok"}
@@ -906,7 +917,7 @@ def create_app(
 
         years = [p.get("year") for p in all_papers if p.get("year")]
         year_counts = Counter(years)
-        timeline = [{"year": int(y), "count": count} for y, count in sorted(year_counts.items()) if y.isdigit()]
+        timeline = [{"year": int(y), "count": count} for y, count in sorted(year_counts.items()) if str(y).isdigit()]
 
         authors = []
         for p in all_papers:

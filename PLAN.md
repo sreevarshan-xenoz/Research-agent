@@ -193,33 +193,173 @@ The project already has a **sophisticated pipeline** covering the full research 
 ## Implementation Roadmap
 
 ```
-Phase 1 (Current Sprint) — Fast Wins
-├── Paper-to-Blog Generator (P0)     ~1-2 days
-├── Interactive LaTeX Preview (P0)   ~2-3 days  
-└── Dataset Discovery (P2)           ~1 day
+Phase 1 (COMPLETE) — Fast Wins
+├── Paper-to-Blog Generator (P0)     ✅ Done
+├── Interactive LaTeX Preview (P0)   ✅ Done
+└── Dataset Discovery (P2)           ✅ Done
 
-Phase 2 — Core Enhancement
-├── Research Q&A Chatbot (P1)        ~3-4 days
-├── Multi-Paper Survey Gen (P1)      ~3-5 days
-└── Citation Network Vis (P2)        ~2-3 days
+Phase 2 (COMPLETE) — Core Enhancement
+├── Research Q&A Chatbot (P1)        ✅ Done
+├── Multi-Paper Survey Gen (P1)      ✅ Done
+└── Citation Network Vis (P2)        ✅ Done
 
-Phase 3 — Advanced
-├── Code Execution Verif. (P1)       ~5-7 days
-├── Overleaf Integration (P2)         ~2-3 days
-└── Grant Proposal Gen (P3)          ~2-3 days
+Phase 3 (COMPLETE) — Advanced
+├── Code Execution Verif. (P1)       ✅ Done
+├── Overleaf Integration (P2)        ✅ Done
+└── Grant Proposal Gen (P3)          ✅ Done
 
-Phase 4 — Future
-└── Research Trends Dashboard (P3)   ~5-7 days
+Phase 4 (COMPLETE) — Future
+└── Research Trends Dashboard (P3)   ✅ Done
 ```
 
 ---
 
-## Recommendation
+## Bug Fixes Applied (June 2026)
 
-**Start with Phase 1** — these are fast, high-value, and visibly impressive:
+| # | File | Issue | Fix |
+|---|------|-------|-----|
+| 1 | `webapp.py:909` | `y.isdigit()` crashes when year is `int` (from Semantic Scholar) | Wrapped with `str(y).isdigit()` |
+| 2 | `webapp.py` | Missing `POST /api/session/{sid}/stop` REST endpoint — frontend fallback fails when WebSocket is down | Added REST stop endpoint that delegates to `stop_session_run()` |
+| 3 | `dataset_discovery.py:3` | Unused `asyncio` import (ruff F401) | Removed |
 
-1. **Paper-to-Blog Generator** — highest value per unit effort. Single new node.
-2. **Interactive LaTeX Preview** — biggest "wow factor" for the UI. 
-3. **Dataset Discovery** — easy addition that connects to the broader AI ecosystem.
+---
 
-These build on existing infrastructure and deliver immediate, demo-able results.
+## Phase 5: Collaborative & Intelligent Research (Next Sprint)
+
+### Priority 11: Multi-User Collaborative Research Sessions
+**Why:** Research is collaborative. Multiple researchers should be able to contribute to the same paper in real time — editing sections, adding comments, and resolving conflicts.
+
+**What to build:**
+- [ ] Shared session model: invite collaborators by email, assign roles (lead, contributor, reviewer)
+- [ ] Real-time co-editing via WebSocket broadcast (operational transform or CRDT for conflict resolution)
+- [ ] Per-section locking and merge resolution when two users edit the same section
+- [ ] Comment threads on generated sections (similar to Google Docs suggestions)
+- [ ] Activity feed: who changed what, when
+- [ ] Permission model: viewer / commenter / editor / admin
+
+**Feasibility:** Medium-High. Significant WebSocket infrastructure expansion. Auth model already supports users.
+
+---
+
+### Priority 12: AI Model Router & Multi-Provider Support
+**Why:** Different LLM providers excel at different tasks. A smart model router selects the best model per task (planning vs writing vs math verification) and provides fallback resilience.
+
+**What to build:**
+- [ ] Model router config: map task types (plan, write, critique, code) to specific models
+- [ ] Support OpenAI, Anthropic, Google Gemini, Ollama (local), Groq, and NVIDIA NIM
+- [ ] Automatic fallback chain: if primary model fails, try secondary, then tertiary
+- [ ] Cost tracking per model per run with budget enforcement
+- [ ] Latency-aware routing: prefer faster models for interactive tasks
+- [ ] Settings UI: let users configure their preferred models and API keys
+
+**Feasibility:** Medium. Requires abstracting the current NVIDIA-centric model layer into a multi-provider system.
+
+---
+
+### Priority 13: Automated Literature Monitoring & Alerting
+**Why:** Researchers need to stay current. An automated watchdog that monitors new publications on their topics and alerts them is high-value.
+
+**What to build:**
+- [ ] Scheduled background jobs (APScheduler or Celery) that poll ArXiv/Semantic Scholar daily
+- [ ] Diff detection: identify genuinely new papers since last check
+- [ ] Relevance scoring: rank new papers against user's research profile/topics
+- [ ] Email digest with summaries, links, and relevance scores
+- [ ] Dashboard widget showing latest papers in user's field
+- [ ] "One-click deep dive": launch a full research run from a discovered paper
+
+**Feasibility:** Medium. Watchdog subscription endpoints already exist. Needs scheduled task infrastructure.
+
+---
+
+### Priority 14: Research Knowledge Graph Explorer
+**Why:** The system already builds knowledge graphs per run, but they're siloed. A cross-run, persistent knowledge graph enables researchers to explore connections across all their past research.
+
+**What to build:**
+- [ ] Persistent Neo4j or NetworkX graph store aggregating entities across all runs
+- [ ] Entity deduplication and merge across runs (same author, concept, or paper)
+- [ ] Interactive 3D graph explorer (WebGL-based, three.js or Sigma.js)
+- [ ] Semantic search over the knowledge graph ("find all papers connecting X to Y")
+- [ ] Export subgraphs as SVG/PNG for inclusion in papers
+- [ ] "Research map" visualization: user's entire research landscape at a glance
+
+**Feasibility:** Medium-High. Knowledge graph nodes already exist per-run. Needs persistent store and aggregation layer.
+
+---
+
+### Priority 15: Intelligent Research Assistant (Agentic Chat)
+**Why:** Move beyond simple Q&A. The chat should proactively suggest next steps, identify gaps in the user's research, and autonomously execute multi-step research plans.
+
+**What to build:**
+- [ ] Agentic chat mode: user gives a high-level goal, agent breaks it into steps and executes
+- [ ] Tool-calling chat: agent can invoke search, citation check, dataset discovery, etc. mid-conversation
+- [ ] Memory across sessions: recall past conversations, research context, and user preferences
+- [ ] Proactive suggestions: "Your paper is missing references from the last 2 years in this subtopic"
+- [ ] Research planning assistant: help users design experiments, formulate hypotheses
+- [ ] Integration with existing graph pipeline: kick off full runs from chat context
+
+**Feasibility:** High. Leverages existing infrastructure. Primary work is in prompt engineering and orchestration logic.
+
+---
+
+## Phase 6: Production Hardening & Scalability
+
+### Priority 16: Async Job Queue & Worker Scaling
+**What to build:**
+- [ ] Replace in-process graph execution with Celery/RQ-based distributed task queue
+- [ ] Redis-backed job tracking with progress, cancellation, and retry support
+- [ ] Horizontal scaling: multiple worker processes for concurrent research runs
+- [ ] Job priority queue: interactive requests get priority over background jobs
+- [ ] Dead letter queue and failure alerting
+
+---
+
+### Priority 17: Comprehensive Observability & Monitoring
+**What to build:**
+- [ ] OpenTelemetry integration for distributed tracing across all nodes
+- [ ] Prometheus metrics: request latency, LLM token usage, error rates, queue depth
+- [ ] Grafana dashboard templates for operational monitoring
+- [ ] Structured JSON logging with correlation IDs across the full pipeline
+- [ ] Cost analytics dashboard: track and visualize API spending per user/run
+
+---
+
+### Priority 18: Security Hardening & Enterprise Features
+**What to build:**
+- [ ] Rate limiting per user and per endpoint (slowapi or custom middleware)
+- [ ] Input sanitization and prompt injection defense
+- [ ] Audit logging: who accessed what data, when
+- [ ] SSO/SAML integration for enterprise deployments
+- [ ] Data retention policies and GDPR compliance tooling
+- [ ] Role-based access control (RBAC) beyond simple auth
+
+---
+
+### Priority 19: Plugin & Extension System
+**What to build:**
+- [ ] Plugin API: allow third-party nodes to be registered at runtime
+- [ ] Hook system: before/after each graph node for custom processing
+- [ ] Custom tool adapters: user-defined search sources (Google Scholar, PubMed, DBLP)
+- [ ] Template marketplace: community-contributed LaTeX templates
+- [ ] Export plugins: custom output formats (Word, EPUB, conference submission systems)
+
+---
+
+### Priority 20: Mobile & Offline Support
+**What to build:**
+- [ ] Progressive Web App (PWA) with offline caching of generated papers
+- [ ] Responsive mobile-first UI redesign
+- [ ] Background sync: queue research requests offline, execute when connected
+- [ ] Push notifications for long-running research completion
+- [ ] Local-first mode: run with Ollama for fully offline research
+
+---
+
+## Next Steps
+
+**Recommended starting order for Phase 5:**
+
+1. **Priority 15: Intelligent Research Assistant** — highest value-to-effort ratio. Builds on existing chat infrastructure and requires mostly prompt engineering.
+2. **Priority 12: AI Model Router** — immediate operational benefit. Reduces cost and improves resilience.
+3. **Priority 13: Literature Monitoring** — watchdog endpoints already exist. Needs scheduling layer.
+
+**For Phase 6**, prioritize **Priority 16 (Job Queue)** first — it unblocks horizontal scaling and makes all other production features viable.
