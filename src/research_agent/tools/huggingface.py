@@ -23,7 +23,7 @@ class HuggingFaceDatasetAdapter(BaseToolAdapter):
             response.raise_for_status()
             data = response.json()
             if not isinstance(data, list):
-                warnings.append(f"Unexpected HuggingFace API response format")
+                warnings.append("Unexpected HuggingFace API response format")
                 return ToolResult(provider=self.provider_name, items=items, warnings=warnings)
             for ds in data[:n]:
                 items.append({
