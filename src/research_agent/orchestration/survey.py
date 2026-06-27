@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -10,7 +9,6 @@ from typing import Any
 
 from research_agent.models import agenerate_json, agenerate_text
 from research_agent.observability import apublish_progress
-from research_agent.orchestration.nodes.worker import WorkerPool
 from research_agent.tools.base import BaseToolAdapter
 from research_agent.tools.registry import arun_multi_source_search
 from research_agent.output.survey_generator import (
@@ -149,7 +147,7 @@ async def research_survey_topics(
     Returns:
         List of SurveyTopic objects enriched with findings.
     """
-    pool = WorkerPool(max_workers=min(len(topics), 6))
+    # pool = WorkerPool(max_workers=min(len(topics), 6))  # Reserved for future parallel execution
 
     async def research_topic(topic: SurveyTopic) -> SurveyTopic:
         await apublish_progress(
@@ -305,7 +303,7 @@ async def run_survey(
         agent="Survey Orchestrator",
         status="running",
         detail=f"Starting survey on: {broad_topic}",
-        message=f"Initiating survey generation",
+        message="Initiating survey generation",
     )
 
     # Step 1: Plan sub-topics
