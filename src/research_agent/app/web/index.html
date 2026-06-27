@@ -186,7 +186,9 @@
         <button id="previewTabBtn" class="tab-btn" type="button">Rendered Preview</button>
         <button id="blogTabBtn" class="tab-btn" type="button">Blog & Social</button>
         <button id="citationTabBtn" class="tab-btn" type="button">Citation Graph</button>
+        <button id="datasetsTabBtn" class="tab-btn" type="button">Datasets</button>
       </header>
+
 
 
       <section id="docWorkbench" class="panel doc-panel active">
@@ -290,6 +292,17 @@
           </div>
         </div>
       </section>
+
+      <section id="datasetsWorkbench" class="panel datasets-panel" style="display: flex; flex-direction: column; min-height: 500px; position: relative; overflow: hidden; padding: 16px;">
+        <div class="doc-header" style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); margin-bottom: 12px;">
+          <span class="doc-label" style="font-weight: 500;">Discovered Datasets</span>
+          <div id="datasetsStatusText" class="mono small" style="opacity: 0.7;">No active run loaded</div>
+        </div>
+        <div id="datasetsContainer" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px;">
+          <!-- Discovered datasets cards will render here -->
+        </div>
+      </section>
+
 
 
     </main>
