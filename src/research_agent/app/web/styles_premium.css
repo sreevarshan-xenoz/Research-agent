@@ -108,6 +108,7 @@ body::after {
   flex-direction: column;
   gap: 16px;
   scrollbar-width: thin;
+  min-height: 0;
 }
 
 /* Sidebar Scrollbar */
@@ -1238,13 +1239,13 @@ button:active {
 }
 
 /* Scrollbars */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 10px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.45); }
 
 .sidebar-header {
   margin-bottom: 8px;

@@ -1,4 +1,4 @@
-const messagesEl = document.getElementById("messages");
+const getMessagesEl = () => document.getElementById("messages");
 const chatForm = document.getElementById("chatForm");
 const messageInput = document.getElementById("messageInput");
 const templateSelect = document.getElementById("templateSelect");
@@ -546,6 +546,7 @@ function renderArtifacts(urls) {
 }
 
 function appendMessage(role, text, options = {}) {
+  const messagesEl = getMessagesEl();
   if (!messagesEl) return;
   const node = document.createElement("article");
   node.className = `message ${role}`;
