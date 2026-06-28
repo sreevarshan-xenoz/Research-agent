@@ -592,6 +592,38 @@ function appendMessage(role, text, options = {}) {
   return node;
 }
 
+function normalizeStatus(raw) {
+  if (!raw) return "pending";
+  const s = String(raw).toLowerCase().trim();
+  if (["done", "complete", "completed", "success", "finished"].includes(s)) return "complete";
+  if (["running", "active", "in_progress", "working"].includes(s)) return "running";
+  if (["waiting", "blocked", "paused"].includes(s)) return "waiting";
+  if (["error", "failed"].includes(s)) return "error";
+  return "pending";
+}
+
+function appendDiscovery(name, detail) {
+  if (!discoveryFeedEl) return;
+  // Remove the placeholder text if present
+  const placeholder = discoveryFeedEl.querySelector(".muted");
+  if (placeholder) placeholder.remove();
+
+  const item = document.createElement("div");
+  item.className = "discovery-item fade-in";
+  const source = document.createElement("span");
+  source.className = "source";
+  source.textContent = name;
+  item.appendChild(source);
+  if (detail) {
+    const detailEl = document.createElement("div");
+    detailEl.className = "small";
+    detailEl.textContent = detail;
+    item.appendChild(detailEl);
+  }
+  discoveryFeedEl.appendChild(item);
+  discoveryFeedEl.scrollTop = discoveryFeedEl.scrollHeight;
+}
+
 function renderAgentActivity(entries) {
   const colPending = document.getElementById("col-pending");
   const colRunning = document.getElementById("col-running");

@@ -581,12 +581,7 @@ button:active {
   50% { opacity: 0.5; transform: scale(1.2); }
 }
 
-/* Chat Area (Right) */
-.chat-area {
-  border-left: 1px solid var(--glass-border);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-}
+/* Chat Area (Right) — layout defined in .chat-area above */
 
 .chat-header {
   padding: 24px;
@@ -607,12 +602,13 @@ button:active {
   text-transform: uppercase;
 }
 
-.messages {
-  padding: 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+/* .messages layout defined above; just override padding/gap here */
+
+.composer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
 }
 
 .message {

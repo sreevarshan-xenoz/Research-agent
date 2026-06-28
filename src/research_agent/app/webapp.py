@@ -675,9 +675,19 @@ def create_app(
         if not session.last_run_id:
             raise HTTPException(status_code=400, detail="No previous run to resume")
 
+        run_id = session.last_run_id
+        artifact_base = f"/api/runs/{run_id}"
+
         return {
             "kind": "result",
-            "run_id": session.last_run_id,
+            "run_id": run_id,
+            "template": session.template,
+            "language": "en",
+            "artifact_urls": {
+                "pdf": f"{artifact_base}/render/pdf",
+                "latex": f"{artifact_base}/graph",
+            },
+            "overleaf_urls": {},
         }
 
     @app.post("/api/chat/upload")
@@ -1521,9 +1531,46 @@ async def _execute_research_run(
         critic_user_feedback=critic_user_feedback
     )
     
-    # Register callback for progress events
+    # Register a progress adapter that matches the single-dict signature
+    # expected by apublish_progress, while forwarding to emit_callback(event, payload).
     from research_agent.observability.progress import set_progress_callback
-    set_progress_callback(emit_callback)
+
+    agent_activity: list[dict] = []
+
+    async def progress_adapter(payload: dict):
+        """Adapter: apublish_progress sends a single dict; emit_callback needs (event, payload)."""
+        agent_name = payload.get("agent", "unknown")
+        status = payload.get("status", "running")
+        detail = payload.get("detail", "")
+        message = payload.get("message", "")
+
+        # Track agent activity for the frontend's Kanban board
+        existing = next((a for a in agent_activity if a["name"] == agent_name), None)
+        if existing:
+            existing["status"] = status
+            existing["detail"] = detail or message
+        else:
+            agent_activity.append({"name": agent_name, "status": status, "detail": detail or message})
+
+        # Determine phase from agent name for the pipeline tracker
+        phase_map = {
+            "intake": "intake", "clarifier": "clarifier", "planner": "planner",
+            "worker": "worker_executor", "executor": "worker_executor",
+            "indexer": "indexing", "indexing": "indexing",
+            "critic": "critic", "combiner": "combiner",
+            "composer": "composer", "exporter": "exporter",
+            "figure_generator": "figure_generator",
+            "citation_verifier": "citation_verifier",
+        }
+        phase = phase_map.get(agent_name.lower().split("_")[0], None)
+
+        await emit_callback("status", {
+            "phase": phase,
+            "message": message or detail or f"{agent_name}: {status}",
+            "agent_activity": list(agent_activity),
+        })
+
+    set_progress_callback(progress_adapter)
 
     try:
         final_state = await graph_runner(initial_state, registry=tool_registry)
@@ -1532,14 +1579,49 @@ async def _execute_research_run(
         session.pending_questions = final_state.clarification_questions
         session.awaiting_critic_feedback = (final_state.phase == "awaiting_critic_review")
         
-        if final_state.phase == "completed":
-            await emit_callback("complete", {
-                "artifact_dir": final_state.artifact_dir,
-                "summary": "Research complete. Artifacts ready."
+        if final_state.needs_clarification:
+            questions = final_state.clarification_questions
+            msg = "I need some clarification before proceeding:\n\n" + "\n".join(
+                f"- {q}" for q in questions
+            )
+            await emit_callback("clarification", {
+                "kind": "clarification",
+                "assistant_message": msg,
+                "persona": "clarifier",
+                "questions": questions,
             })
-        elif final_state.needs_clarification:
-            await emit_callback("clarification_needed", {
-                "questions": final_state.clarification_questions
+        elif final_state.phase == "awaiting_critic_review":
+            critic_msg = "\n".join(final_state.critic_notes) if final_state.critic_notes else "The critic has feedback. Please review and provide guidance."
+            await emit_callback("critic_feedback", {
+                "kind": "critic_feedback",
+                "assistant_message": critic_msg,
+                "persona": "critic",
+            })
+        else:
+            # Build result payload with all fields the frontend expects
+            artifact_base = f"/api/runs/{run_id}"
+            artifact_urls = {}
+            if final_state.artifact_dir:
+                artifact_urls["pdf"] = f"{artifact_base}/render/pdf"
+                artifact_urls["latex"] = f"{artifact_base}/graph"
+
+            summary = f"Research paper on \"{topic}\" generated successfully."
+            if final_state.run_warnings:
+                summary += "\n\n⚠️ Warnings:\n" + "\n".join(f"- {w}" for w in final_state.run_warnings)
+
+            await emit_callback("result", {
+                "kind": "result",
+                "run_id": run_id,
+                "assistant_message": summary,
+                "persona": "composer",
+                "latex_text": final_state.latex_main or "",
+                "artifact_urls": artifact_urls,
+                "overleaf_urls": {},
+                "doc_preview_html": "",
+                "section_evidence": [
+                    {"section": sec, "confidence": conf, "sources": []}
+                    for sec, conf in (final_state.section_confidence or {}).items()
+                ],
             })
             
         return True
