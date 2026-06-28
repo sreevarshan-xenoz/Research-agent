@@ -80,11 +80,42 @@ class ResearchIndex:
 
     def _ensure_collection(self, vector_size: int) -> None:
         # NOTE: Callers must hold self._lock
+        # Verify if the collection already exists in Qdrant and check its dimensions
+        try:
+            info = self.client.get_collection(self.collection_name)
+            if info is not None and info.config is not None and info.config.params is not None:
+                vectors_cfg = info.config.params.vectors
+                if hasattr(vectors_cfg, "size"):
+                    existing_size = vectors_cfg.size
+                else:
+                    # In case of multiple named vectors
+                    existing_size = next(iter(vectors_cfg.values())).size
+                
+                if existing_size != vector_size:
+                    logger.info(
+                        "Recreating collection '%s' due to vector dimension change from %d to %d",
+                        self.collection_name,
+                        existing_size,
+                        vector_size,
+                    )
+                    self.client.delete_collection(collection_name=self.collection_name)
+                    self._collection_created = False
+                else:
+                    # Dimensions match, so the collection is ready
+                    self.vector_size = vector_size
+                    self._collection_created = True
+        except Exception:
+            # Collection does not exist or failed to query, will create below
+            pass
+
         if self._collection_created and vector_size == self.vector_size:
             return
 
         if self._collection_created:
-            self.client.delete_collection(collection_name=self.collection_name)
+            try:
+                self.client.delete_collection(collection_name=self.collection_name)
+            except Exception:
+                pass
 
         self.vector_size = vector_size
         self.client.create_collection(
@@ -95,6 +126,7 @@ class ResearchIndex:
             ),
         )
         self._collection_created = True
+
 
     def _coerce_vector(self, vector: List[float]) -> List[float]:
         """Pad or truncate a vector to match self.vector_size.

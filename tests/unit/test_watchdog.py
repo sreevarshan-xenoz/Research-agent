@@ -446,7 +446,7 @@ class TestFullWatchdogFlow:
                 new=AsyncMock(return_value={"arxiv": mock_result}),
             ),
             patch(
-                "research_agent.app.watchdog_storage.get_watchdog_storage",
+                "research_agent.orchestration.watchdog.get_watchdog_storage",
                 return_value=storage,
             ),
         ):

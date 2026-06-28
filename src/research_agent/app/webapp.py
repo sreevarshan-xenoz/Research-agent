@@ -170,6 +170,14 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Startup: create database tables
+        from research_agent.app.auth import create_db_and_tables
+        try:
+            await create_db_and_tables()
+            logger.info("Database tables initialized successfully.")
+        except Exception as exc:
+            logger.error("Failed to initialize database tables: %s", exc)
+
         # Startup: start background watchdog scheduler
         watchdog_task = None
         if settings.features.research_watchdog:
@@ -744,6 +752,7 @@ def create_app(
         return "<h1>Research Agent Web API</h1><p>Static files not found.</p>"
 
     if Path(static_dir).exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
         app.mount("/web", StaticFiles(directory=static_dir), name="web")
 
     @app.get("/api/runs/{run_id}/graph")

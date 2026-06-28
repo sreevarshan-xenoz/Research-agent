@@ -28,15 +28,23 @@ def _is_newer(paper: dict[str, Any], last_checked: float) -> bool:
     Uses the paper's 'year' field as a proxy, since exact timestamps
     are not always available from all providers.
     """
-    year = paper.get("year", 0)
+    year_val = paper.get("year")
+    if year_val is None:
+        return True
+    year = year_val
     if isinstance(year, str):
         try:
             year = int(year)
         except (ValueError, TypeError):
-            year = 0
+            return True
+    elif not isinstance(year, (int, float)):
+        return True
+    if year == 0:
+        return True
     # If paper year is greater than or equal to the year of last check, consider it new
     last_check_year = float(time.gmtime(last_checked).tm_year) if last_checked > 0 else 0
     return year >= last_check_year or not last_checked
+
 
 
 async def run_watchdog_check(
