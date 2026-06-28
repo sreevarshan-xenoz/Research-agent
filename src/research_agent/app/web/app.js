@@ -246,7 +246,7 @@ authFormEl?.addEventListener("submit", async (e) => {
 
   try {
     if (authMode === "login") {
-      const response = await fetch("/auth/jwt/login", {
+      const response = await fetch("/api/auth/jwt/login", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ username: email, password: password }),
@@ -255,7 +255,7 @@ authFormEl?.addEventListener("submit", async (e) => {
       const data = await response.json();
       authToken = data.access_token;
     } else {
-      const response = await fetch("/auth/register", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
