@@ -706,6 +706,7 @@ async function sendMessageStream(text, onEvent) {
     max_runtime_minutes: Number.parseInt(runtimeCapInput?.value),
     max_cost_usd: Number.parseFloat(costCapInput?.value),
   });
+}
 // Mode Toggle Handlers
 runModeRadios.forEach(radio => {
   radio.addEventListener("change", (e) => {
