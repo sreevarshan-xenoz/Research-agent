@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from typing import Any
 import asyncio
 import json
 import logging
@@ -135,7 +135,7 @@ async def code_execution_node(state: GraphState) -> dict:
     except Exception as e:
         logger.error(f"Failed to write math_verification.md: {e}")
 
-    notebook = {
+    notebook: dict[str, Any] = {
         "cells": [
             {
                 "cell_type": "markdown",

@@ -85,11 +85,14 @@ class ResearchIndex:
             info = self.client.get_collection(self.collection_name)
             if info is not None and info.config is not None and info.config.params is not None:
                 vectors_cfg = info.config.params.vectors
-                if hasattr(vectors_cfg, "size"):
-                    existing_size = vectors_cfg.size
-                else:
-                    # In case of multiple named vectors
-                    existing_size = next(iter(vectors_cfg.values())).size
+                existing_size = 0
+                if vectors_cfg is not None:
+                    if isinstance(vectors_cfg, dict):
+                        first_val = next(iter(vectors_cfg.values()), None)
+                        if first_val is not None:
+                            existing_size = getattr(first_val, "size", 0)
+                    else:
+                        existing_size = getattr(vectors_cfg, "size", 0)
                 
                 if existing_size != vector_size:
                     logger.info(
@@ -153,7 +156,7 @@ class ResearchIndex:
         # Try local multilingual embeddings first
         if embedding_model and settings.features.multi_language:
             try:
-                from sentence_transformers import SentenceTransformer
+                from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
                 # Cache the model on the class or globally to avoid reloading
                 async with self._lock:
                     if not hasattr(self, "_st_model"):
@@ -172,7 +175,7 @@ class ResearchIndex:
         
         if api_key and enable_nvidia:
             try:
-                from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings
+                from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings  # type: ignore[import-untyped]
                 embedder = NVIDIAEmbeddings(api_key=api_key)
                 embeddings = await asyncio.to_thread(embedder.embed_documents, texts)
                 # Ensure collection matches the real embedding dimension

@@ -50,7 +50,7 @@ The project already delivers a complete research lifecycle pipeline:
 | Metric | Status | Details |
 |--------|--------|---------|
 | **Ruff lint** | ✅ PASS | 0 errors across 94 source files |
-| **Mypy typecheck** | ⚠️ 8 errors | 3 low (optional deps), 4 medium, 1 high (config attr) |
+| **Mypy typecheck** | ✅ PASS | 0 errors across 94 source files |
 | **Tests** | ✅ PASS | All unit tests and watchdog tests passing |
 | **Coverage** | 🟡 Needs work | No integration tests with real graph execution through tools |
 
@@ -64,11 +64,11 @@ Quick-fix priorities resolved:
 | P0 | Qdrant vector dimension mismatch — NVIDIA 1024d vs local 384d crashes upsert | `rag/indexer.py` | Detect dim change → recreate collection | ✅ Fixed |
 | P0 | Static files mounted at `/web` only, causing `/static/...` references to 404 | `app/webapp.py` | Mount `/static` directory in FastAPI | ✅ Fixed |
 | P0 | Database tables not created automatically on application start | `app/webapp.py` | Run `create_db_and_tables` in lifespan | ✅ Fixed |
-| P1 | `RetrievalSettings` missing `semantic_scholar_api_key` | `app/webapp.py:893` | Fix config attribute or use env var | 🟡 Pending |
-| P1 | `proposal_content` may be `None` sent to `write_text()` | `nodes/grant_proposal.py:68` | Add `or ""` fallback | 🟡 Pending |
-| P1 | Missing type stubs (fitz, pdfplumber, sentence_transformers) | 3 files | Add `# type: ignore[import-not-found]` | 🟡 Pending |
+| P1 | `RetrievalSettings` missing `semantic_scholar_api_key` | `app/webapp.py:893` | Safely query config, fallback to env var | ✅ Fixed |
+| P1 | `proposal_content` may be `None` sent to `write_text()` | `nodes/grant_proposal.py:68` | Add `or ""` fallback | ✅ Fixed |
+| P1 | Missing type stubs (fitz, pdfplumber, sentence_transformers) | 3 files | Add `# type: ignore[import-not-found]` | ✅ Fixed |
+| P2 | `code_execution.py` `run_warnings` typed as `object` | `nodes/code_execution.py:161` | Annotate `notebook` as `dict[str, Any]` | ✅ Fixed |
 | P2 | 3 test files hang (test_smoke, test_webapp, test_worker_node) | fixture/async | Investigate and fix | 🟡 Pending |
-| P2 | `code_execution.py` `run_warnings` typed as `object` | `nodes/code_execution.py:161` | Add explicit list cast | 🟡 Pending |
 
 
 ---

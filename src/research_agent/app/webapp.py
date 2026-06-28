@@ -898,8 +898,11 @@ def create_app(
         from research_agent.tools.arxiv import ArxivAdapter
         from research_agent.tools.semantic_scholar import SemanticScholarAdapter
 
+        import os
         arxiv = ArxivAdapter()
-        api_key = settings.retrieval.semantic_scholar_api_key if hasattr(settings, "retrieval") else None
+        api_key = getattr(settings.retrieval, "semantic_scholar_api_key", None) if hasattr(settings, "retrieval") else None
+        if not api_key:
+            api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
         ss = SemanticScholarAdapter(api_key=api_key)
 
         arxiv_items = []
@@ -926,9 +929,9 @@ def create_app(
 
         years = [p.get("year") for p in all_papers if p.get("year")]
         year_counts = Counter(years)
-        timeline = [{"year": int(y), "count": count} for y, count in sorted(year_counts.items()) if str(y).isdigit()]
+        timeline = [{"year": int(str(y)), "count": count} for y, count in sorted(year_counts.items()) if str(y).isdigit()]
 
-        authors = []
+        authors: list[str] = []
         for p in all_papers:
             authors.extend(p.get("authors") or [])
         author_counts = Counter(authors)

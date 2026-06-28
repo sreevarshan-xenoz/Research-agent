@@ -65,7 +65,7 @@ async def grant_proposal_node(state: GraphState) -> dict:
     run_dir.mkdir(parents=True, exist_ok=True)
     proposal_file = run_dir / "grant_proposal.md"
     try:
-        proposal_file.write_text(proposal_content, encoding="utf-8")
+        proposal_file.write_text(proposal_content or "", encoding="utf-8")
     except Exception as e:
         logger.error(f"Failed to write grant_proposal.md: {e}")
 

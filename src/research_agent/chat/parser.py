@@ -9,7 +9,7 @@ def extract_text_from_pdf(pdf_path: Path) -> dict[str, Any] | None:
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
     try:
-        import fitz
+        import fitz  # type: ignore[import-untyped]
         doc = fitz.open(pdf_path)
         text_parts: list[str] = []
         metadata: dict[str, Any] = {
@@ -30,7 +30,7 @@ def extract_text_from_pdf(pdf_path: Path) -> dict[str, Any] | None:
         return None
 
     try:
-        import pdfplumber
+        import pdfplumber  # type: ignore[import-not-found]
         with pdfplumber.open(pdf_path) as pdf:
             text = "\n".join(page.extract_text() or "" for page in pdf.pages)
             return {
