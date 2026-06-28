@@ -145,19 +145,23 @@ const authToggleTextEl = document.getElementById("authToggleText");
 
 // Initialize Quill Editor (if element exists)
 let quill = null;
-if (docEditorEl) {
-  quill = new Quill("#docEditor", {
-    theme: "snow",
-    modules: {
-      toolbar: [
-        [{ header: [1, 2, 3, false] }],
-        ["bold", "italic", "underline", "strike"],
-        [{ list: "ordered" }, { list: "bullet" }],
-        [{ 'align': [] }],
-        ["clean"],
-      ],
-    },
-  });
+try {
+  if (docEditorEl) {
+    quill = new Quill("#docEditor", {
+      theme: "snow",
+      modules: {
+        toolbar: [
+          [{ header: [1, 2, 3, false] }],
+          ["bold", "italic", "underline", "strike"],
+          [{ list: "ordered" }, { list: "bullet" }],
+          [{ 'align': [] }],
+          ["clean"],
+        ],
+      },
+    });
+  }
+} catch (err) {
+  console.error("Failed to initialize Quill editor:", err);
 }
 
 let sessionId = null;
