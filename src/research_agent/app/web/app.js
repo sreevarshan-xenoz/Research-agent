@@ -1794,7 +1794,490 @@ subscribeTrendsBtn?.addEventListener("click", async () => {
   }
 });
 
+// ── Agent Chat Functions (P15) ─────────────────────────────────────────────────
+
+let agentSessionId = null;
+let agentStreamAbortController = null;
+
+const agentSuggestionsEl = document.getElementById("agentSuggestions");
+const suggestionsContainerEl = document.getElementById("suggestionsContainer");
+const agentCitationsEl = document.getElementById("agentCitations");
+const citationsContainerEl = document.getElementById("citationsContainer");
+const researchPlanPanelEl = document.getElementById("researchPlanPanel");
+const planSectionsContainerEl = document.getElementById("planSectionsContainer");
+const planTasksContainerEl = document.getElementById("planTasksContainer");
+const planTasksListEl = document.getElementById("planTasksList");
+const executePlanBtn = document.getElementById("executePlanBtn");
+
+async function ensureAgentSession() {
+  if (agentSessionId) return agentSessionId;
+  try {
+    const res = await fetch("/api/session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({ template: templateSelect?.value || "ieee" })
+    });
+    if (!res.ok) throw new Error("Session creation failed");
+    const data = await res.json();
+    agentSessionId = data.session_id;
+    localStorage.setItem("research_agent_session_id", agentSessionId);
+    return agentSessionId;
+  } catch (err) {
+    console.error("Failed to create agent session:", err);
+    return null;
+  }
+}
+
+function renderCitations(citations) {
+  if (!citationsContainerEl || !agentCitationsEl) return;
+  if (!citations || citations.length === 0) {
+    agentCitationsEl.classList.add("hidden");
+    return;
+  }
+  agentCitationsEl.classList.remove("hidden");
+  citationsContainerEl.innerHTML = citations.map((c, i) => {
+    const [numPart, ...rest] = c.split("] ");
+    const num = numPart.replace("[", "");
+    const text = rest.join("] ");
+    // Try to extract URL from the citation
+    const urlMatch = text.match(/https?:\/\/[^\s]+/);
+    const url = urlMatch ? urlMatch[0] : "";
+    const displayText = url ? text.replace(url, "").trim() : text;
+    return `
+      <div class="citation-item">
+        <span class="citation-number">${num}</span>
+        <span class="citation-text">${displayText}${url ? ` <a href="${url}" target="_blank" rel="noopener">↗</a>` : ""}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderSuggestions(suggestions) {
+  if (!suggestionsContainerEl || !agentSuggestionsEl) return;
+  if (!suggestions || suggestions.length === 0) {
+    agentSuggestionsEl.classList.add("hidden");
+    return;
+  }
+  agentSuggestionsEl.classList.remove("hidden");
+  suggestionsContainerEl.innerHTML = suggestions.map(s => {
+    const text = typeof s === "string" ? s : (s.title || s.query || s);
+    const isResearchQuery = typeof s === "string" && (s.toLowerCase().includes("research") || s.toLowerCase().includes("survey") || s.toLowerCase().includes("paper"));
+    const dataset = isResearchQuery ? ` data-research="${text.replace(/"/g, "&quot;")}"` : "";
+    return `<button class="suggestion-chip" data-query="${text.replace(/"/g, "&quot;")}"${dataset}>${text}</button>`;
+  }).join("");
+}
+
+// Event delegation for suggestion chips (single consolidated handler)
+suggestionsContainerEl?.addEventListener("click", (e) => {
+  const chip = e.target.closest(".suggestion-chip");
+  if (!chip) return;
+  
+  // Research-flagged chips get special treatment: trigger research plan generation
+  if (chip.dataset.research) {
+    const query = chip.dataset.research || chip.textContent;
+    if (messageInput) messageInput.value = query;
+    chatForm?.dispatchEvent(new Event("submit"));
+    return;
+  }
+  
+  const query = chip.dataset.query || chip.textContent;
+  if (messageInput) messageInput.value = query;
+  chatForm?.dispatchEvent(new Event("submit"));
+});
+
+function renderToolCalls(toolCalls) {
+  if (!toolCalls || toolCalls.length === 0) return;
+  const msgBody = document.querySelector(".message:last-child .message-body");
+  if (!msgBody) return;
+  const toolContainer = document.createElement("div");
+  toolContainer.style.marginTop = "8px";
+  toolCalls.forEach(tc => {
+    const toolName = tc.tool || "unknown";
+    const itemCount = tc.items?.length || 0;
+    const error = tc.error;
+    const div = document.createElement("div");
+    div.className = `tool-call-result ${error ? "tool-error" : "tool-complete"}`;
+    div.innerHTML = `
+      <span>${error ? "⚠" : "✓"}</span>
+      <span><strong>${toolName}</strong>: ${error ? error : `found ${itemCount} results`}</span>
+    `;
+    toolContainer.appendChild(div);
+  });
+  msgBody.appendChild(toolContainer);
+}
+
+function showAgentThinking() {
+  const messagesEl = getMessagesEl();
+  if (!messagesEl) return;
+  const node = document.createElement("article");
+  node.className = "message assistant";
+  node.id = "agentThinking";
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 12L2.1 12.1"/></svg>';
+  node.appendChild(avatar);
+  const msgContent = document.createElement("div");
+  msgContent.className = "message-body";
+  msgContent.innerHTML = `
+    <div class="meta">Research Agent</div>
+    <div class="agent-thinking">
+      Analyzing your request
+      <div class="thinking-dots">
+        <span class="thinking-dot"></span>
+        <span class="thinking-dot"></span>
+        <span class="thinking-dot"></span>
+      </div>
+    </div>
+  `;
+  node.appendChild(msgContent);
+  messagesEl.appendChild(node);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function hideAgentThinking() {
+  const el = document.getElementById("agentThinking");
+  if (el) el.remove();
+}
+
+async function loadAgentSuggestions() {
+  if (!agentSessionId || !agentSuggestionsEl) return;
+  try {
+    const res = await fetch(`/api/chat/suggestions?session_id=${encodeURIComponent(agentSessionId)}`, {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderSuggestions(data.suggestions || []);
+  } catch (err) {
+    console.error("Failed to load suggestions:", err);
+  }
+}
+
+async function runAgentChatFlow(message) {
+  const sid = await ensureAgentSession();
+  if (!sid) {
+    appendMessage("assistant", "Failed to create session. Please try again.");
+    return;
+  }
+
+  appendMessage("user", message);
+  showAgentThinking();
+  if (sendBtn) sendBtn.disabled = true;
+
+  // Hide previous suggestions/citations
+  if (agentSuggestionsEl) agentSuggestionsEl.classList.add("hidden");
+  if (agentCitationsEl) agentCitationsEl.classList.add("hidden");
+
+  try {
+    const res = await fetch("/api/chat/agent", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        session_id: sid,
+        message: message
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Agent request failed");
+    }
+
+    const data = await res.json();
+    hideAgentThinking();
+
+    // Show the response
+    const options = {};
+    // If there's a research launch topic, add a launch button
+    const hasResearch = (data.tool_calls || []).some(tc => tc.tool === "launch_research");
+    if (hasResearch) {
+      options.links = {
+        "Launch Full Research": "#"
+      };
+    }
+    appendMessage("assistant", data.message || "No response received.");
+
+    // Render tool calls
+    renderToolCalls(data.tool_calls || []);
+
+    // Show citations
+    renderCitations(data.citations || []);
+
+    // Show suggestions
+    renderSuggestions(data.suggestions || []);
+
+    // Add launch research button if topic was discussed
+    const lastMsg = document.querySelector(".message:last-child .message-body");
+    if (lastMsg && data.tool_calls?.some(tc => tc.tool === "launch_research")) {
+      const launchBtn = document.createElement("button");
+      launchBtn.className = "launch-research-btn";
+      launchBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Launch Full Research Paper';
+      launchBtn.onclick = async () => {
+        launchBtn.disabled = true;
+        launchBtn.textContent = "Launching...";
+        try {
+          const lr = await fetch("/api/chat/launch-research", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ topic: message, session_id: sid })
+          });
+          const lrData = await lr.json();
+          if (lrData.kind === "result") {
+            currentRunId = lrData.run_id;
+            appendMessage("assistant", `🚀 Research launched! Paper: "${lrData.topic}" (${lrData.section_count} sections). Check the Document Editor tab.`, {
+              links: {
+                "View Artifacts": `/api/runs/${lrData.run_id}/graph`,
+                "Download PDF": lrData.artifact_urls?.pdf
+              }
+            });
+            if (currentRunId && overleafPushBtn) overleafPushBtn.classList.remove("hidden");
+            setWorkbenchStatus("ready", "success");
+            updatePipelineTracker("completed");
+            switchWorkbenchTab("doc");
+          } else {
+            appendMessage("assistant", `Clarification needed: ${(lrData.questions || []).join(", ")}`);
+          }
+        } catch (err) {
+          appendMessage("assistant", `Research launch failed: ${err.message}`);
+        }
+      };
+      lastMsg.appendChild(launchBtn);
+    }
+  } catch (err) {
+    hideAgentThinking();
+    appendMessage("assistant", `Error: ${err.message}`);
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    if (messageInput) messageInput.focus();
+  }
+}
+
+async function runAgentChatStreamFlow(message) {
+  const sid = await ensureAgentSession();
+  if (!sid) {
+    appendMessage("assistant", "Failed to create session.");
+    return;
+  }
+
+  appendMessage("user", message);
+  if (sendBtn) sendBtn.disabled = true;
+  if (agentSuggestionsEl) agentSuggestionsEl.classList.add("hidden");
+  if (agentCitationsEl) agentCitationsEl.classList.add("hidden");
+
+  // Create assistant message node that we'll update
+  const assistantNode = appendMessage("assistant", "", { generating: true });
+  const textContent = assistantNode?.querySelector(".text-content");
+  const msgBody = assistantNode?.querySelector(".message-body");
+  let fullMessage = "";
+  const toolContainer = document.createElement("div");
+  toolContainer.style.marginTop = "8px";
+  if (msgBody) msgBody.appendChild(toolContainer);
+
+  agentStreamAbortController = new AbortController();
+
+  try {
+    const res = await fetch("/api/chat/agent/stream", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        session_id: sid,
+        message: message
+      }),
+      signal: agentStreamAbortController.signal
+    });
+
+    if (!res.ok) {
+      throw new Error("Stream request failed");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+
+          switch (event.event) {
+            case "thought":
+              if (textContent) textContent.textContent = "🧠 " + (event.content || "Thinking...");
+              break;
+
+            case "tool_result":
+              const tcDiv = document.createElement("div");
+              tcDiv.className = `tool-call-result ${event.status === "error" ? "tool-error" : "tool-complete"}`;
+              tcDiv.innerHTML = `<span>${event.status === "error" ? "⚠" : "✓"}</span><span><strong>${event.tool}</strong>: ${event.status === "error" ? event.error : `${event.item_count} results`}</span>`;
+              toolContainer.appendChild(tcDiv);
+              break;
+
+            case "complete":
+              if (textContent) {
+                textContent.textContent = event.message || "";
+              }
+              renderCitations(event.citations || []);
+              renderSuggestions(event.suggestions || []);
+              
+              // Add launch research button
+              if (event.suggestions?.some(s => typeof s === "string" && s.toLowerCase().includes("research"))) {
+                const launchBtn = document.createElement("button");
+                launchBtn.className = "launch-research-btn";
+                launchBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Launch Full Research';
+                launchBtn.onclick = async () => {
+                  launchBtn.disabled = true;
+                  launchBtn.textContent = "Launching...";
+                  try {
+                    const lr = await fetch("/api/chat/launch-research", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${authToken}`
+                      },
+                      body: JSON.stringify({ topic: message, session_id: sid })
+                    });
+                    const lrData = await lr.json();
+                    if (lrData.kind === "result") {
+                      currentRunId = lrData.run_id;
+                      appendMessage("assistant", `🚀 Research paper launched on "${lrData.topic}"! Check the Document Editor.`);
+                      if (currentRunId && overleafPushBtn) overleafPushBtn.classList.remove("hidden");
+                      setWorkbenchStatus("ready", "success");
+                      switchWorkbenchTab("doc");
+                    }
+                  } catch (err) {
+                    console.error("Launch research failed:", err);
+                  }
+                };
+                if (msgBody) msgBody.appendChild(launchBtn);
+              }
+              break;
+
+            case "error":
+              if (textContent) textContent.textContent = `Error: ${event.message}`;
+              break;
+          }
+        } catch (e) {
+          console.warn("Failed to parse stream event:", line, e);
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return;
+    if (textContent) textContent.textContent = `Error: ${err.message}`;
+  } finally {
+    agentStreamAbortController = null;
+    if (sendBtn) sendBtn.disabled = false;
+    if (messageInput) messageInput.focus();
+    // Remove generating indicator
+    if (assistantNode) {
+      const typing = assistantNode.querySelector(".typing");
+      if (typing) typing.remove();
+    }
+  }
+}
+
+// Patch appendMessage to add feedback buttons to assistant messages
+const _originalAppendMessage = appendMessage;
+let _messageIndex = 0;
+
+appendMessage = function(role, text, options = {}) {
+  const node = _originalAppendMessage(role, text, options);
+  if (role === "assistant" && agentSessionId) {
+    _messageIndex++;
+    addFeedbackButtons(node, agentSessionId, _messageIndex);
+  }
+  return node;
+};
+
+// Update mode handler for agent chat
+runModeRadios.forEach(radio => {
+  radio.addEventListener("change", (e) => {
+    const mode = e.target.value;
+    surveyConfigBlock?.classList.toggle("hidden", mode !== "survey");
+    libraryConfigBlock?.classList.toggle("hidden", mode !== "chat");
+
+    if (mode === "paper") {
+      messageInput.placeholder = "Enter a research topic...";
+    } else if (mode === "survey") {
+      messageInput.placeholder = "Enter a broad research area to survey...";
+    } else if (mode === "chat") {
+      messageInput.placeholder = "Ask a question about the active document...";
+      loadUserLibraries();
+    } else if (mode === "agent") {
+      messageInput.placeholder = "Ask me anything! Find papers, search web, discover datasets...";
+      loadAgentSuggestions();
+    }
+  });
+});
+
+// Patch the chat form submit to handle agent mode and research planning
+chatForm?.addEventListener("submit", async (e) => {
+  const activeMode = document.querySelector('input[name="runMode"]:checked')?.value || "paper";
+  if (activeMode === "agent") {
+    e.preventDefault();
+    const text = messageInput?.value.trim();
+    if (!text) return;
+    messageInput.value = "";
+
+    // Check if this looks like a research intent (generate a plan first)
+    const researchPatterns = ["write", "research", "paper on", "survey on", "create a paper", "generate a paper", "write a survey", "write about"];
+    const isResearchIntent = researchPatterns.some(p => text.toLowerCase().startsWith(p) || text.toLowerCase().includes(p));
+
+    if (isResearchIntent) {
+      // Extract the actual topic from research intent patterns
+      let topic = text;
+      for (const pattern of researchPatterns) {
+        const idx = text.toLowerCase().indexOf(pattern);
+        if (idx >= 0) {
+          const afterPattern = text.substring(idx + pattern.length).trim();
+          if (afterPattern && afterPattern.length > 5) {
+            topic = afterPattern.replace(/^"|"$/g, "").replace(/^on\s+/i, "");
+            break;
+          }
+        }
+      }
+      await generateResearchPlan(topic);
+    } else {
+      // Use streaming by default, fallback to non-streaming
+      try {
+        await runAgentChatStreamFlow(text);
+      } catch (err) {
+        console.warn("Streaming agent chat failed, falling back to non-streaming:", err);
+        await runAgentChatFlow(text);
+      }
+    }
+  }
+  // Otherwise the existing handler (via onsubmit) or the previous listener will handle it
+}, true);  // Use capture to run before other handlers
+
+
+
 (async () => {
   resetWorkbench();
   checkAuth();
+  
+  // Restore agent session if exists
+  const savedAgentSession = localStorage.getItem("research_agent_session_id");
+  if (savedAgentSession) {
+    agentSessionId = savedAgentSession;
+  }
 })();
