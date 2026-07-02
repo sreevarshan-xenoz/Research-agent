@@ -742,6 +742,540 @@ def create_app(
         return result
 
 
+    # ------------------------------------------------------------------ #
+    # Agentic Chat Endpoints (P15)
+    # ------------------------------------------------------------------ #
+
+    # Global memory store for the agentic chat
+    from research_agent.chat.memory import get_memory_store
+    agent_memory = get_memory_store()
+
+    @app.post("/api/chat/agent")
+    async def agent_chat_endpoint(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Agentic chat with tool-calling loop.
+
+        Takes a message, runs the agent loop (think → act → observe → respond),
+        and returns the synthesized answer with citations.
+
+        Request body:
+            message (str, required): The user's message.
+            session_id (str, optional): Session ID for conversation continuity.
+            library_id (str, optional): Library ID from PDF upload for document Q&A.
+            depth (str, optional): "quick", "balanced", or "deep".
+
+        Response:
+            message (str): The agent's answer.
+            citations (list[str]): Formatted citation references.
+            tool_calls (list[dict]): Tools that were called.
+            session_id (str): Session ID (created if new).
+            suggestions (list[str]): Proactive follow-up suggestions.
+            launch_research (dict|None): If the agent decided to launch research.
+        """
+        from research_agent.chat.agent import agent_chat
+
+        message = body.get("message", "").strip()
+        if not message:
+            raise HTTPException(status_code=400, detail="message is required")
+
+        session_id = body.get("session_id", "")
+        if not session_id:
+            sid = f"sess-{uuid.uuid4().hex[:12]}"
+            session_id = sid
+            # Create a chat session in the existing session store too
+            new_ss = ChatSession(session_id=session_id, user_id=str(user.id))
+            await save_session(new_ss)
+        else:
+            existing_session = await get_session(str(user.id), session_id)
+            if existing_session is None:
+                raise HTTPException(status_code=404, detail="Session not found")
+
+        library_id = body.get("library_id") or agent_memory.get_active_library(session_id) or ""
+        # Build tool registry for the agent
+        agent_tool_registry = tool_registry
+
+        # Build persistent memory from the agent memory store for conversation continuity
+        def _build_memory_store() -> dict[str, list[dict]]:
+            history = agent_memory.get_history(session_id, limit=10)  # type: ignore[union-attr]
+            store: dict[str, list[dict]] = {session_id: [
+                {"role": e.role, "content": e.content}
+                for e in history  # type: ignore[union-attr]
+            ]}
+            return store
+
+        # Run the agentic loop with persistent memory
+        memory_store = _build_memory_store()
+        result = await agent_chat(
+            session_id=session_id,
+            message=message,
+            tool_registry=agent_tool_registry,
+            library_id=library_id or None,
+            memory_store=memory_store,
+            max_tool_iterations=3,
+        )
+
+        # Sync agent_chat's in-memory history back to agent_memory
+        synced_history = memory_store.get(session_id, [])
+        for entry in synced_history:
+            agent_memory.add_message(session_id, entry["role"], entry["content"])
+        
+        # Update suggestions and store them in memory
+        suggestions = _generate_suggestions(message, result)
+
+        # Store last topic in memory
+        agent_memory.set_last_topic(session_id, message)
+        if library_id:
+            agent_memory.set_active_library(session_id, library_id)
+
+        return {
+            "session_id": session_id,
+            "message": result["message"],
+            "citations": result.get("citations", []),
+            "tool_calls": result.get("tool_calls", []),
+            "suggestions": suggestions,
+            "launch_research": None,
+        }
+
+    @app.post("/api/chat/agent/stream")
+    async def agent_chat_stream_endpoint(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Streaming agentic chat with real-time tool execution events.
+
+        Streams NDJSON events as the agent thinks, calls tools, and generates
+        the final response:
+        - {"event": "thought", "content": "..."}
+        - {"event": "tool_result", "tool": "search_web", "item_count": 5}
+        - {"event": "complete", "message": "...", "citations": [...]}
+        - {"event": "error", "message": "..."}
+        """
+        from research_agent.chat.agent import agent_chat
+
+        message = body.get("message", "").strip()
+        if not message:
+            raise HTTPException(status_code=400, detail="message is required")
+
+        session_id = body.get("session_id", "")
+        if not session_id:
+            sid = f"sess-{uuid.uuid4().hex[:12]}"
+            session_id = sid
+            new_ss = ChatSession(session_id=session_id, user_id=str(user.id))
+            await save_session(new_ss)
+
+        library_id = body.get("library_id", "")
+
+        async def event_stream():
+            events_queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+            async def run_agent():
+                try:
+                    # Emit thought event
+                    await events_queue.put({"event": "thought", "content": "Analyzing your request and choosing tools..."})
+
+                    # Build persistent memory from agent_memory
+                    history = agent_memory.get_history(session_id, limit=10)  # type: ignore[union-attr]
+                    memory_store: dict[str, list[dict]] = {session_id: [
+                        {"role": e.role, "content": e.content}
+                        for e in history  # type: ignore[union-attr]
+                    ]}
+
+                    result = await agent_chat(
+                        session_id=session_id,
+                        message=message,
+                        tool_registry=tool_registry,
+                        library_id=library_id or None,
+                        memory_store=memory_store,
+                        max_tool_iterations=3,
+                    )
+
+                    # Sync back to agent_memory
+                    synced = memory_store.get(session_id, [])
+                    for entry in synced:
+                        agent_memory.add_message(session_id, entry["role"], entry["content"])
+
+                    tool_calls = result.get("tool_calls", [])
+                    for tc in tool_calls:
+                        tool_name = tc.get("tool", "unknown")
+                        items = tc.get("items", [])
+                        error = tc.get("error")
+                        if error:
+                            await events_queue.put({
+                                "event": "tool_result",
+                                "tool": tool_name,
+                                "status": "error",
+                                "error": error,
+                            })
+                        else:
+                            await events_queue.put({
+                                "event": "tool_result",
+                                "tool": tool_name,
+                                "status": "complete",
+                                "item_count": len(items),
+                            })
+
+                    suggestions = _generate_suggestions(message, result)
+
+                    await events_queue.put({
+                        "event": "complete",
+                        "message": result["message"],
+                        "citations": result.get("citations", []),
+                        "session_id": session_id,
+                        "suggestions": suggestions,
+                    })
+                except Exception as e:
+                    await events_queue.put({"event": "error", "message": str(e)})
+                finally:
+                    await events_queue.put(None)
+
+            task = asyncio.create_task(run_agent())
+            try:
+                while True:
+                    item = await events_queue.get()
+                    if item is None:
+                        break
+                    yield json.dumps(item) + "\n"
+            finally:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    @app.post("/api/chat/launch-research")
+    async def agent_launch_research(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Launch a full research pipeline from agent context.
+
+        Accepts a topic refined by the agentic chat and launches the complete
+        research graph (plan → search → synthesize → compose → export).
+
+        Request body:
+            topic (str, required): The research topic.
+            session_id (str, optional): Session for context continuity.
+            depth (str, optional): "quick", "balanced", "deep".
+            template (str, optional): "ieee", "acm", "beamer", "poster".
+        """
+        topic = body.get("topic", "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        session_id = body.get("session_id", "")
+        depth = body.get("depth", "balanced")
+        template = body.get("template", "ieee")
+
+        run_id = f"run-{uuid.uuid4().hex[:8]}"
+
+        actual_graph_runner = graph_runner or run_graph
+        tool_registry_local = registry if registry is not None else build_tool_registry(settings)
+
+        initial_state = WorkflowState(
+            run_id=run_id,
+            topic=topic,
+            template=template,
+            language="en",
+            depth=depth,
+            autonomy_mode="hybrid",
+            max_runtime_minutes=settings.runtime.max_runtime_minutes,
+            max_cost_usd=settings.runtime.max_cost_usd,
+            max_iterations=settings.runtime.max_iterations,
+        )
+
+        try:
+            if asyncio.iscoroutinefunction(actual_graph_runner):
+                final_state = await actual_graph_runner(initial_state, registry=tool_registry_local)
+            else:
+                final_state = actual_graph_runner(initial_state, registry=tool_registry_local)
+
+            if final_state.needs_clarification or final_state.stop_reason == "clarification_required":
+                return {
+                    "kind": "clarification",
+                    "run_id": run_id,
+                    "questions": final_state.clarification_questions,
+                }
+
+            # Store context in memory
+            agent_memory.set_research_context(session_id or "", {
+                "run_id": run_id,
+                "topic": topic,
+                "template": template,
+                "depth": depth,
+            })
+
+            artifact_base = f"/api/runs/{run_id}"
+
+            return {
+                "kind": "result",
+                "run_id": run_id,
+                "topic": topic,
+                "template": template,
+                "section_count": len(final_state.sections) if hasattr(final_state, "sections") and final_state.sections else 0,
+                "artifact_urls": {
+                    "pdf": f"{artifact_base}/render/pdf",
+                    "latex": f"{artifact_base}/graph",
+                    "citation_graph": f"{artifact_base}/citation-graph",
+                    "datasets": f"{artifact_base}/datasets",
+                    "gaps": f"{artifact_base}/gaps",
+                },
+                "section_evidence": [
+                    {"section": sec, "confidence": conf}
+                    for sec, conf in (final_state.section_confidence or {}).items()
+                ],
+            }
+        except Exception as e:
+            logger.exception("Research launch failed")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/chat/suggestions")
+    async def agent_suggestions(
+        session_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """Get proactive suggestions for the current session context.
+
+        Uses the agent's memory (last topic, research context, conversation
+        history) to suggest follow-up actions.
+        """
+        last_topic = agent_memory.get_last_topic(session_id)
+        research_ctx = agent_memory.get_research_context(session_id)
+        suggestions = []
+
+        if last_topic:
+            suggestions.extend([
+                {"title": f"Research \"{last_topic}\" in depth",
+                 "action": "research",
+                 "query": f"Launch full research on \"{last_topic}\""},
+                {"title": "Find datasets for this topic",
+                 "action": "agent_chat",
+                 "query": f"Find datasets related to \"{last_topic}\""},
+                {"title": "Search recent papers",
+                 "action": "agent_chat",
+                 "query": f"Find recent papers on \"{last_topic}\" from the last 2 years"},
+            ])
+
+        if research_ctx.get("run_id"):
+            suggestions.append({
+                "title": "View latest research results",
+                "action": "view_run",
+                "run_id": research_ctx["run_id"],
+            })
+            suggestions.append({
+                "title": "Export as blog post",
+                "action": "export_blog",
+                "run_id": research_ctx["run_id"],
+            })
+
+        active_lib = agent_memory.get_active_library(session_id)
+        if active_lib:
+            suggestions.append({
+                "title": "Ask about your uploaded document",
+                "action": "agent_chat",
+                "query": "Summarize the key findings from my uploaded document"
+                          " and explain how they relate to recent research",
+                "library_id": active_lib,
+            })
+
+        # General suggestions
+        if not suggestions:
+            suggestions = [
+                {"title": "Find papers on a topic",
+                 "action": "agent_chat",
+                 "query": "Find recent papers on transformer architectures"},
+                {"title": "Generate a research survey",
+                 "action": "survey",
+                 "query": "Create a survey of recent advances in NLP"},
+                {"title": "Check research trends",
+                 "action": "trends",
+                 "query": "Show me current trends in machine learning"},
+            ]
+
+        return {"suggestions": suggestions}
+
+    @app.post("/api/chat/plan")
+    async def agent_research_plan(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Generate a structured research plan from a topic.
+
+        Decomposes the topic into sub-topics, generates a research outline
+        with sections and tasks, and returns the plan for review before
+        launching the full research pipeline.
+
+        Request body:
+            topic (str, required): The research topic or question.
+            depth (str, optional): "quick", "balanced", "deep".
+            template (str, optional): "ieee", "acm", "beamer", "poster".
+
+        Response:
+            topic (str): The original topic.
+            sections (list[dict]): Structured outline with sections and sub-sections.
+            tasks (list[dict]): Research tasks with dependencies.
+            estimated_papers (int): Rough estimate of papers to review.
+        """
+        topic = body.get("topic", "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        depth = body.get("depth", "balanced")
+        template = body.get("template", "ieee")
+
+        # Use the existing planner logic to generate the research plan
+        from research_agent.orchestration.nodes.planner import _build_adaptive_fallback_tasks
+
+        # Generate fallback tasks as a base plan
+        fallback_sections = [
+            {"title": "Introduction", "objective": f"Set the context and motivation for {topic}", "estimated_pages": 1},
+            {"title": "Background and Related Work", "objective": f"Survey existing literature on {topic}", "estimated_pages": 2},
+            {"title": "Methodology", "objective": f"Describe research methods for {topic}", "estimated_pages": 2},
+            {"title": "Results and Analysis", "objective": f"Present findings on {topic}", "estimated_pages": 2},
+            {"title": "Discussion", "objective": f"Interpret results and discuss implications for {topic}", "estimated_pages": 1},
+            {"title": "Conclusion and Future Work", "objective": f"Summarize contributions and outline future directions for {topic}", "estimated_pages": 1},
+        ]
+
+        tasks = _build_adaptive_fallback_tasks(topic)
+
+        # Try to use the planner's LLM to generate a better plan
+        from research_agent.models import agenerate_json
+
+        prompt = (
+            f"Generate a detailed research plan outline for the topic: '{topic}'.\n"
+            f"Template: {template}, Depth: {depth}\n\n"
+            "Return a JSON object with a 'sections' key containing an array of section objects.\n"
+            "Each section object must have:\n"
+            "- 'id': a unique string like 's1', 's2'\n"
+            "- 'title': section title\n"
+            "- 'objective': 1-2 sentence research objective for this section\n"
+            "- 'subsections': array of subsection title strings (at least 2)\n"
+            "- 'estimated_pages': integer 1-3\n"
+            f"Include {6 if depth == 'quick' else 7 if depth == 'balanced' else 9} sections total, covering all aspects of a research paper on '{topic}'.\n"
+            "Also return a 'tasks' key with research tasks that would generate this content."
+        )
+
+        try:
+            llm_plan = await agenerate_json(role="head", prompt=prompt)
+            if llm_plan and isinstance(llm_plan, dict):
+                if "sections" in llm_plan and isinstance(llm_plan["sections"], list):
+                    sections = llm_plan["sections"]
+                    # Validate sections
+                    valid_sections = []
+                    for s in sections:
+                        if isinstance(s, dict) and "title" in s and "objective" in s:
+                            s["estimated_pages"] = s.get("estimated_pages", 1)
+                            s["subsections"] = s.get("subsections", [])
+                            if not isinstance(s["subsections"], list):
+                                s["subsections"] = []
+                            valid_sections.append(s)
+                    if valid_sections:
+                        fallback_sections = valid_sections
+
+                if "tasks" in llm_plan and isinstance(llm_plan["tasks"], list):
+                    valid_tasks = []
+                    for t in llm_plan["tasks"]:
+                        if isinstance(t, dict) and "task_id" in t and "title" in t:
+                            t["objective"] = t.get("objective", t["title"])
+                            t["depends_on"] = t.get("depends_on", [])
+                            t["providers"] = t.get("providers", [])
+                            t["status"] = "pending"
+                            if not isinstance(t["depends_on"], list):
+                                t["depends_on"] = []
+                            if not isinstance(t["providers"], list):
+                                t["providers"] = []
+                            valid_tasks.append(t)
+                    if valid_tasks:
+                        tasks = valid_tasks
+        except Exception:
+            pass  # Use fallback sections
+
+        return {
+            "topic": topic,
+            "template": template,
+            "depth": depth,
+            "sections": fallback_sections,
+            "tasks": tasks,
+            "estimated_papers": len(tasks) * 8,
+        }
+
+    @app.post("/api/chat/feedback")
+    async def agent_chat_feedback(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Record user feedback on an agent response.
+
+        Request body:
+            session_id (str, required): The session ID.
+            message_id (str, optional): Identifier for the specific message.
+            rating (str, required): "up" or "down".
+            feedback_text (str, optional): Optional text feedback.
+        """
+        session_id = body.get("session_id", "")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="session_id is required")
+
+        rating = body.get("rating", "")
+        if rating not in ("up", "down"):
+            raise HTTPException(status_code=400, detail="rating must be 'up' or 'down'")
+
+        # Store in agent memory
+        feedback_entry = {
+            "rating": rating,
+            "feedback_text": body.get("feedback_text", ""),
+            "message_id": body.get("message_id", ""),
+        }
+
+        # Accumulate feedback in memory
+        existing_feedback = agent_memory.get_preference(session_id, "feedback_history", [])
+        existing_feedback.append(feedback_entry)
+        agent_memory.update_preference(session_id, "feedback_history", existing_feedback)
+
+        # Track counts
+        up_count = sum(1 for f in existing_feedback if f["rating"] == "up")
+        down_count = sum(1 for f in existing_feedback if f["rating"] == "down")
+        agent_memory.update_preference(session_id, "feedback_up_count", up_count)
+        agent_memory.update_preference(session_id, "feedback_down_count", down_count)
+
+        return {
+            "success": True,
+            "total_feedback": len(existing_feedback),
+            "up_count": up_count,
+            "down_count": down_count,
+        }
+
+    @app.post("/api/chat/memory")
+    async def update_agent_memory(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Update agent memory preferences for the current user/session.
+
+        Request body:
+            session_id (str): The session ID.
+            preferences (dict): Key-value pairs to store in memory.
+            research_context (dict, optional): Research context to store.
+        """
+        session_id = body.get("session_id", "")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="session_id is required")
+
+        preferences = body.get("preferences", {})
+        for key, value in preferences.items():
+            agent_memory.update_preference(session_id, key, value)
+
+        research_context = body.get("research_context")
+        if research_context:
+            agent_memory.set_research_context(session_id, research_context)
+
+        return {"success": True}
+
+
     @app.get("/api/chat/library")
     async def chat_list_libraries(user: User = Depends(current_active_user)):
         libraries = [
@@ -1489,6 +2023,53 @@ def create_app(
         }
 
     return app
+
+
+def _generate_suggestions(
+    message: str,
+    result: dict,
+) -> list[str]:
+    """Generate proactive follow-up suggestions based on the agent's response."""
+    suggestions = []
+
+    # If the response mentions papers or research, suggest follow-ups
+    message_lower = message.lower()
+    result_msg = result.get("message", "")
+    result_msg_lower = result_msg.lower()
+
+    has_papers = any(w in result_msg_lower for w in ["paper", "research", "study", "arxiv", "published"])
+    has_datasets = any(w in result_msg_lower for w in ["dataset", "data", "kaggle", "huggingface"])
+    has_code = any(w in result_msg_lower for w in ["code", "github", "implementation", "repository"])
+    has_comparison = any(w in result_msg_lower for w in ["compare", "difference", "versus", "vs"])
+
+    cited_sources = len(result.get("citations", []))
+
+    if has_papers and cited_sources > 0:
+        suggestions.append(f"Launch full research on \"{message}\"")
+        suggestions.append("Find related papers and build a citation graph")
+
+    if has_datasets:
+        suggestions.append("Show me the most popular datasets in this area")
+
+    if has_comparison:
+        suggestions.append("Create a comparison table of the approaches mentioned")
+
+    if message_lower.startswith(("find", "search", "look up", "get")):
+        suggestions.append("Summarize these findings in a structured report")
+        suggestions.append("Export results as a blog post")
+
+    if has_code:
+        suggestions.append("Check if the code repositories are still active")
+
+    # General suggestions if we don't have specific ones
+    if not suggestions:
+        suggestions = [
+            "Search for recent papers on this topic",
+            "Find related datasets for further analysis",
+            "Generate a comprehensive research survey",
+        ]
+
+    return suggestions[:4]  # Max 4 suggestions
 
 
 def _compose_refined_topic(original: str, questions: list[str], answers: list[str]) -> str:
