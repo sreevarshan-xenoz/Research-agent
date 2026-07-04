@@ -143,6 +143,19 @@ observability:
   enable_metrics: true
   log_level: INFO
 
+# Code Sandbox configuration (P24)
+code_sandbox:
+  enabled: true
+  container_timeout: 60          # Max seconds per code execution
+  memory_limit_mb: 512           # Memory limit per Docker container
+  max_output_chars: 100000       # Max stdout/stderr chars to capture
+  pool_size: 2                   # Number of warm Docker containers
+  min_verification_potential: 0.3  # Min claim verifiability threshold
+  claim_extraction_enabled: true
+  code_generation_enabled: true
+  r_support: false               # Enable R language support
+  julia_support: false           # Enable Julia language support
+
 # Qdrant configuration
 qdrant:
   location: ".runtime/qdrant"
