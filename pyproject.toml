@@ -33,7 +33,8 @@ dependencies = [
   "fastapi-users>=13.0.0",
   "fastapi-users-db-sqlalchemy>=6.0.0",
   "aiosqlite>=0.20.0",
-  "aiolimiter>=1.2.1"
+  "aiolimiter>=1.2.1",
+  "docker>=7.0.0"
 ]
 
 [project.optional-dependencies]
