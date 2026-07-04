@@ -46,6 +46,7 @@ from research_agent.observability.checkpoints import (
 )
 from research_agent.observability.logging import ErrorSeverity, log_error
 from research_agent.orchestration.graph import close_redis_pool, get_memory_diagnostics, get_redis_pool, run_graph
+from research_agent.orchestration.job_queue import JobPriority, JobStatus, get_job_manager
 from research_agent.orchestration.state import WorkflowState
 from research_agent.tools.cache import close_global_tool_cache
 from research_agent.tools.registry import build_tool_registry
@@ -2229,6 +2230,112 @@ def create_app(
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, _send)
+
+
+    # ------------------------------------------------------------------ #
+    # Job Queue Endpoints (P16)
+    # ------------------------------------------------------------------ #
+
+    # Worker runs as separate process (python -m research_agent.orchestration.job_queue.worker)
+    job_manager_running = False
+
+    @app.get("/api/jobs/queue/health")
+    async def job_queue_health(user: User = Depends(current_active_user)):
+        """Get job queue health status."""
+        jm = get_job_manager()
+        try:
+            depth = await jm.get_queue_depth()
+            active = await jm.get_active_count()
+            return {
+                "queue_depth": depth,
+                "active_jobs": active,
+                "worker_running": job_manager_running,
+                "healthy": True,
+            }
+        except Exception as exc:
+            return {"healthy": False, "error": str(exc)[:200]}
+
+    @app.post("/api/jobs")
+    async def enqueue_job(
+        body: dict,
+        user: User = Depends(current_active_user)
+    ):
+        """Enqueue a new research job."""
+        topic = body.get("topic", "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        from research_agent.orchestration.job_queue.models import JobType
+
+        params = {
+            "topic": topic,
+            "template": body.get("template", "ieee"),
+            "depth": body.get("depth", "balanced"),
+            "language": body.get("language", "en"),
+            "autonomy_mode": body.get("autonomy_mode", "hybrid"),
+            "max_runtime_minutes": body.get("max_runtime_minutes", settings.runtime.max_runtime_minutes),
+            "max_cost_usd": body.get("max_cost_usd", settings.runtime.max_cost_usd),
+            "max_iterations": body.get("max_iterations", settings.runtime.max_iterations),
+        }
+
+        jm = get_job_manager()
+
+        # Check concurrency limit
+        if not await jm.check_concurrency_limit(str(user.id), settings.job_queue.max_concurrent_per_user):
+            raise HTTPException(status_code=429, detail="Concurrency limit reached. Wait for active jobs to complete.")
+
+        job = await jm.enqueue(
+            job_type=JobType.RESEARCH_RUN,
+            params=params,
+            user_id=str(user.id),
+            max_retries=settings.job_queue.max_retries,
+            timeout_seconds=settings.job_queue.default_timeout,
+        )
+
+        return {"job_id": job.job_id, "status": job.status.value, "created_at": job.created_at}
+
+    @app.get("/api/jobs")
+    async def list_jobs(
+        status: str | None = None,
+        user: User = Depends(current_active_user)
+    ):
+        """List jobs for the current user."""
+        jm = get_job_manager()
+        filter_status = JobStatus(status) if status and status in (s.value for s in JobStatus) else None
+        jobs = await jm.list_jobs(user_id=str(user.id), status=filter_status, limit=50)
+        return {"jobs": [j.to_dict() for j in jobs]}
+
+    @app.get("/api/jobs/{job_id}")
+    async def get_job_status(
+        job_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """Get job status and details."""
+        jm = get_job_manager()
+        job = await jm.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.user_id != str(user.id):
+            raise HTTPException(status_code=403, detail="Not authorized to view this job")
+        return job.to_dict()
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    async def cancel_job(
+        job_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """Cancel a queued or running job."""
+        jm = get_job_manager()
+        job = await jm.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.user_id != str(user.id):
+            raise HTTPException(status_code=403, detail="Not authorized to cancel this job")
+
+        cancelled = await jm.cancel_job(job_id)
+        if cancelled:
+            return {"status": "cancelled", "job_id": job_id}
+        return {"status": job.status.value, "job_id": job_id, "message": "Job already completed or failed"}
 
         return {
             "success": True,
