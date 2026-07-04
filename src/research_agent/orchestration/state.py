@@ -56,6 +56,15 @@ class GraphState(TypedDict):
     artifact_dir: str
     acm_layout: str | None
     run_warnings: list[str]
+    # Deep Research fields (P21)
+    search_rounds: dict[str, list[dict[str, Any]]]
+    termination_signals: dict[str, str]
+    chained_papers: list[dict[str, Any]]
+    chained_paper_ids: list[str]
+    # Code Sandbox fields (P24)
+    empirical_claims: list[dict[str, Any]]
+    code_verification_items: list[dict[str, Any]]
+    code_reproducibility_report: str | None
 
 
 @dataclass
@@ -111,6 +120,15 @@ class WorkflowState:
     artifact_root: str = ".runtime/artifacts"
     artifact_dir: str = ""
     run_warnings: List[str] = field(default_factory=list)
+    # Deep Research fields (P21)
+    search_rounds: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    termination_signals: Dict[str, str] = field(default_factory=dict)
+    chained_papers: List[Dict[str, Any]] = field(default_factory=list)
+    chained_paper_ids: List[str] = field(default_factory=list)
+    # Code Sandbox fields (P24)
+    empirical_claims: List[Dict[str, Any]] = field(default_factory=list)
+    code_verification_items: List[Dict[str, Any]] = field(default_factory=list)
+    code_reproducibility_report: Optional[str] = None
 
 
 def to_graph_state(state: WorkflowState) -> GraphState:
@@ -166,6 +184,13 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "artifact_dir": state.artifact_dir,
         "acm_layout": state.acm_layout,
         "run_warnings": state.run_warnings,
+        "search_rounds": state.search_rounds,
+        "termination_signals": state.termination_signals,
+        "chained_papers": state.chained_papers,
+        "chained_paper_ids": state.chained_paper_ids,
+        "empirical_claims": state.empirical_claims,
+        "code_verification_items": state.code_verification_items,
+        "code_reproducibility_report": state.code_reproducibility_report,
     }
 
 
@@ -222,4 +247,11 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         artifact_root=state["artifact_root"],
         artifact_dir=state["artifact_dir"],
         run_warnings=state["run_warnings"],
+        search_rounds=state.get("search_rounds", {}),
+        termination_signals=state.get("termination_signals", {}),
+        chained_papers=state.get("chained_papers", []),
+        chained_paper_ids=state.get("chained_paper_ids", []),
+        empirical_claims=state.get("empirical_claims", []),
+        code_verification_items=state.get("code_verification_items", []),
+        code_reproducibility_report=state.get("code_reproducibility_report"),
     )
