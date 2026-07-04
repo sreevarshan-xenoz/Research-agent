@@ -52,6 +52,33 @@ class GroqSettings(BaseModel):
     timeout_seconds: int = Field(default=30, ge=10, le=300)
 
 
+class CodeSandboxSettings(BaseModel):
+    """Configuration for the Verified Code Execution Sandbox (P24)."""
+    enabled: bool = True
+    container_timeout: int = Field(default=60, ge=10, le=600, description="Max seconds per code execution")
+    memory_limit_mb: int = Field(default=512, ge=64, le=8192, description="Memory limit per container")
+    max_output_chars: int = Field(default=100_000, ge=1_000, le=1_000_000, description="Max chars to capture from stdout/stderr")
+    pool_size: int = Field(default=2, ge=0, le=10, description="Number of warm containers to prewarm")
+    min_verification_potential: float = Field(default=0.3, ge=0.0, le=1.0, description="Min verification potential threshold")
+    claim_extraction_enabled: bool = True
+    code_generation_enabled: bool = True
+    r_support: bool = Field(default=False, description="Enable R language support")
+    julia_support: bool = Field(default=False, description="Enable Julia language support")
+
+
+class DeepResearchSettings(BaseModel):
+    """Configuration for the Agentic Deep Research Engine (P21)."""
+    enabled: bool = True
+    max_search_rounds: int = Field(default=3, ge=1, le=10, description="Maximum search rounds per task")
+    max_citation_chain_depth: int = Field(default=2, ge=0, le=5, description="Max recursion depth for citation chaining")
+    max_chained_papers: int = Field(default=15, ge=1, le=100, description="Max total chained papers per run")
+    max_seed_papers: int = Field(default=3, ge=1, le=20, description="Max seed papers to chain from per task")
+    min_relevance_threshold: float = Field(default=0.15, ge=0.0, le=1.0, description="Min relevance for chaining a paper")
+    novelty_decay_threshold: float = Field(default=0.1, ge=0.0, le=1.0, description="Novelty ratio below which search terminates")
+    score_plateau_threshold: float = Field(default=0.05, ge=0.0, le=1.0, description="Min score improvement to continue")
+    max_stalled_rounds: int = Field(default=2, ge=1, le=5, description="Max rounds below plateau threshold before termination")
+
+
 class ModelRouterTaskConfig(BaseModel):
     """Configuration for a single task type in the model router."""
     provider: str = "ollama"
@@ -308,3 +335,5 @@ class AppSettings(BaseModel):
     watchdog_email: WatchdogEmailSettings = Field(default_factory=WatchdogEmailSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+    deep_research: DeepResearchSettings = Field(default_factory=DeepResearchSettings)
+    code_sandbox: CodeSandboxSettings = Field(default_factory=CodeSandboxSettings)

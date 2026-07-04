@@ -8,6 +8,8 @@ from research_agent.config.schema import (
     ModelRouterSettings,
     ModelRouterTaskConfig,
     WatchdogEmailSettings,
+    DeepResearchSettings,
+    CodeSandboxSettings,
 )
 
 __all__ = [
@@ -19,6 +21,8 @@ __all__ = [
     "ModelRouterSettings",
     "ModelRouterTaskConfig",
     "WatchdogEmailSettings",
+    "DeepResearchSettings",
+    "CodeSandboxSettings",
     "load_settings",
     "validate_insecure_defaults",
 ]
