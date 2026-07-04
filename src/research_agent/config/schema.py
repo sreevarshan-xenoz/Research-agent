@@ -23,28 +23,89 @@ class RuntimeSettings(BaseModel):
         return value
 
 
+class OpenAISettings(BaseModel):
+    """OpenAI-specific configuration."""
+    api_key: SecretStr = SecretStr("")
+    api_base: str | None = Field(default=None, description="Custom API base URL (e.g., for Azure OpenAI or proxies)")
+    organization: str | None = Field(default=None, description="OpenAI organization ID")
+    timeout_seconds: int = Field(default=60, ge=10, le=300)
+
+
+class AnthropicSettings(BaseModel):
+    """Anthropic-specific configuration."""
+    api_key: SecretStr = SecretStr("")
+    api_base: str | None = Field(default=None, description="Custom API base URL")
+    timeout_seconds: int = Field(default=60, ge=10, le=300)
+
+
+class GeminiSettings(BaseModel):
+    """Google Gemini-specific configuration."""
+    api_key: SecretStr = SecretStr("")
+    api_base: str | None = Field(default=None, description="Custom API base URL (e.g., for Vertex AI)")
+    timeout_seconds: int = Field(default=60, ge=10, le=300)
+
+
+class GroqSettings(BaseModel):
+    """Groq-specific configuration (ultra-fast inference)."""
+    api_key: SecretStr = SecretStr("")
+    api_base: str | None = Field(default=None, description="Custom API base URL")
+    timeout_seconds: int = Field(default=30, ge=10, le=300)
+
+
+class ModelRouterTaskConfig(BaseModel):
+    """Configuration for a single task type in the model router."""
+    provider: str = "ollama"
+    model: str = Field(default="", description="Full model name (e.g. openai/gpt-4o). If empty, inferred from provider + models section.")
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1)
+
+
+class ModelRouterSettings(BaseModel):
+    """Task-to-model routing configuration.
+
+    Maps each research task type to a specific model/provider combination.
+    Task types: plan, write, critique, code, embed, search, evaluate
+    """
+    enabled: bool = True
+    default_provider: str = "ollama"
+    default_model: str = Field(default="", description="Fallback model when no task-specific mapping exists")
+    tasks: dict[str, ModelRouterTaskConfig] = Field(
+        default_factory=lambda: {
+            "plan": ModelRouterTaskConfig(provider="gemini", model="gemini/gemini-2.0-flash"),
+            "write": ModelRouterTaskConfig(provider="groq", model="groq/llama-3.3-70b-versatile"),
+            "critique": ModelRouterTaskConfig(provider="ollama", model="ollama/deepseek-r1:8b"),
+            "code": ModelRouterTaskConfig(provider="gemini", model="gemini/gemini-2.0-flash"),
+            "embed": ModelRouterTaskConfig(provider="ollama", model="ollama/nomic-embed-text"),
+        }
+    )
+
+
 class ModelSettings(BaseModel):
     """Model configuration with multi-provider support.
 
     Role definitions:
     - orchestrator: Local model for planning, clarification, critic. Default: ollama/qwen3:8b
     - subagent: Model for section synthesis (auto-selects from local/cloud/fallback)
-    - provider_priority: Order of providers to try (ollama > openrouter > puter)
+    - provider_priority: Order of providers to try (ollama > openrouter > puter > nvidia > openai > anthropic)
     """
     # Orchestrator (head) model
     orchestrator_model: str = "ollama/qwen3:8b"
-    orchestrator_provider: Literal["ollama", "openrouter", "vllm"] = "ollama"
+    orchestrator_provider: Literal["ollama", "openrouter", "vllm", "openai", "anthropic", "gemini", "groq"] = "ollama"
 
     # Subagent model settings
-    subagent_provider: Literal["auto", "ollama", "openrouter", "puter", "nvidia", "vllm"] = "auto"
+    subagent_provider: Literal["auto", "ollama", "openrouter", "puter", "nvidia", "vllm", "openai", "anthropic", "gemini", "groq"] = "auto"
     subagent_local: str = "deepseek-r1:8b"
     subagent_cloud: str = "openrouter/free"
     subagent_nvidia: str = "nvidia/meta/llama-3.1-405b-instruct"
     subagent_vllm: str = "deepseek-r1"
+    subagent_openai: str = "openai/gpt-4o"
+    subagent_anthropic: str = "anthropic/claude-3-5-sonnet-20241022"
+    subagent_gemini: str = "gemini/gemini-2.0-flash"
+    subagent_groq: str = "groq/llama-3.3-70b-versatile"
 
     # Provider priority
     provider_priority: list[str] = Field(
-        default_factory=lambda: ["ollama", "openrouter", "puter", "nvidia", "vllm"]
+        default_factory=lambda: ["ollama", "openrouter", "puter", "nvidia", "vllm", "openai", "anthropic", "gemini", "groq"]
     )
 
     # Legacy aliases (deprecated, for backward compatibility)
@@ -72,7 +133,7 @@ class ModelSettings(BaseModel):
             value = [item.strip() for item in value.split(",") if item.strip()]
         if not isinstance(value, list):
             raise ValueError("provider_priority must be a list or a comma-separated string")
-        supported = {"ollama", "openrouter", "puter", "nvidia"}
+        supported = {"ollama", "openrouter", "puter", "nvidia", "vllm", "openai", "anthropic", "gemini", "groq"}
         for p in value:
             if p not in supported:
                 raise ValueError(f"Invalid provider in priority: {p}. Supported: {sorted(supported)}")
@@ -181,6 +242,16 @@ class AuthSettings(BaseModel):
     enable_registration: bool = True
 
 
+class WatchdogEmailSettings(BaseModel):
+    """SMTP/email configuration for watchdog digest notifications."""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    from_email: str = "noreply@research-agent.local"
+    from_name: str = "Research Watchdog"
+
+
 class FeatureFlags(BaseModel):
     """Feature flags for v2 features."""
     parallel_subagents: bool = True
@@ -193,6 +264,7 @@ class FeatureFlags(BaseModel):
     plagiarism_check: bool = True
     research_watchdog: bool = True
     overleaf_integration: bool = True
+    literature_monitoring: bool = True
 
 
 class ObservabilitySettings(BaseModel):
@@ -220,13 +292,19 @@ class AppSettings(BaseModel):
     version: str = "2.0"
     runtime: RuntimeSettings
     models: ModelSettings
+    model_router: ModelRouterSettings = Field(default_factory=ModelRouterSettings)
     output: OutputSettings
     retrieval: RetrievalSettings
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     openrouter: OpenRouterSettings = Field(default_factory=OpenRouterSettings)
+    openai: OpenAISettings = Field(default_factory=OpenAISettings)
+    anthropic: AnthropicSettings = Field(default_factory=AnthropicSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
+    groq: GroqSettings = Field(default_factory=GroqSettings)
     vllm: VllmSettings = Field(default_factory=VllmSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    watchdog_email: WatchdogEmailSettings = Field(default_factory=WatchdogEmailSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
