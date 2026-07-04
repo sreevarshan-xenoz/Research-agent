@@ -176,6 +176,18 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("CODE_SANDBOX_POOL_SIZE"):
         code_sandbox["pool_size"] = int(env["CODE_SANDBOX_POOL_SIZE"])
 
+    # Job Queue settings (P16)
+    job_queue = data.setdefault("job_queue", {})
+    if env.get("JOB_QUEUE_ENABLED"):
+        val = env["JOB_QUEUE_ENABLED"].lower().strip()
+        job_queue["enabled"] = val in ("true", "1", "yes")
+    if env.get("JOB_QUEUE_WORKER_COUNT"):
+        job_queue["worker_count"] = int(env["JOB_QUEUE_WORKER_COUNT"])
+    if env.get("JOB_QUEUE_MAX_CONCURRENT"):
+        job_queue["max_concurrent_per_user"] = int(env["JOB_QUEUE_MAX_CONCURRENT"])
+    if env.get("JOB_QUEUE_TIMEOUT"):
+        job_queue["default_timeout"] = int(env["JOB_QUEUE_TIMEOUT"])
+
     return data
 
 
