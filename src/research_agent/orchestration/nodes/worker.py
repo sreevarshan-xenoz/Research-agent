@@ -135,6 +135,125 @@ async def _emit_progress(
     await apublish_progress(agent=agent, status=status, detail=detail, message=message)
 
 
+async def _run_deep_research_task(
+    task: GraphTask,
+    registry: dict[str, BaseToolAdapter],
+    progress_handler: ProgressCallback | None,
+    task_id: str,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Execute a deep research task with iterative query refinement and citation chaining.
+
+    Multi-round search: initial pass -> gap analysis -> follow-up queries ->
+    citation chaining -> merge findings.
+    """
+    from research_agent.config import load_settings
+    from research_agent.orchestration.deep_research.query_refiner import refine_queries
+    from research_agent.orchestration.deep_research.citation_chainer import chain_citations
+
+    settings = load_settings()
+    dr_settings = settings.deep_research
+    max_rounds = dr_settings.max_search_rounds
+
+    query = str(task["objective"])
+    providers_raw = task.get("providers")
+    providers = [str(p) for p in providers_raw] if isinstance(providers_raw, list) else None
+
+    aggregated_findings: dict[str, dict[str, Any]] = {}
+    queries_used: list[str] = [query]
+    task_warnings: list[str] = []
+
+    for round_idx in range(max_rounds):
+        await _emit_progress(
+            progress_handler,
+            agent=f"DeepResearch {task_id}",
+            status="running",
+            detail=f"Round {round_idx + 1}/{max_rounds}: {query[:80]}",
+            message=f"Deep research round {round_idx + 1}",
+        )
+
+        try:
+            result_map = await arun_multi_source_search(
+                query, registry, limit=4, providers=providers
+            )
+
+            try:
+                await _enrich_web_results_with_page_content(result_map, registry)
+            except Exception as enrichment_exc:
+                task_warnings.append(f"enrichment_error:{str(enrichment_exc)}")
+
+            # Merge round findings into aggregated findings
+            for provider, result in result_map.items():
+                if provider in aggregated_findings:
+                    existing_items = aggregated_findings[provider].get("items", [])
+                    existing_ids = {str(item.get("paper_id", item.get("url", ""))) for item in existing_items if isinstance(item, dict)}
+                    for item in result.items:
+                        if isinstance(item, dict):
+                            item_id = str(item.get("paper_id", item.get("url", "")))
+                            if item_id not in existing_ids:
+                                existing_items.append(item)
+                                existing_ids.add(item_id)
+                    aggregated_findings[provider]["items"] = existing_items
+                    aggregated_findings[provider]["item_count"] = len(existing_items)
+                else:
+                    metadata_only = sum(
+                        1 for item in result.items
+                        if isinstance(item, dict) and not str(item.get("snippet") or item.get("content") or "").strip()
+                    )
+                    aggregated_findings[provider] = {
+                        "item_count": len(result.items),
+                        "metadata_only_count": metadata_only,
+                        "warning_count": len(result.warnings),
+                        "warnings": list(result.warnings),
+                        "items": list(result.items),
+                    }
+
+                for warning in result.warnings:
+                    task_warnings.append(f"{provider}:{warning}")
+        except Exception as search_exc:
+            task_warnings.append(f"deep_search_round_{round_idx}_error:{search_exc}")
+            logger.exception("Deep search round %d failed for task %s", round_idx, task_id)
+
+        # Query refinement: generate follow-up queries from gaps
+        if round_idx < max_rounds - 1:
+            follow_up_queries = await refine_queries(
+                topic=str(task.get("title", "")),
+                task_title=str(task.get("title", "")),
+                task_objective=query,
+                current_findings=aggregated_findings,
+                queries_used=queries_used,
+            )
+            if follow_up_queries:
+                query = follow_up_queries[0]
+                queries_used.append(query)
+                if len(follow_up_queries) > 1:
+                    queries_used.append(follow_up_queries[1])
+            else:
+                break  # No more gaps to explore
+
+    # Citation chaining: find cited/citing papers for high-value seeds
+    try:
+        chain_result = await chain_citations(
+            registry=registry,
+            task_findings=aggregated_findings,
+            max_depth=dr_settings.max_citation_chain_depth,
+            max_seed_papers=dr_settings.max_seed_papers,
+            max_total=dr_settings.max_chained_papers,
+        )
+        if chain_result.chained_papers:
+            aggregated_findings.setdefault("citation_chain", {
+                "item_count": len(chain_result.chained_papers),
+                "items": chain_result.chained_papers,
+                "warning_count": 0,
+                "warnings": [],
+                "metadata_only_count": 0,
+            })
+            task_warnings.extend(chain_result.warnings)
+    except Exception as chain_exc:
+        task_warnings.append(f"citation_chaining_error:{chain_exc}")
+
+    return aggregated_findings, task_warnings
+
+
 class WorkerPool:
     """Manages parallel execution of research tasks with concurrency control."""
 
@@ -145,12 +264,14 @@ class WorkerPool:
         self, 
         task: GraphTask, 
         registry: dict[str, BaseToolAdapter],
-        progress_handler: ProgressCallback | None = None
+        progress_handler: ProgressCallback | None = None,
+        *,
+        deep_research_enabled: bool = False,
     ) -> tuple[str, dict[str, dict[str, Any]], list[str]]:
         async with self.semaphore:
             task_id = str(task["task_id"])
             task["status"] = "running"
-            
+
             await _emit_progress(
                 progress_handler,
                 agent=f"SubResearch {task_id}",
@@ -162,58 +283,58 @@ class WorkerPool:
             query = str(task["objective"])
             providers_raw = task.get("providers")
             providers = [str(p) for p in providers_raw] if isinstance(providers_raw, list) else None
-            
+
             task_finding: dict[str, dict[str, Any]] = {}
-            task_warnings = []
-            
-            try:
-                # Execute multi-source search
-                result_map = await arun_multi_source_search(
-                    query, 
-                    registry, 
-                    limit=4, 
-                    providers=providers
+            task_warnings: list[str] = []
+
+            if deep_research_enabled:
+                # P21: Deep research with iterative refinement + citation chaining
+                task_finding, task_warnings = await _run_deep_research_task(
+                    task, registry, progress_handler, task_id
                 )
-                
-                # Enrich results with page content
+            else:
+                # Standard single-pass search
                 try:
-                    await _enrich_web_results_with_page_content(result_map, registry)
-                except Exception as enrichment_exc:
-                    task_warnings.append(f"enrichment_error:{str(enrichment_exc)}")
-                    log_error(
-                        "Page enrichment failed for task %s",
-                        severity=ErrorSeverity.RECOVERABLE,
-                        component="worker",
-                        trace_id=task_id,
-                        detail=str(enrichment_exc),
+                    result_map = await arun_multi_source_search(
+                        query, registry, limit=4, providers=providers
                     )
-                
-                # Format findings
-                task_finding = {
-                    provider: {
-                        "item_count": len(result.items),
-                        "metadata_only_count": sum(
-                            1
-                            for item in result.items
-                            if isinstance(item, dict)
-                            and not str(item.get("snippet") or item.get("content") or "").strip()
-                        ),
-                        "warning_count": len(result.warnings),
-                        "warnings": result.warnings,
-                        "items": result.items,
+
+                    try:
+                        await _enrich_web_results_with_page_content(result_map, registry)
+                    except Exception as enrichment_exc:
+                        task_warnings.append(f"enrichment_error:{str(enrichment_exc)}")
+                        log_error(
+                            "Page enrichment failed for task %s",
+                            severity=ErrorSeverity.RECOVERABLE,
+                            component="worker",
+                            trace_id=task_id,
+                            detail=str(enrichment_exc),
+                        )
+
+                    task_finding = {
+                        provider: {
+                            "item_count": len(result.items),
+                            "metadata_only_count": sum(
+                                1 for item in result.items
+                                if isinstance(item, dict)
+                                and not str(item.get("snippet") or item.get("content") or "").strip()
+                            ),
+                            "warning_count": len(result.warnings),
+                            "warnings": result.warnings,
+                            "items": result.items,
+                        }
+                        for provider, result in result_map.items()
                     }
-                    for provider, result in result_map.items()
-                }
-                
-                for provider, result in result_map.items():
-                    for warning in result.warnings:
-                        task_warnings.append(f"{provider}:{warning}")
-                        
-            except Exception as search_exc:
-                logger.exception("Catastrophic search failure for task %s", task_id)
-                task_warnings.append(f"search_catastrophic_error:{str(search_exc)}")
-                task_finding = {"error": {"items": [], "warnings": [str(search_exc)], "item_count": 0}}
-            
+
+                    for provider, result in result_map.items():
+                        for warning in result.warnings:
+                            task_warnings.append(f"{provider}:{warning}")
+
+                except Exception as search_exc:
+                    logger.exception("Catastrophic search failure for task %s", task_id)
+                    task_warnings.append(f"search_catastrophic_error:{str(search_exc)}")
+                    task_finding = {"error": {"items": [], "warnings": [str(search_exc)], "item_count": 0}}
+
             task["status"] = "complete"
             total_items = sum(
                 int(f["item_count"])
@@ -237,6 +358,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
     pool = WorkerPool(max_workers=max_workers)
     
     registry_provider_count = max(len(registry), 1)
+    deep_research_enabled = settings.deep_research.enabled
 
     async def worker_node(state: GraphState) -> dict:
         tasks: list[GraphTask] = [cast(GraphTask, dict(task)) for task in state["tasks"]]
@@ -251,18 +373,20 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
         run_warnings = list(state["run_warnings"])
         estimated_cost_usd = float(state.get("estimated_cost_usd", 0.0) or 0.0)
         progress_handler = get_progress_callback()
+        search_rounds = dict(state.get("search_rounds", {}))
 
-        # Execute all ready tasks in parallel via the WorkerPool
         ready_tasks = [t for t in tasks if str(t["task_id"]) in ready_task_ids]
-        
+
         execution_tasks = [
-            pool.execute_task(t, registry, progress_handler) 
+            pool.execute_task(
+                t, registry, progress_handler,
+                deep_research_enabled=deep_research_enabled,
+            )
             for t in ready_tasks
         ]
-        
+
         results = await asyncio.gather(*execution_tasks, return_exceptions=True)
 
-        # Rough cost estimator
         estimated_cost_usd += len(ready_tasks) * registry_provider_count * 0.01
             
         for result in results:
@@ -286,6 +410,7 @@ def make_worker_node(registry: dict[str, BaseToolAdapter]):
             "run_warnings": run_warnings,
             "estimated_cost_usd": round(estimated_cost_usd, 4),
             "stop_reason": None,
+            "search_rounds": search_rounds,
         }
 
     return worker_node

@@ -1,83 +1,94 @@
+from __future__ import annotations
+
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links
 from research_agent.orchestration.state import GraphState, GraphTask
+from research_agent.orchestration.deep_research.evidence_scorer import score_evidence
+from research_agent.orchestration.deep_research.termination import check_termination
 
 
 async def critic_node(state: GraphState) -> dict:
     await apublish_progress(
         agent="Critic",
         status="running",
-        detail="Scoring evidence confidence",
+        detail="Scoring evidence confidence (multi-factor)",
         message="Reviewing evidence quality",
     )
     section_confidence: dict[str, float] = {}
     notes: list[str] = []
-
-    from research_agent.config import load_settings
-    settings = load_settings()
-    metadata_penalty = float(settings.retrieval.metadata_fallback_confidence_penalty)
+    termination_signals: dict[str, str] = dict(state.get("termination_signals", {}))
 
     tasks: list[GraphTask] = [t.copy() for t in state["tasks"]]
     iteration_index = state["iteration_index"] + 1
     contradiction_links = await get_contradiction_links(state["run_id"])
-
-    def _get_int(provider_data: dict[str, object], key: str) -> int:
-        val = provider_data.get(key, 0)
-        if isinstance(val, (int, float)):
-            return int(val)
-        if isinstance(val, str) and val.isdigit():
-            return int(val)
-        return 0
+    deep_research_enabled = state.get("depth", "balanced") in ("deep", "comprehensive")
 
     low_confidence_tasks = []
     for task in tasks:
         task_id = str(task["task_id"])
         findings = state["task_findings"].get(task_id, {})
 
-        item_count = sum(_get_int(provider_data, "item_count") for provider_data in findings.values())
-        warning_count = sum(
-            _get_int(provider_data, "warning_count") for provider_data in findings.values()
-        )
-        metadata_only_count = sum(
-            _get_int(provider_data, "metadata_only_count") for provider_data in findings.values()
-        )
-        contradiction_count = sum(
-            1
-            for link in contradiction_links
-            if task_id in {link.get("task_a", ""), link.get("task_b", "")}
-        )
-        contradiction_penalty = min(0.2, contradiction_count * 0.05)
-
-        if item_count == 0:
-            confidence = 0.1
-        else:
-            confidence = max(
-                0.0,
-                min(
-                    1.0,
-                    (item_count / 8.0)
-                    - (warning_count * 0.04)
-                    - (metadata_only_count * metadata_penalty)
-                    - contradiction_penalty,
-                ),
+        if findings and isinstance(findings, dict):
+            # Compute contradiction count for this task
+            contradiction_count = sum(
+                1
+                for link in contradiction_links
+                if task_id in {link.get("task_a", ""), link.get("task_b", "")}
             )
+
+            # P21: Multi-factor evidence scoring
+            evidence = score_evidence(
+                findings,
+                contradiction_count=contradiction_count,
+            )
+            confidence = evidence.overall
+
+            # Build rich critic notes
+            if evidence.num_sources == 0:
+                notes.append(f"No sources found for {task_id}")
+            if evidence.coverage < 0.3:
+                notes.append(f"Low coverage for {task_id} ({evidence.num_sources} sources)")
+            if evidence.source_authority < 0.4:
+                notes.append(f"Low source authority for {task_id}")
+            if evidence.contradiction_penalty > 0:
+                notes.append(
+                    f"Contradiction penalty for {task_id}: "
+                    f"{evidence.contradiction_penalty:.2f}"
+                )
+            if evidence.num_providers <= 1 and evidence.num_sources > 0:
+                notes.append(f"Single provider dependency for {task_id}")
+
+            # Deep research termination check
+            # Primary termination handled by worker's iterative refinement;
+            # critic-level termination is a secondary safety net using empty
+            # previous_scores (the worker's query_refiner returns empty when
+            # coverage is sufficient).
+            if deep_research_enabled and task_id in state.get("task_findings", {}):
+                term_decision = check_termination(
+                    current_overall=evidence.overall,
+                    current_coverage=evidence.coverage,
+                    current_total_items=evidence.num_sources,
+                    previous_scores=[],
+                    round_index=iteration_index,
+                )
+                if term_decision.should_terminate:
+                    termination_signals[task_id] = term_decision.reason
+                    notes.append(
+                        f"Search terminated for {task_id}: {term_decision.reason}"
+                    )
+        else:
+            # Fallback: no findings at all
+            evidence = score_evidence({})
+            confidence = evidence.overall
+            notes.append(f"No findings data for {task_id}")
 
         section_confidence[task_id] = round(confidence, 3)
         if confidence < 0.35:
-            notes.append(f"Low evidence confidence for {task_id}")
             low_confidence_tasks.append(task)
-        if metadata_only_count > 0:
-            notes.append(f"Metadata fallback penalty applied for {task_id} ({metadata_only_count} items)")
-        if contradiction_count > 0:
-            notes.append(
-                f"Contradiction penalty applied for {task_id} "
-                f"({contradiction_count} conflicting links)"
-            )
 
     if not notes:
-        notes.append("Evidence confidence is acceptable for initial v1 synthesis")
-    
-    # If we have low confidence and capacity for more iterations, mark ONLY those tasks for re-run
+        notes.append("Evidence confidence is acceptable for initial synthesis")
+
     await apublish_progress(
         agent="Critic",
         status="running",
@@ -92,8 +103,7 @@ async def critic_node(state: GraphState) -> dict:
             detail=f"Resetting {len(low_confidence_tasks)} low-confidence tasks for iteration {iteration_index}",
             message="Planning iteration loop",
         )
-        
-        # Mark low-confidence tasks as pending so worker_executor picks them up
+
         low_conf_ids = {str(t["task_id"]) for t in low_confidence_tasks}
         for t in tasks:
             if str(t["task_id"]) in low_conf_ids:
@@ -111,7 +121,6 @@ async def critic_node(state: GraphState) -> dict:
         ]
         tasks.extend(new_tasks)
     elif low_confidence_tasks:
-        # At max iterations but still low confidence — will be handled by routing logic
         await apublish_progress(
             agent="Critic",
             status="running",
@@ -135,4 +144,5 @@ async def critic_node(state: GraphState) -> dict:
         "phase": "critic_scored",
         "tasks": tasks,
         "iteration_index": iteration_index,
+        "termination_signals": termination_signals,
     }
