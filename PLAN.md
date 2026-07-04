@@ -1,47 +1,50 @@
 # Research Agent v2 — Strategic Roadmap
 
-> **Last updated:** July 2, 2026
-> **Status:** Active development — 30+ pipeline nodes, 8 integrated services, full research lifecycle automated
+> **Last updated:** July 4, 2026
+> **Status:** Active development — 30+ pipeline nodes, 8+ integrated providers, full research lifecycle automated
 > **Research sources:** STORM, GPT-Researcher, Agent Laboratory, AI-Researcher, Elicit, Scite, Consensus, NotebookLM, GraphRAG, MG²-RAG, MiA-RAG
 
 ---
 
 ## Current Capabilities
 
-The project delivers a complete research lifecycle pipeline with all 30+ features live:
+The project delivers a complete research lifecycle pipeline with all features live:
 
-| Capability | Status |
-|-----------|--------|
-| Topic intake & clarification | ✅ Live |
-| Planner + parallel workers | ✅ Live |
-| Deep RAG (Qdrant) indexing | ✅ Live |
-| Critic + iterative replanning | ✅ Live |
-| Section synthesis & combination | ✅ Live |
-| LaTeX composition (IEEE/ACM/Beamer/Poster) | ✅ Live |
-| Citation verification & auto-fix | ✅ Live |
-| Formula normalization & verification | ✅ Live |
-| Hallucination guard | ✅ Live |
-| Peer review automation | ✅ Live |
-| Bias detection | ✅ Live |
-| Knowledge graph construction | ✅ Live |
-| Future work extrapolation | ✅ Live |
-| Comparison table generation | ✅ Live |
-| Figure generation (Mermaid/TikZ) | ✅ Live |
-| Paper-to-Blog/Newsletter/Twitter export | ✅ Live |
-| Interactive LaTeX preview | ✅ Live |
-| Multi-paper survey generation | ✅ Live |
-| Research Q&A chatbot (PDF library) | ✅ Live |
-| Code execution & reproducibility | ✅ Live |
-| Citation network visualization | ✅ Live |
-| Dataset discovery (HF/Kaggle) | ✅ Live |
-| Grant proposal generator | ✅ Live |
-| Research trends dashboard | ✅ Live |
-| Overleaf push/pull | ✅ Live |
-| Plagiarism checker | ✅ Live |
-| Voice intake | ✅ Live |
-| Auth + session persistence | ✅ Live |
-| WebSocket real-time streaming | ✅ Live |
-| Watchdog literature monitoring | ✅ Live |
+| Capability | Status | Phase |
+|-----------|--------|-------|
+| Topic intake & clarification | ✅ | P0 |
+| Planner + parallel workers | ✅ | P0 |
+| Deep RAG (Qdrant) indexing | ✅ | P0 |
+| Critic + iterative replanning | ✅ | P0 |
+| Section synthesis & combination | ✅ | P0 |
+| LaTeX composition (IEEE/ACM/Beamer/Poster) | ✅ | P0 |
+| Citation verification & auto-fix | ✅ | P0 |
+| Formula normalization & verification | ✅ | P0 |
+| Hallucination guard | ✅ | P0 |
+| Peer review automation | ✅ | P0 |
+| Bias detection | ✅ | P0 |
+| Knowledge graph construction | ✅ | P0 |
+| Future work extrapolation | ✅ | P0 |
+| Comparison table generation | ✅ | P0 |
+| Figure generation (Mermaid/TikZ) | ✅ | P0 |
+| Paper-to-Blog/Newsletter/Twitter export | ✅ | P0 |
+| Interactive LaTeX preview | ✅ | P0 |
+| Multi-paper survey generation | ✅ | P0 |
+| Research Q&A chatbot (PDF library) | ✅ | P0 |
+| Code execution & reproducibility | ✅ | P0 |
+| Citation network visualization | ✅ | P0 |
+| Dataset discovery (HF/Kaggle) | ✅ | P0 |
+| Grant proposal generator | ✅ | P0 |
+| Research trends dashboard | ✅ | P0 |
+| Overleaf push/pull | ✅ | P0 |
+| Plagiarism checker | ✅ | P0 |
+| Voice intake | ✅ | P0 |
+| Auth + session persistence | ✅ | P0 |
+| WebSocket real-time streaming | ✅ | P0 |
+| Watchdog literature monitoring | ✅ | P0 |
+| **Agentic Chat with Tool-Calling Loop** | ✅ | **P15** |
+| **AI Model Router with Multi-Provider Fallback** | ✅ | **P12** |
+| **Automated Literature Monitoring & Alerting** | ✅ | **P13** |
 
 ---
 
@@ -49,189 +52,346 @@ The project delivers a complete research lifecycle pipeline with all 30+ feature
 
 | Metric | Status | Details |
 |--------|--------|---------|
-| **Ruff lint** | ✅ PASS | 0 errors across 94 source files |
-| **Mypy typecheck** | ✅ PASS | 0 errors across 94 source files |
-| **Tests (core)** | ✅ PASS | All unit tests passing (31 tests) |
-| **Tests (graph)** | 🟡 Skipped | 3 test files need mock-based async fixture fix. Tracked in conftest.py |
-| **Coverage** | 🟡 Needs work | No integration tests with real graph execution through tools |
+| **Ruff lint** | ✅ PASS | 0 errors across all source files |
+| **Mypy typecheck** | ✅ PASS | 0 errors across all source files |
+| **Tests (unit)** | ✅ PASS | All unit tests passing |
+| **Tests (integration)** | 🟡 Needs work | Existing smoke test times out (hangs on tool call), more coverage needed |
+| **Coverage** | 🟡 Partial | No integration tests with real graph execution through tools |
+| **Docs** | 🟡 Needs work | Inline docstrings good, but no user-facing documentation website |
 
 ---
 
-## Implementation Phases
+## Recently Completed
 
-Each phase is ordered by value-to-effort ratio.
+### ✅ P15 — Intelligent Research Assistant (Agentic Chat)
+**Completed July 2026.** Full agentic chat with tool-calling, cross-session memory, proactive suggestions, streaming, research planning mode, and feedback buttons.
+
+**Key deliverables:**
+- Tool-calling agent loop (`chat/agent.py`) with multi-tool orchestration
+- Cross-session memory (`chat/memory.py`) with Redis fallback
+- Research planning mode (`/api/chat/plan`) with plan panel in composer
+- Streaming agentic chat (`/api/chat/agent/stream`) with NDJSON events
+- User feedback buttons (`/api/chat/feedback`) + thumbs up/down UI
+
+### ✅ P12 — AI Model Router & Multi-Provider Support
+**Completed July 2026.** Smart model router with 6+ provider adapters, cost tracking, latency-aware routing, embedding fallback chain, and Settings UI.
+
+**Key deliverables:**
+- **Provider adapters**: Ollama, OpenRouter, NVIDIA, vLLM, OpenAI, Anthropic, Google Gemini, Groq
+- **Model router YAML config** (`ModelRouterSettings`): map task types (`plan`, `write`, `critique`, `code`, `embed`) to specific models
+- **Cost tracking module** (`models/cost_tracker.py`): per-run budget enforcement, pricing tables for 15+ models
+- **Latency-aware routing** (`models/latency_tracker.py`): sliding-window response time tracking, auto-selects fastest provider
+- **Settings UI**: collapsible model preferences panel, per-provider API keys, health check button
+- **Embedding fallback chain**: sentence-transformers → OpenAI → NVIDIA → deterministic mock
+- **Live `/api/health/models` endpoint**: tests all configured providers, returns status + latency + cost metrics
+
+### ✅ P13 — Automated Literature Monitoring & Alerting
+**Completed July 2026.** Background scheduler with true diff detection, relevance scoring, email digests, and dashboard widget.
+
+**Key deliverables:**
+- **Background scheduler** (APScheduler integration): polls ArXiv + Semantic Scholar on configurable interval
+- **True fingerprint-based diff detection**: `_compute_fingerprint()` avoids re-reporting seen papers
+- **Relevance scoring**: `_compute_relevance_score()` — weighted multi-factor (topic/keyword/author/venue/recency)
+- **Email digest generator** (`digest_email.py`): rich HTML emails with dark theme, relevance badges, paper count
+- **SMTP configuration** via `WatchdogEmailSettings` + env var overrides
+- **Dashboard widget**: "Latest Papers" panel in sidebar with digest cards, refresh/check buttons
+- **New API endpoints**: `GET /api/watchdog/dashboard`, `GET/POST /api/watchdog/notifications/{id}`, `POST /api/watchdog/deep-dive`, `POST /api/watchdog/email/test`
+- **Per-profile notification preferences** (frequency, email, min relevance threshold)
+- **One-click deep dive**: launch full `run_graph` from a discovered paper
 
 ---
 
-## Phase 5: Intelligent Research Core (Current Sprint)
+## Next Up: Core Infrastructure & Agentic Features
 
-### P15 — Intelligent Research Assistant (Agentic Chat) ⬅️ ACTIVE
-**Why:** Current Q&A is passive keyword retrieval. An agentic chat with tool-calling, cross-session memory, and proactive suggestions is a step-change in usefulness.
+### P21 — Agentic Deep Research Engine
+**Why:** Current research is single-pass: plan → execute → compose. A self-correcting loop with iterative query refinement, citation chaining, and expanding search depth produces significantly better results.
 
 **What to build:**
-- [x] Chat API endpoints (`/api/chat/upload`, `/api/chat/ask`, `/api/chat/library`)
-- [x] PDF parser, chunker, indexer, and ask modules
-- [x] **Tool-calling agent loop** (`chat/agent.py`): agent decides tools → executes → synthesizes answer with citations
-- [x] **Cross-session memory store** (`chat/memory.py`): InMemoryMemoryStore + RedisMemoryStore fallback
-- [x] **Proactive suggestions engine**: `/api/chat/suggestions` + `_generate_suggestions()` in webapp.py
-- [x] **Integration with graph pipeline**: `/api/chat/launch-research` kicks off full `run_graph` from chat context
-- [x] **Streaming agentic chat**: `/api/chat/agent/stream` with NDJSON events (thought, tool_call, token, complete)
-- [x] **Agentic chat API**: `/api/chat/agent` endpoint with tool-calling loop, citations, and suggestions
-- [x] **Memory API**: `/api/chat/memory` for storing/retrieving user preferences and research context
-- [x] **Research planning mode**: /api/chat/plan endpoint + plan panel in composer + research intent detection in JS
-- [x] **User feedback buttons**: /api/chat/feedback endpoint + thumbs up/down on every assistant message
-- [x] **Frontend chat UI**: Agent chat panel with streaming, suggestions, citations, plan display, and feedback
+- [ ] **Iterative query refinement**: after each search pass, LLM analyzes gaps and generates follow-up queries
+- [ ] **Citation chaining**: extract citations from high-value papers, recursively fetch and analyze cited/citing works
+- [ ] **Adaptive search depth**: allocate more iterations to low-confidence sections
+- [ ] **Parallel search strategies**: web search + academic APIs + citation graph simultaneously
+- [ ] **Evidence scoring per section**: confidence-weighted evidence aggregation
+- [ ] **Search termination heuristics**: stop when diminishing returns detected (novelty decay curve)
 
-**Feasibility:** High. Leverages existing chat infra, worker pool, and tool registry.
-**Estimated effort:** 2-3 sprints
-**Key files:** `chat/ask.py`, `orchestration/graph.py`, `app/webapp.py`
+**Estimated effort:** 3-4 sprints
+**Why now:** Transforms research quality dramatically. Builds directly on P12's multi-provider routing.
 
 ---
 
-### P12 — AI Model Router & Multi-Provider Support
-**Why:** Different LLMs excel at different tasks. A smart router selects the best model per task, provides fallback resilience, and tracks costs.
+### P24 — Verified Code Execution Sandbox
+**Why:** ⭐ Unique differentiator — no other research tool verifies paper claims by executing code.
 
 **What to build:**
-- [x] Provider adapters: Ollama, OpenRouter, NVIDIA, vLLM
-- [x] Automatic fallback chain (provider_priority config)
-- [x] Deterministic fallback when all LLMs unavailable
-- [x] LiteLLM unified client with streaming support
-- [ ] **Model router YAML config**: map task types (`plan`, `write`, `critique`, `code`, `embed`) to specific models per provider
-- [ ] **Provider adapters**: OpenAI, Anthropic, Google Gemini, Groq
-- [ ] **Cost tracking** per model per run with budget enforcement
-- [ ] **Latency-aware routing**: prefer fast models for interactive tasks
-- [ ] **Settings UI**: user-configurable model preferences + API keys per provider
-- [ ] **Embedding provider support**: OpenAI, NVIDIA, local sentence-transformers, with fallback chain
-- [ ] **Live `/api/health/models` endpoint** showing availability of each configured model
+- [ ] **Docker sandbox** for safe code execution (Python, R, Julia)
+- [ ] **Claim extraction from paper**: identify empirical claims with code verification potential
+- [ ] **Code generation from claim descriptions**: LLM generates verification scripts
+- [ ] **Execution engine**: run code in isolated container, capture stdout/stderr/timings
+- [ ] **Result comparison**: compare empirical results against paper claims
+- [ ] **Reproducibility report**: per-claim pass/fail/partial with evidence
+- [ ] **Integration with graph**: auto-trigger for sections with high empirical content
 
-**Feasibility:** Medium. Core multi-provider architecture exists in `llm_client.py`.
-**Estimated effort:** 2-3 sprints
-**Key files:** `models/llm_client.py`, `config/schema.py`
+**Estimated effort:** 3-4 sprints
+**Why now:** First-mover advantage. Builds on existing code execution node.
 
 ---
 
-### P13 — Automated Literature Monitoring & Alerting
-**Why:** Watchdog subscription endpoints exist but are not wired to a scheduler.
+## Phase: Production Hardening
 
-**What to build:**
-- [x] Watchdog subscription CRUD endpoints (`/api/watchdog/subscribe`, `/api/watchdog/subscriptions`, `/api/watchdog/subscriptions/{id}`)
-- [x] Watchdog digest storage and formatting
-- [x] Manual check endpoint (`/api/watchdog/check`)
-- [ ] **Background scheduler** (APScheduler): poll ArXiv + Semantic Scholar daily for subscribed topics
-- [ ] **True diff detection**: compare paper fingerprints against previously seen set
-- [ ] **Relevance scoring**: rank new papers (0-1) against user's interest profile
-- [ ] **Email digest generator**: Markdown → HTML email with summaries and links
-- [ ] **Dashboard widget**: "Latest Papers" feed in sidebar
-- [ ] **"One-click deep dive"**: launch full `run_graph` from a discovered paper
-- [ ] **Notification preferences**: per-profile push or email, configurable frequency
+### P16 — Async Job Queue & Concurrency
+- [ ] **Celery/RQ job queue** for background research runs
+- [ ] **Job priority**: interactive chat high priority, deep research low priority
+- [ ] **Concurrent run limits** per user with fair scheduling
+- [ ] **Run cancellation** via API
+- [ ] **Kubernetes HPA integration** for elastic scaling
 
-**Feasibility:** Medium. Watchdog storage and endpoints exist.
-**Estimated effort:** 2 sprints
-**Key files:** `orchestration/watchdog.py`, `app/watchdog_storage.py`
+**Estimated effort:** 2-3 sprints | **Deps:** Redis
 
 ---
 
-### P11 — Multi-User Collaborative Research Sessions
-**Why:** Real-time co-editing with comments and role-based access.
+### P17 — Observability Stack
+- [ ] **OpenTelemetry instrumentation** across all nodes
+- [ ] **Prometheus metrics** (run duration, LLM latency, error rates, cost per run)
+- [ ] **Grafana dashboards** (research pipeline overview, cost breakdown, provider health)
+- [ ] **Structured logging** (JSON logs with correlation IDs)
+- [ ] **Sentry/error tracking** integration
 
-**Key components needed:**
-- CRDT-based real-time co-editing via WebSocket (Yjs)
-- Per-section locking, comment threads, cursor presence
-- Version history with diff viewer and rollback
-- Role-based access (viewer/commenter/editor/admin)
+**Estimated effort:** 2-3 sprints | **Deps:** P16
 
-**Feasibility:** Medium-High. WebSocket infra exists. Yjs is mature.
-**Estimated effort:** 4-5 sprints
+---
+
+### P18 — Security Hardening
+- [ ] **RBAC** (viewer/editor/admin roles)
+- [ ] **SSO/OAuth** (Google, GitHub, ORCID)
+- [ ] **API rate limiting** per user/endpoint
+- [ ] **Audit logging** for all research actions
+- [ ] **Secrets management** (encrypted API key storage)
+
+**Estimated effort:** 3-4 sprints | **Deps:** Auth system
+
+---
+
+## Phase: Advanced RAG & Multi-Modal Intelligence
+
+### P22 — Multi-Modal Paper Analysis
+- [ ] **Figure extraction & captioning** from PDFs
+- [ ] **Table parsing & structured extraction** (camelot/tabula)
+- [ ] **Equation extraction & normalization** (LaTeX-OCR)
+- [ ] **Multi-modal Q&A**: "What does Figure 3 show?" with visual grounding
+- [ ] **Chart-to-text generation** for accessibility
+
+**Estimated effort:** 4-5 sprints | **Key differentiator**
+
+---
+
+### P23 — GraphRAG Knowledge Graph Retrieval
+- [ ] **Persistent entity store** across runs (Neo4j or NetworkX serialized)
+- [ ] **Entity resolution/deduplication** across papers
+- [ ] **Multi-hop retrieval**: "What papers cite the method used in Paper X?"
+- [ ] **Interactive graph explorer** (three.js or Sigma.js)
+- [ ] **Time-based landscape evolution**: animate research trends over years
+
+**Estimated effort:** 4-5 sprints | **Key differentiator**
 
 ---
 
 ### P14 — Research Knowledge Graph Explorer
-**Why:** Cross-run persistent KG enables connection exploration across all past research.
+- [ ] **Persistent graph store** (Neo4j/NetworkX)
+- [ ] **Entity deduplication** across runs
+- [ ] **Interactive graph explorer** (three.js or Sigma.js)
+- [ ] **Semantic search** over the KG
+- [ ] **Time-based animation** of research landscape evolution
 
-**Key components needed:**
-- Persistent Neo4j/NetworkX graph store
-- Entity deduplication across runs
-- Interactive graph explorer (three.js or Sigma.js)
-- Semantic search over the KG
-- Time-based animation of research landscape evolution
+**Estimated effort:** 4-5 sprints | **Note:** P23 subsumes this — prioritize P23 instead
 
-**Feasibility:** Medium-High. Per-run KG extraction already exists.
+---
+
+## Phase: Human-Centric Collaboration & UX
+
+### P25 — Collaborative Real-Time Co-Editing
+- [ ] **CRDT-based co-editing** via WebSocket (Yjs)
+- [ ] **Per-section locking** and conflict resolution
+- [ ] **Comment threads** on paper sections
+- [ ] **Cursor presence**: see who's editing what in real-time
+- [ ] **Version history** with diff viewer and rollback
+
+**Estimated effort:** 5-6 sprints | **Deps:** WebSocket infra exists
+
+---
+
+### P27 — Multi-Format Submission Pipeline
+- [ ] **Format converters**: IEEE ↔ ACM ↔ Springer ↔ Elsevier
+- [ ] **Style compliance checker**: validate against conference guidelines
+- [ ] **Auto-wrap content** to match template constraints
+- [ ] **One-click export** for Overleaf, arXiv, conference submission
+
+**Estimated effort:** 3-4 sprints
+
+---
+
+### P28 — Personal Research Library
+- [ ] **Zotero import** via CSL/BibTeX
+- [ ] **Auto-tagging** with LLM-based topic classification
+- [ ] **Smart collections** based on research themes
+- [ ] **PDF annotation viewer** with highlights and notes
+- [ ] **Reading list management** (to-read, reading, completed)
+
 **Estimated effort:** 4-5 sprints
 
 ---
 
-## Phase 6: Production Hardening
+### P29 — Reproducibility Dashboard
+- [ ] **Experiment tracking** across runs
+- [ ] **Result comparison** side-by-side
+- [ ] **Run artifact explorer** (browse all generated files per run)
+- [ ] **Research timeline view** (when/what was researched)
 
-| # | Feature | Effort | Dependencies | Key Value |
-|---|---------|--------|-------------|-----------|
-| P16 | **Async Job Queue** (Celery/RQ + K8s HPA) | 3-4 sprints | Redis | Unlocks concurrency & scaling |
-| P17 | **Observability Stack** (OTel + Prometheus + Grafana) | 2-3 sprints | P16 | Operational visibility |
-| P18 | **Security Hardening** (RBAC, SSO, rate limiting) | 3-4 sprints | Auth system | Enterprise readiness |
-| P19 | **Plugin System** (entry points + hooks) | 3 sprints | None | Extensibility & community |
-| P20 | **Mobile & Offline Support** (PWA, local-first) | 4-5 sprints | P12, P16 | Cross-device research |
+**Estimated effort:** 2-3 sprints
 
 ---
 
-## Phase 7: Agentic RAG & Multi-Modal Intelligence
+### P26 — Advanced AI Research Assistant
+- [ ] **Autonomous mode**: agent proposes research agenda without user prompting
+- [ ] **Hypothesis generation**: LLM synthesizes novel research hypotheses from gaps
+- [ ] **Research strategy recommendation**: suggest methodology, datasets, baselines
+- [ ] **Proactive gap filling**: when literature is thin, suggest pilot experiments
 
-| # | Feature | Effort | Key Differentiator |
-|---|---------|--------|-------------------|
-| P21 | **Agentic Deep Research Engine** (iterative query refinement, citation chaining) | 4-5 sprints | Self-correcting search loops |
-| P22 | **Multi-Modal Paper Analysis** (figures, tables, equations) | 5-6 sprints | Table-aware Q&A |
-| P23 | **GraphRAG Knowledge Graph Retrieval** (entity extraction, cross-run resolution) | 5-6 sprints | Multi-hop reasoning |
-| P24 | **Verified Code Execution Sandbox** (Docker, claim verification) | 3-4 sprints | ⭐ Unique differentiator |
-
----
-
-## Phase 8: Human-Centric Collaboration & UX
-
-| # | Feature | Effort |
-|---|---------|--------|
-| P25 | **Collaborative Real-Time Co-Editing** (Yjs, CRDT) | 5-6 sprints |
-| P27 | **Multi-Format Paper Submission Pipeline** (IEEE↔ACM↔Springer) | 3-4 sprints |
-| P28 | **Personal Research Library** (Zotero import, auto-tagging) | 4-5 sprints |
-| P29 | **Reproducibility Dashboard** (experiment tracking) | 2-3 sprints |
-| P26 | **Advanced AI Research Assistant** (autonomous mode, hypothesis generation) | 5-6 sprints |
+**Estimated effort:** 5-6 sprints
 
 ---
 
-## Phase 9: Production Infrastructure
+## Phase: Cutting-Edge Research Features
 
-| # | Feature | Effort | Dependencies |
-|---|---------|--------|-------------|
-| P30 | **Async Job Queue** (Celery/RQ + K8s HPA) | 3-4 sprints | Redis |
-| P31 | **Observability Stack** (OTel + Prometheus + Grafana) | 2-3 sprints | P30 |
-| P32 | **Security Hardening** (RBAC, SSO, rate limiting) | 3-4 sprints | Auth system |
-| P33 | **Plugin System** (entry points + hooks) | 3 sprints | None |
+### P34 — Multi-Agent Research Swarm
+- [ ] **Role-specialized agents**: Theorist, Experimentalist, Critic, Editor
+- [ ] **Debate protocol**: agents discuss and refine hypotheses
+- [ ] **Consensus mechanisms**: voting/weighting agent outputs
+- [ ] **Swarm coordination**: dynamic task allocation across agents
+- [ ] **Self-improvement**: agents learn from past run outcomes
+
+**Estimated effort:** 5-6 sprints
 
 ---
 
-## Phase 10: Cutting-Edge Research Features
+### P35 — Cross-Lingual Research & Translation
+- [ ] **Multilingual embeddings** for non-English paper discovery
+- [ ] **Translation pipeline**: paper abstracts/sections → target language
+- [ ] **Cross-lingual Q&A**: ask in English, answer from Chinese/Japanese/German papers
+- [ ] **Bilingual paper generation**: LaTeX with parallel text columns
 
-| # | Feature | Effort |
-|---|---------|--------|
-| P34 | **Multi-Agent Research Swarm** (Theorist, Experimentalist, Critic, Editor) | 5-6 sprints |
-| P35 | **Cross-Lingual Research & Translation** (multilingual embeddings) | 4-5 sprints |
-| P36 | **Paper-git: Version Control for Research Artifacts** | 3-4 sprints |
-| P37 | **Automated Peer Review with Confidence Scoring** | 2-3 sprints |
-| P38 | **Interactive Tutorial & Onboarding System** | 2-3 sprints |
+**Estimated effort:** 4-5 sprints
+
+---
+
+### P36 — Paper-git: Version Control for Research
+- [ ] **Git-like diff** for LaTeX documents
+- [ ] **Branch/merge** for research experiments
+- [ ] **Checkpoint restore** per run/section
+- [ ] **Collaborative review workflow** (PR-style)
+- [ ] **Conflict resolution UI** for parallel edits
+
+**Estimated effort:** 3-4 sprints
+
+---
+
+### P37 — Automated Peer Review with Confidence Scoring
+- [ ] **Structured review template** (strengths, weaknesses, questions)
+- [ ] **Per-section confidence scoring** (0.0-1.0)
+- [ ] **Review aggregation**: multiple reviews into meta-review
+- [ ] **Reviewer persona simulation**: theoretical vs. applied vs. experimental reviewer
+
+**Estimated effort:** 2-3 sprints
+
+---
+
+### P38 — Interactive Tutorial & Onboarding
+- [ ] **Guided tour** of research pipeline
+- [ ] **Sample topics** with pre-loaded results
+- [ ] **Command palette** for power users
+- [ ] **Tooltips and contextual help** throughout UI
+- [ ] **Quick-start templates**: "Research a paper topic", "Compare methods", "Find datasets"
+
+**Estimated effort:** 2-3 sprints
+
+---
+
+## New: Plugin System & Extensibility
+
+### P19 — Plugin System
+- [ ] **Entry-point based plugin discovery** (Python namespace packages)
+- [ ] **Plugin lifecycle hooks**: `on_run_start`, `on_section_generated`, `on_run_complete`
+- [ ] **Plugin marketplace** UI for browsing/installing
+- [ ] **Sandboxed plugin execution** for safety
+- [ ] **Community plugin registry** with versioning
+
+**Estimated effort:** 3 sprints
+
+---
+
+### P20 — Mobile & Offline Support
+- [ ] **PWA manifest** for installable web app
+- [ ] **Service worker** for offline caching
+- [ ] **Local-first architecture** (IndexedDB for offline state)
+- [ ] **Background sync** when connectivity restored
+- [ ] **Mobile-responsive UI** for phone/tablet
+
+**Estimated effort:** 3-4 sprints
+
+---
+
+### P39 — Research Templates & Presets
+- [ ] **Research template library**: Literature Survey, Meta-Analysis, Systematic Review, Case Study
+- [ ] **Conference preset packs**: CVPR, NeurIPS, ICML, ACL formatting presets
+- [ ] **Custom template builder**: drag-and-drop research pipeline designer
+- [ ] **Template marketplace**: share and discover community templates
+
+**Estimated effort:** 2-3 sprints
+
+---
+
+### P40 — Research Team Management
+- [ ] **Team workspaces**: shared research projects
+- [ ] **Task assignment**: assign sections/tasks to team members
+- [ ] **Activity feed**: what everyone is working on
+- [ ] **Shared resource pool**: common paper library, datasets, API keys
+
+**Estimated effort:** 3-4 sprints
 
 ---
 
 ## Strategic Sequencing
 
 ```
-Sprint 1-2 (NOW):  P15 Agentic Chat (tool-calling loop) → P12 Model Router (more providers + cost tracking)
-Sprint 3-4:        P13 Literature Monitoring (scheduler) → P21 Deep Research Engine
-Sprint 5-6:        P24 Code Sandbox → P16 Job Queue → P17 Observability
-Sprint 7-8:        P22 Multi-Modal → P23 GraphRAG → P28 Personal Library
-Sprint 9-10:       P25 Co-Editing → P27 Submission Pipeline → P18 Security
-Sprint 11+:        P26 Advanced Agentic → P34 Swarm → P36 Paper-git
+Sprint NOW (Complete):   P12 Model Router (multi-provider) → P15 Agentic Chat (tool-calling loop)
+                         ╔═══════════════════════════════════════════════╗
+                         ║  ↓ These features are scoped for implementation  ║
+                         ╚═══════════════════════════════════════════════╝
+Sprint NOW (Complete):   P13 Literature Monitoring
+Sprint 1-2:              P24 Code Sandbox (unique differentiator)
+Sprint 3-4:              P21 Deep Research Engine (iterative search)
+                           → P16 Job Queue (infrastructure)
+Sprint 5-6:              P22 Multi-Modal Analysis → P17 Observability
+Sprint 7-8:              P23 GraphRAG → P28 Personal Library
+Sprint 9-10:             P25 Co-Editing → P27 Submission Pipeline → P18 Security
+Sprint 11+:              P26 Advanced Agentic → P34 Swarm → P19 Plugins
 ```
 
 ### First-Mover Advantage Features
 
-1. **P24 Verified Code Sandbox** — No other tool verifies paper claims by executing code
-2. **P22 Multi-Modal RAG** — Figure/table/equation understanding is the next frontier
-3. **P23 GraphRAG** — Cross-run knowledge graphs are unique
-4. **P36 Paper-git** — Research artifact versioning is an unmet need
+| Rank | Feature | Differentiation | Effort |
+|------|---------|----------------|--------|
+| ⭐ | **P24 Verified Code Sandbox** | No other tool verifies paper claims by executing code | 3-4 sprints |
+| 🥇 | **P22 Multi-Modal RAG** | Figure/table/equation understanding is the next frontier | 4-5 sprints |
+| 🥈 | **P21 Deep Research Engine** | Self-correcting search loops with citation chaining | 3-4 sprints |
+| 🥉 | **P23 GraphRAG** | Cross-run knowledge graphs for multi-hop reasoning | 4-5 sprints |
+| 💡 | **P36 Paper-git** | Research artifact versioning is an unmet need | 3-4 sprints |
+| 🔌 | **P19 Plugin System** | Enables community contributions and marketplace | 3 sprints |
+
+### Quick Wins (1-2 sprints each)
+
+| Feature | Effort | Why Quick |
+|---------|--------|-----------|
+| **P29 Reproducibility Dashboard** | 2-3 sprints | Leverages existing artifact structure |
+| **P37 Peer Review with Confidence** | 2-3 sprints | Builds on existing peer review node |
+| **P38 Onboarding System** | 2-3 sprints | Frontend-only, no backend changes |
+| **P39 Research Templates** | 2-3 sprints | Template-based, no new infra

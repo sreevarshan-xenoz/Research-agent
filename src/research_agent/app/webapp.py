@@ -37,6 +37,7 @@ from research_agent.app.auth import (
     auth_backend,
 )
 from research_agent.config import load_settings, validate_insecure_defaults
+from research_agent.models.llm_client import _resolve_api_key
 from research_agent.output.grant_proposal import generate_grant_proposal
 from research_agent.observability.checkpoints import (
     append_run_event,
@@ -440,6 +441,132 @@ def create_app(
     @app.get("/api/health")
     async def health_check():
         return {"status": "ok"}
+
+    @app.get("/api/health/models")
+    async def health_models():
+        """Check the availability of each configured LLM provider/model.
+
+        Tests connectivity by attempting a minimal request against each
+        configured provider. Reports status, model, and latency for each.
+        Returns a consolidated health report.
+        """
+        import time as _time
+        _settings = load_settings()
+        results: list[dict[str, object]] = []
+
+        provider_configs: list[tuple[str, str, str | None, dict[str, Any]]] = []
+
+        def _add(provider: str, model: str, api_key: str | None, extra: dict[str, Any]) -> None:
+            provider_configs.append((provider, model, api_key, extra))
+
+        # Ollama (local)
+        _add("ollama", _settings.models.orchestrator_model if "ollama" in _settings.models.orchestrator_model else "ollama/qwen3:8b",
+             None, {"api_base": _settings.ollama.api_base})
+
+        # OpenRouter
+        or_key = _resolve_api_key(_settings.openrouter.api_key) or os.getenv("OPENROUTER_API_KEY", "")
+        if or_key:
+            _add("openrouter", _settings.models.subagent_cloud or "openrouter/free",
+                 or_key, {"api_key": or_key})
+
+        # NVIDIA
+        nv_key = os.getenv("NVIDIA_API_KEY", "") or os.getenv("NVIDIA_NIMS_API_KEY", "")
+        if nv_key:
+            _add("nvidia", _settings.models.subagent_nvidia or "nvidia/meta/llama-3.1-405b-instruct",
+                 nv_key, {"api_key": nv_key})
+
+        # OpenAI
+        oa_key = _resolve_api_key(_settings.openai.api_key) or os.getenv("OPENAI_API_KEY", "")
+        if oa_key:
+            _add("openai", _settings.models.subagent_openai or "openai/gpt-4o",
+                 oa_key, {})
+
+        # Anthropic
+        an_key = _resolve_api_key(_settings.anthropic.api_key) or os.getenv("ANTHROPIC_API_KEY", "")
+        if an_key:
+            _add("anthropic", _settings.models.subagent_anthropic or "anthropic/claude-3-5-sonnet-20241022",
+                 an_key, {})
+
+        # Gemini
+        gm_key = _resolve_api_key(_settings.gemini.api_key) or os.getenv("GEMINI_API_KEY", "")
+        if gm_key:
+            _add("gemini", _settings.models.subagent_gemini or "gemini/gemini-2.0-flash",
+                 gm_key, {})
+
+        # Groq
+        gq_key = _resolve_api_key(_settings.groq.api_key) or os.getenv("GROQ_API_KEY", "")
+        if gq_key:
+            _add("groq", _settings.models.subagent_groq or "groq/llama-3.3-70b-versatile",
+                 gq_key, {})
+
+        # Test each provider with a minimal LiteLLM completion call
+        import litellm as _litellm
+        _litellm.drop_params = True
+
+        for provider, model, api_key, extra in provider_configs:
+            start = _time.monotonic()
+            status = "unknown"
+            latency_ms: float | None = None
+            error: str | None = None
+            try:
+                # Use a tiny max_tokens to minimize cost/time
+                resp = _litellm.completion(
+                    model=model,
+                    messages=[{"role": "user", "content": "Respond with 'ok'",}],
+                    max_tokens=5,
+                    temperature=0.1,
+                    timeout=10,
+                    **extra,
+                )
+                latency_ms = round((_time.monotonic() - start) * 1000, 1)
+                if resp and resp.choices and resp.choices[0].message.content:
+                    status = "healthy"
+                else:
+                    status = "unhealthy"
+            except Exception as exc:
+                latency_ms = round((_time.monotonic() - start) * 1000, 1)
+                error = f"{type(exc).__name__}: {exc}"
+                status = "error" if "rate limit" in str(exc).lower() or "unauthorized" in str(exc).lower() else "unreachable"
+
+            # Get latency metrics from the tracker if available
+            from research_agent.models.latency_tracker import get_latency_tracker
+            tracker = get_latency_tracker()
+            try:
+                avg_latency = await tracker.get_avg_latency_ms(provider)
+            except Exception:
+                avg_latency = None
+
+            results.append({
+                "provider": provider,
+                "model": model,
+                "status": status,
+                "latency_ms": latency_ms,
+                "avg_latency_ms": avg_latency,
+                "error": error,
+                "api_key_configured": bool(api_key),
+            })
+
+        # Get cost metrics
+        from research_agent.models.cost_tracker import get_all_cost_metrics
+        try:
+            cost_metrics = await get_all_cost_metrics()
+        except Exception:
+            cost_metrics = {}
+
+        # Count healthy vs unhealthy
+        healthy_count = sum(1 for r in results if r["status"] == "healthy")
+        unhealthy_count = sum(1 for r in results if r["status"] != "healthy")
+
+        return {
+            "models": results,
+            "summary": {
+                "total": len(results),
+                "healthy": healthy_count,
+                "unhealthy": unhealthy_count,
+            },
+            "cost_metrics": cost_metrics,
+            "healthy": healthy_count > 0,
+        }
 
     @app.get("/api/health/redis")
     async def health_redis():
@@ -1791,10 +1918,12 @@ def create_app(
             "digests": [
                 {
                     "digest_id": d.digest_id,
+                    "profile_id": d.profile_id,
                     "topic": d.topic,
                     "summary": d.summary,
                     "paper_count": d.paper_count,
                     "generated_at": d.generated_at,
+                    "email_sent": d.email_sent,
                     "formatted": format_digest_for_display(d),
                     "papers": [
                         {
@@ -1803,6 +1932,8 @@ def create_app(
                             "year": p.get("year", "n.d."),
                             "url": p.get("url", ""),
                             "source": p.get("watchdog_provider", p.get("provider", "unknown")),
+                            "relevance_score": p.get("relevance_score", None),
+                            "snippet": p.get("snippet", "")[:200],
                         }
                         for p in d.new_papers[:20]
                     ],
@@ -1837,6 +1968,272 @@ def create_app(
         except Exception as exc:
             logger.exception("Manual watchdog check failed")
             raise HTTPException(status_code=500, detail=f"Watchdog check failed: {exc}")
+
+    @app.get("/api/watchdog/notifications/{profile_id}")
+    async def watchdog_get_notifications(
+        profile_id: str,
+        user: User = Depends(current_active_user)
+    ):
+        """Get notification preferences for a watchdog subscription."""
+        from research_agent.app.watchdog_storage import get_watchdog_storage
+
+        storage = get_watchdog_storage()
+        profile = storage.get_profile(profile_id)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        if profile.user_id != str(user.id):
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        prefs = profile.notification_prefs
+        return {
+            "profile_id": profile_id,
+            "email_enabled": prefs.email_enabled,
+            "email_address": prefs.email_address,
+            "push_enabled": prefs.push_enabled,
+            "min_relevance_score": prefs.min_relevance_score,
+            "max_papers_per_digest": prefs.max_papers_per_digest,
+        }
+
+    @app.post("/api/watchdog/notifications/{profile_id}")
+    async def watchdog_update_notifications(
+        profile_id: str,
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Update notification preferences for a watchdog subscription."""
+        from research_agent.app.watchdog_storage import (
+            get_watchdog_storage,
+            NotificationPrefs,
+        )
+
+        storage = get_watchdog_storage()
+        profile = storage.get_profile(profile_id)
+        if profile is None:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        if profile.user_id != str(user.id):
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        prefs = NotificationPrefs(
+            email_enabled=bool(body.get("email_enabled", profile.notification_prefs.email_enabled)),
+            email_address=str(body.get("email_address", profile.notification_prefs.email_address)),
+            push_enabled=bool(body.get("push_enabled", profile.notification_prefs.push_enabled)),
+            min_relevance_score=float(body.get("min_relevance_score", profile.notification_prefs.min_relevance_score)),
+            max_papers_per_digest=int(body.get("max_papers_per_digest", profile.notification_prefs.max_papers_per_digest)),
+        )
+
+        storage.update_notification_prefs(profile_id, prefs)
+
+        return {
+            "profile_id": profile_id,
+            "message": "Notification preferences updated.",
+            "email_enabled": prefs.email_enabled,
+            "email_address": prefs.email_address,
+            "min_relevance_score": prefs.min_relevance_score,
+        }
+
+    @app.post("/api/watchdog/deep-dive")
+    async def watchdog_deep_dive(
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Launch a full research paper on a paper discovered by the watchdog.
+
+        Takes a paper title/URL from a digest and launches the full research
+        graph to produce a comprehensive survey on the paper's topic.
+
+        Request body:
+            topic (str, required): The paper topic to deep-dive into.
+            paper_title (str, optional): Original paper title for context.
+            depth (str, optional): "quick", "balanced", "deep".
+        """
+        topic = body.get("topic", "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required")
+
+        depth = body.get("depth", "balanced")
+        template = body.get("template", "ieee")
+
+        run_id = f"run-{uuid.uuid4().hex[:8]}"
+
+        actual_graph_runner = graph_runner or run_graph
+        tool_registry_local = registry if registry is not None else build_tool_registry(settings)
+
+        initial_state = WorkflowState(
+            run_id=run_id,
+            topic=topic,
+            template=template,
+            language="en",
+            depth=depth,
+            autonomy_mode="hybrid",
+            max_runtime_minutes=settings.runtime.max_runtime_minutes,
+            max_cost_usd=settings.runtime.max_cost_usd,
+            max_iterations=1,  # Single pass for deep-dive speed
+        )
+
+        try:
+            if asyncio.iscoroutinefunction(actual_graph_runner):
+                final_state = await actual_graph_runner(initial_state, registry=tool_registry_local)
+            else:
+                final_state = actual_graph_runner(initial_state, registry=tool_registry_local)
+
+            artifact_base = f"/api/runs/{run_id}"
+
+            return {
+                "kind": "result",
+                "run_id": run_id,
+                "topic": topic,
+                "template": template,
+                "section_count": len(final_state.sections) if hasattr(final_state, "sections") and final_state.sections else 0,
+                "artifact_urls": {
+                    "pdf": f"{artifact_base}/render/pdf",
+                    "latex": f"{artifact_base}/graph",
+                },
+            }
+        except Exception as e:
+            logger.exception("Watchdog deep-dive failed")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.get("/api/watchdog/dashboard")
+    async def watchdog_dashboard(
+        user: User = Depends(current_active_user)
+    ):
+        """Get watchdog dashboard stats for the current user.
+
+        Returns subscription counts, recent digests, and new paper alerts
+        for the sidebar widget.
+        """
+        from research_agent.app.watchdog_storage import get_watchdog_storage
+        import time
+
+        storage = get_watchdog_storage()
+        profiles = storage.get_user_profiles(str(user.id))
+        digests = storage.get_user_digests(str(user.id), limit=5)
+
+        now = time.time()
+        subscriptions = []
+        for p in profiles:
+            interval_sec = storage.get_interval_seconds(p.check_interval)
+            next_check_due = max(0, p.last_checked_at + interval_sec - now) if p.last_checked_at > 0 else 0
+
+            subscriptions.append({
+                "profile_id": p.profile_id,
+                "topic": p.topic,
+                "enabled": p.enabled,
+                "check_interval": p.check_interval,
+                "last_checked_at": p.last_checked_at,
+                "next_check_in_seconds": int(next_check_due),
+                "keywords": p.keywords,
+                "authors": p.authors,
+                "email_enabled": p.notification_prefs.email_enabled,
+            })
+
+        # Count total new papers across recent digests
+        total_new_papers = sum(d.paper_count for d in digests)
+
+        return {
+            "subscriptions": subscriptions,
+            "active_subscriptions": sum(1 for s in subscriptions if s["enabled"]),
+            "total_subscriptions": len(subscriptions),
+            "recent_digests": [
+                {
+                    "digest_id": d.digest_id,
+                    "topic": d.topic,
+                    "paper_count": d.paper_count,
+                    "summary": d.summary,
+                    "generated_at": d.generated_at,
+                    "email_sent": d.email_sent,
+                }
+                for d in digests
+            ],
+            "total_new_papers": total_new_papers,
+        }
+
+    @app.post("/api/watchdog/email/test")
+    async def watchdog_test_email(
+        body: dict = {},
+        user: User = Depends(current_active_user)
+    ):
+        """Test email notification configuration.
+
+        Sends a test email to verify SMTP settings are working.
+        """
+        from research_agent.app.watchdog_storage import get_watchdog_storage, NotificationPrefs, InterestProfile, WatchdogDigest
+        import uuid
+        import time
+
+        email = body.get("email", "").strip()
+        if not email:
+            raise HTTPException(status_code=400, detail="Email address is required")
+
+        # Create a test digest
+        test_digest = WatchdogDigest(
+            digest_id=f"test-{uuid.uuid4().hex[:8]}",
+            profile_id="test",
+            user_id=str(user.id),
+            topic="Test: Watchdog Notification",
+            new_papers=[
+                {
+                    "title": "Test Paper: Advances in Research Agent Systems",
+                    "authors": ["Test Author"],
+                    "year": 2026,
+                    "url": "https://example.com/test-paper",
+                    "watchdog_provider": "arxiv",
+                    "snippet": "This is a test paper to verify email notification configuration.",
+                    "relevance_score": 0.95,
+                }
+            ],
+            paper_count=1,
+            summary="Test digest for verifying SMTP configuration.",
+            generated_at=time.time(),
+            relevance_scores=[0.95],
+        )
+
+        # Use the existing email sending logic
+        from research_agent.orchestration.digest_email import build_html_digest_email
+        from research_agent.config import load_settings
+        settings_local = load_settings()
+
+        smtp_host = settings_local.watchdog_email.smtp_host
+        if not smtp_host:
+            raise HTTPException(status_code=400, detail="SMTP not configured. Set SMTP_HOST and SMTP_PASSWORD.")
+
+        html_content = build_html_digest_email(test_digest)
+
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "[Test] Research Watchdog Notification"
+        msg["From"] = settings_local.watchdog_email.from_email
+        msg["To"] = email
+
+        text_part = MIMEText("This is a test email from Research Agent Watchdog.", "plain", "utf-8")
+        html_part = MIMEText(html_content, "html", "utf-8")
+        msg.attach(text_part)
+        msg.attach(html_part)
+
+        def _send() -> None:
+            with smtplib.SMTP(smtp_host, settings_local.watchdog_email.smtp_port, timeout=15) as server:
+                if settings_local.watchdog_email.smtp_port == 587:
+                    server.starttls()
+                smtp_user = settings_local.watchdog_email.smtp_user
+                smtp_password = str(settings_local.watchdog_email.smtp_password)
+                if smtp_user and smtp_password:
+                    server.login(smtp_user, smtp_password)
+                server.sendmail(
+                    settings_local.watchdog_email.from_email,
+                    [email],
+                    msg.as_string(),
+                )
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _send)
+
+        return {
+            "success": True,
+            "message": f"Test email sent to {email}. Check your inbox.",
+        }
 
     @app.post("/api/runs/{run_id}/overleaf/push")
     async def overleaf_push(

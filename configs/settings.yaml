@@ -61,6 +61,59 @@ openrouter:
   api_key: ""                    # Set OPENROUTER_API_KEY env var
   timeout_seconds: 60
 
+# OpenAI configuration
+openai:
+  api_key: ""                    # Set OPENAI_API_KEY env var
+  api_base: null                 # Optional: custom base URL (e.g., Azure OpenAI endpoint)
+  organization: null             # Optional: OpenAI organization ID
+  timeout_seconds: 60
+
+# Anthropic configuration
+anthropic:
+  api_key: ""                    # Set ANTHROPIC_API_KEY env var
+  api_base: null                 # Optional: custom base URL
+  timeout_seconds: 60
+
+# Google Gemini configuration
+gemini:
+  api_key: ""                    # Set GEMINI_API_KEY env var
+  api_base: null                 # Optional: custom base URL (e.g., for Vertex AI)
+  timeout_seconds: 60
+
+# Groq configuration (ultra-fast inference)
+groq:
+  api_key: ""                    # Set GROQ_API_KEY env var
+  api_base: null                 # Optional: custom base URL
+  timeout_seconds: 30
+
+# Model Router: task-to-model mapping
+# Task types: plan, write, critique, code, embed, search, evaluate
+model_router:
+  enabled: true
+  default_provider: nvidia       # Provider used when no task-specific mapping exists
+  default_model: ""              # Optional fallback model (empty = use subagent from models section)
+  tasks:
+    plan:
+      provider: gemini
+      model: gemini/gemini-2.0-flash
+      temperature: 0.2
+    write:
+      provider: groq
+      model: groq/llama-3.3-70b-versatile
+      temperature: 0.7
+    critique:
+      provider: nvidia
+      model: nvidia/moonshotai/kimi-k2-instruct-0905
+      temperature: 0.3
+    code:
+      provider: gemini
+      model: gemini/gemini-2.0-flash
+      temperature: 0.1
+    embed:
+      provider: ollama
+      model: ollama/qwen3.5:2b
+      temperature: 0.1
+
 # vLLM configuration
 vllm:
   api_base: http://localhost:8000/v1

@@ -98,15 +98,71 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("PAPER_PROVIDERS"):
         retrieval["paper_providers"] = _coerce_list(env["PAPER_PROVIDERS"])
 
+    # OpenAI settings
+    if env.get("OPENAI_API_KEY"):
+        data.setdefault("openai", {})["api_key"] = env["OPENAI_API_KEY"]
+    if env.get("OPENAI_API_BASE"):
+        data.setdefault("openai", {})["api_base"] = env["OPENAI_API_BASE"]
+    if env.get("OPENAI_ORGANIZATION"):
+        data.setdefault("openai", {})["organization"] = env["OPENAI_ORGANIZATION"]
+
+    # Anthropic settings
+    if env.get("ANTHROPIC_API_KEY"):
+        data.setdefault("anthropic", {})["api_key"] = env["ANTHROPIC_API_KEY"]
+
+    # Gemini settings
+    if env.get("GEMINI_API_KEY"):
+        data.setdefault("gemini", {})["api_key"] = env["GEMINI_API_KEY"]
+    if env.get("GEMINI_API_BASE"):
+        data.setdefault("gemini", {})["api_base"] = env["GEMINI_API_BASE"]
+
+    # Groq settings
+    if env.get("GROQ_API_KEY"):
+        data.setdefault("groq", {})["api_key"] = env["GROQ_API_KEY"]
+
+    # Subagent model overrides for new providers
+    if env.get("SUBAGENT_OPENAI_MODEL"):
+        models["subagent_openai"] = env["SUBAGENT_OPENAI_MODEL"]
+    if env.get("SUBAGENT_ANTHROPIC_MODEL"):
+        models["subagent_anthropic"] = env["SUBAGENT_ANTHROPIC_MODEL"]
+    if env.get("SUBAGENT_GEMINI_MODEL"):
+        models["subagent_gemini"] = env["SUBAGENT_GEMINI_MODEL"]
+    if env.get("SUBAGENT_GROQ_MODEL"):
+        models["subagent_groq"] = env["SUBAGENT_GROQ_MODEL"]
+
     # vLLM settings
     if env.get("VLLM_API_KEY"):
         data.setdefault("vllm", {})["api_key"] = env["VLLM_API_KEY"]
     if env.get("VLLM_API_BASE"):
         data.setdefault("vllm", {})["api_base"] = env["VLLM_API_BASE"]
 
+    # Model router settings
+    if env.get("MODEL_ROUTER_ENABLED"):
+        val = env["MODEL_ROUTER_ENABLED"].lower().strip()
+        data.setdefault("model_router", {})["enabled"] = val in ("true", "1", "yes")
+    if env.get("MODEL_ROUTER_DEFAULT_PROVIDER"):
+        data.setdefault("model_router", {})["default_provider"] = env["MODEL_ROUTER_DEFAULT_PROVIDER"]
+    if env.get("MODEL_ROUTER_DEFAULT_MODEL"):
+        data.setdefault("model_router", {})["default_model"] = env["MODEL_ROUTER_DEFAULT_MODEL"]
+
     # Auth settings
     if env.get("SECRET_KEY"):
         data.setdefault("auth", {})["secret_key"] = env["SECRET_KEY"]
+
+    # Watchdog email / SMTP settings
+    watchdog_email = data.setdefault("watchdog_email", {})
+    if env.get("SMTP_HOST"):
+        watchdog_email["smtp_host"] = env["SMTP_HOST"]
+    if env.get("SMTP_PORT"):
+        watchdog_email["smtp_port"] = int(env["SMTP_PORT"])
+    if env.get("SMTP_USER"):
+        watchdog_email["smtp_user"] = env["SMTP_USER"]
+    if env.get("SMTP_PASSWORD"):
+        watchdog_email["smtp_password"] = env["SMTP_PASSWORD"]
+    if env.get("WATCHDOG_FROM_EMAIL"):
+        watchdog_email["from_email"] = env["WATCHDOG_FROM_EMAIL"]
+    if env.get("WATCHDOG_FROM_NAME"):
+        watchdog_email["from_name"] = env["WATCHDOG_FROM_NAME"]
 
     return data
 

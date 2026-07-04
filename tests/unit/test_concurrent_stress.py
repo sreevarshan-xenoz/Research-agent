@@ -10,9 +10,7 @@ The test verifies that:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
-from typing import Generator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -22,50 +20,10 @@ from research_agent.orchestration.state import WorkflowState
 
 
 # ---------------------------------------------------------------------------
-# Autouse fixture: reset all global caches before/after each test to prevent
-# test-ordering-dependent failures (e.g., stale _INDEX_CACHE entries).
+# Cache cleanup is handled by conftest.py's clean_global_caches (synchronous,
+# autouse), which prevents asyncio.run() conflicts with pytest-asyncio on
+# Windows. No per-file autouse fixture needed here.
 # ---------------------------------------------------------------------------
-
-
-async def _reset_global_caches() -> None:
-    """Clear all module-level global caches that persist across test runs."""
-    from research_agent.orchestration.nodes.indexing import (
-        _CONTRADICTION_CACHE,
-        _CONTRADICTION_CACHE_LOCK,
-        _INDEX_CACHE,
-        _INDEX_CACHE_LOCK,
-        _INDEX_CACHE_TIMESTAMPS,
-        _INDEXED_TASKS_CACHE,
-        _INDEXED_TASKS_CACHE_LOCK,
-    )
-    from research_agent.observability.logging import (
-        _node_timings,
-        _provider_failures,
-    )
-
-    async with _INDEX_CACHE_LOCK:
-        _INDEX_CACHE.clear()
-        _INDEX_CACHE_TIMESTAMPS.clear()
-    async with _CONTRADICTION_CACHE_LOCK:
-        _CONTRADICTION_CACHE.clear()
-    async with _INDEXED_TASKS_CACHE_LOCK:
-        _INDEXED_TASKS_CACHE.clear()
-    # These are accessed without async locks in the source, so safe to clear
-    # directly in single-threaded test context.
-    _node_timings.clear()
-    _provider_failures.clear()
-
-
-@pytest.fixture(autouse=True)
-def _clean_global_caches() -> Generator[None, None, None]:
-    """Reset global caches before each test to prevent stale-state cross-talk.
-
-    Uses asyncio.run() because pytest-asyncio strict mode does not support
-    async autouse fixtures.
-    """
-    asyncio.run(_reset_global_caches())
-    yield
-    asyncio.run(_reset_global_caches())
 
 
 @pytest.mark.asyncio
