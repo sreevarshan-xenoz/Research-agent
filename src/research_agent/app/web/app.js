@@ -94,6 +94,29 @@ const trendsVenuesContainer = document.getElementById("trendsVenuesContainer");
 const trendsEmailInput = document.getElementById("trendsEmailInput");
 const subscribeTrendsBtn = document.getElementById("subscribeTrendsBtn");
 
+// Reproducibility Dashboard Elements (P29)
+const reproducibilityStatusText = document.getElementById("reproducibilityStatusText");
+const reproOverallScore = document.getElementById("reproOverallScore");
+const reproPassed = document.getElementById("reproPassed");
+const reproFailed = document.getElementById("reproFailed");
+const reproPartial = document.getElementById("reproPartial");
+const reproUnverifiable = document.getElementById("reproUnverifiable");
+const reproVerdict = document.getElementById("reproVerdict");
+const reproClaimsContainer = document.getElementById("reproClaimsContainer");
+const reproEmptyState = document.getElementById("reproEmptyState");
+const reproViewReportBtn = document.getElementById("reproViewReportBtn");
+const reproViewScriptsBtn = document.getElementById("reproViewScriptsBtn");
+const reproReportModal = document.getElementById("reproReportModal");
+const reproReportContent = document.getElementById("reproReportContent");
+const reproReportModalClose = document.getElementById("reproReportModalClose");
+const reproReportModalCloseBtn = document.getElementById("reproReportModalCloseBtn");
+const reproCopyReportBtn = document.getElementById("reproCopyReportBtn");
+const reproScriptsModal = document.getElementById("reproScriptsModal");
+const reproScriptsContent = document.getElementById("reproScriptsContent");
+const reproScriptsModalClose = document.getElementById("reproScriptsModalClose");
+const reproScriptsModalCloseBtn = document.getElementById("reproScriptsModalCloseBtn");
+
+
 
 
 
@@ -297,6 +320,7 @@ function switchWorkbenchTab(tab) {
   if (datasetsTabBtn) datasetsTabBtn.classList.toggle("active", tab === "datasets");
   if (proposalTabBtn) proposalTabBtn.classList.toggle("active", tab === "proposal");
   if (trendsTabBtn) trendsTabBtn.classList.toggle("active", tab === "trends");
+  if (reproducibilityTabBtn) reproducibilityTabBtn.classList.toggle("active", tab === "reproducibility");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
@@ -306,6 +330,7 @@ function switchWorkbenchTab(tab) {
   const datasetsPanel = document.querySelector(".datasets-panel");
   const proposalPanel = document.querySelector(".proposal-panel");
   const trendsPanel = document.querySelector(".trends-panel");
+  const reproducibilityPanel = document.querySelector(".reproducibility-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
   if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
@@ -315,6 +340,7 @@ function switchWorkbenchTab(tab) {
   if (datasetsPanel) datasetsPanel.classList.toggle("active", tab === "datasets");
   if (proposalPanel) proposalPanel.classList.toggle("active", tab === "proposal");
   if (trendsPanel) trendsPanel.classList.toggle("active", tab === "trends");
+  if (reproducibilityPanel) reproducibilityPanel.classList.toggle("active", tab === "reproducibility");
 
   if (tab === "citation") {
     loadCitationGraph();
@@ -324,6 +350,8 @@ function switchWorkbenchTab(tab) {
     loadProposalTab();
   } else if (tab === "trends") {
     loadTrendsTab();
+  } else if (tab === "reproducibility") {
+    loadReproducibilityData();
   }
 }
 
@@ -457,6 +485,16 @@ function resetWorkbench() {
   if (proposalContentArea) proposalContentArea.textContent = "";
   if (proposalTitle) proposalTitle.value = "";
   if (proposalAbstract) proposalAbstract.value = "";
+
+  // Reset Reproducibility elements
+  if (reproducibilityStatusText) reproducibilityStatusText.textContent = "No active run loaded";
+  if (reproOverallScore) reproOverallScore.textContent = "—";
+  if (reproPassed) reproPassed.textContent = "—";
+  if (reproFailed) reproFailed.textContent = "—";
+  if (reproPartial) reproPartial.textContent = "—";
+  if (reproUnverifiable) reproUnverifiable.textContent = "—";
+  if (reproVerdict) reproVerdict.style.display = "none";
+  if (reproClaimsContainer) reproClaimsContainer.innerHTML = "<p class='small muted'>Load a research run to see reproducibility results.</p>";
 
   // Reset Trends elements
   if (trendsStatusText) trendsStatusText.textContent = "Enter a query to view trend analytics";
@@ -977,6 +1015,7 @@ citationTabBtn?.addEventListener("click", () => switchWorkbenchTab("citation"));
 datasetsTabBtn?.addEventListener("click", () => switchWorkbenchTab("datasets"));
 proposalTabBtn?.addEventListener("click", () => switchWorkbenchTab("proposal"));
 trendsTabBtn?.addEventListener("click", () => switchWorkbenchTab("trends"));
+reproducibilityTabBtn?.addEventListener("click", () => switchWorkbenchTab("reproducibility"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
 
 
@@ -1794,6 +1833,196 @@ subscribeTrendsBtn?.addEventListener("click", async () => {
   }
 });
 
+// ── Reproducibility Dashboard Functions (P29) ───────────────────────────────
+
+let _reproDataCache = null;
+
+async function loadReproducibilityData() {
+  if (!currentRunId) {
+    if (reproducibilityStatusText) reproducibilityStatusText.textContent = "No active run loaded yet.";
+    if (reproClaimsContainer) reproClaimsContainer.innerHTML = "<p class='small muted'>Load a research run to see reproducibility results.</p>";
+    return;
+  }
+
+  if (reproducibilityStatusText) reproducibilityStatusText.textContent = "Loading reproducibility data...";
+
+  try {
+    const res = await fetch(`/api/runs/${currentRunId}/reproducibility`, {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) throw new Error("Failed to fetch reproducibility data");
+
+    const data = await res.json();
+    _reproDataCache = data;
+
+    if (!data.has_reproducibility || data.total_claims === 0) {
+      if (reproducibilityStatusText) reproducibilityStatusText.textContent = data.message || "No reproducibility data available.";
+      if (reproOverallScore) reproOverallScore.textContent = "\u2014";
+      if (reproPassed) reproPassed.textContent = "0";
+      if (reproFailed) reproFailed.textContent = "0";
+      if (reproPartial) reproPartial.textContent = "0";
+      if (reproUnverifiable) reproUnverifiable.textContent = "0";
+      if (reproClaimsContainer) reproClaimsContainer.innerHTML = "<p class='small muted'>" + (data.message || "No reproducibility data found.") + "</p>";
+      if (reproVerdict) reproVerdict.style.display = "none";
+      return;
+    }
+
+    if (reproducibilityStatusText) reproducibilityStatusText.textContent = data.total_claims + " claims analyzed";
+    renderReproducibilityDashboard(data);
+  } catch (err) {
+    if (reproducibilityStatusText) reproducibilityStatusText.textContent = "Failed to load: " + err.message;
+    if (reproClaimsContainer) reproClaimsContainer.innerHTML = "<p class='small muted'>Error: " + err.message + "</p>";
+  }
+}
+
+function renderReproducibilityDashboard(data) {
+  const summary = data.summary || {};
+  const passed = summary.passed || 0;
+  const failed = summary.failed || 0;
+  const partial = summary.partial || 0;
+  const unverifiable = summary.unverifiable || 0;
+  const overallScore = data.overall_score || 0;
+  const items = data.items || [];
+
+  // Update score cards
+  if (reproOverallScore) reproOverallScore.textContent = (overallScore * 100).toFixed(0) + "%";
+  if (reproPassed) reproPassed.textContent = passed;
+  if (reproFailed) reproFailed.textContent = failed;
+  if (reproPartial) reproPartial.textContent = partial;
+  if (reproUnverifiable) reproUnverifiable.textContent = unverifiable;
+
+  // Update verdict banner
+  if (reproVerdict) {
+    let verdictText = "";
+    let verdictBg = "";
+    let verdictColor = "";
+    if (overallScore >= 0.8) {
+      verdictText = "\u2705 Strong Reproducibility \u2014 " + (overallScore * 100).toFixed(0) + "% of claims verified";
+      verdictBg = "rgba(16, 185, 129, 0.1)";
+      verdictColor = "#34d399";
+    } else if (overallScore >= 0.5) {
+      verdictText = "\U0001f7e1 Partial Reproducibility \u2014 " + (overallScore * 100).toFixed(0) + "% of claims verified";
+      verdictBg = "rgba(245, 158, 11, 0.1)";
+      verdictColor = "#f59e0b";
+    } else {
+      verdictText = "\u274c Poor Reproducibility \u2014 Only " + (overallScore * 100).toFixed(0) + "% of claims verified";
+      verdictBg = "rgba(244, 63, 94, 0.1)";
+      verdictColor = "#f43f5e";
+    }
+    reproVerdict.textContent = verdictText;
+    reproVerdict.style.display = "block";
+    reproVerdict.style.background = verdictBg;
+    reproVerdict.style.color = verdictColor;
+    reproVerdict.style.border = "1px solid " + verdictColor + "33";
+  }
+
+  // Render per-claim results
+  if (reproClaimsContainer) {
+    if (items.length === 0) {
+      reproClaimsContainer.innerHTML = "<p class='small muted'>No claim results available.</p>";
+      return;
+    }
+
+    reproClaimsContainer.innerHTML = items.map((item, idx) => {
+      const status = item.status || "unknown";
+      const statusEmoji = status === "pass" ? "\u2705" : status === "fail" ? "\u274c" : status === "partial" ? "\U0001f7e1" : "\u2b1c";
+      const statusColor = status === "pass" ? "#34d399" : status === "fail" ? "#f43f5e" : status === "partial" ? "#f59e0b" : "#71717a";
+      const claimText = item.claim_text || "Unknown claim";
+      const claimedVal = item.claimed_value || "\u2014";
+      const actualVal = item.actual_value || "\u2014";
+      const confidence = item.confidence || 0;
+      const duration = item.duration_seconds || 0;
+
+      return `
+        <div class="repro-claim-card" style="background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 12px; transition: all 0.2s ease;">
+          <div style="display: flex; align-items: flex-start; gap: 10px;">
+            <span style="font-size: 1.1rem; line-height: 1.4;">${statusEmoji}</span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 0.8rem; color: #e4e4e7; line-height: 1.4; margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${claimText.replace(/"/g, "&quot;")}">${claimText}</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.7rem; color: #71717a;">
+                <span>Claimed: <strong style="color: #a1a1aa;">${String(claimedVal).substring(0, 60)}</strong></span>
+                <span>Actual: <strong style="color: ${statusColor};">${String(actualVal).substring(0, 60)}</strong></span>
+                <span>Confidence: <strong>${(confidence * 100).toFixed(0)}%</strong></span>
+                <span>Runtime: <strong>${duration.toFixed(1)}s</strong></span>
+              </div>
+              <div style="margin-top: 6px;">
+                <span class="status-pill" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; background: ${statusColor}22; color: ${statusColor};">${statusEmoji} ${status}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+}
+
+// ── Reproducibility Modal Handlers ───────────────────────────────
+
+function openReproReportModal() {
+  if (!currentRunId) return;
+  if (reproReportContent) reproReportContent.textContent = "Loading report...";
+  if (reproReportModal) reproReportModal.classList.remove("hidden");
+
+  fetch(`/api/runs/${currentRunId}/reproducibility/report`, {
+    headers: { "Authorization": `Bearer ${authToken}` }
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Report not found");
+      return res.json();
+    })
+    .then(data => {
+      if (reproReportContent) reproReportContent.textContent = data.report || "No report content.";
+    })
+    .catch(err => {
+      if (reproReportContent) reproReportContent.textContent = "Error: " + err.message;
+    });
+}
+
+function closeReproReportModal() {
+  if (reproReportModal) reproReportModal.classList.add("hidden");
+}
+
+function openReproScriptsModal() {
+  if (!currentRunId) return;
+  if (reproScriptsContent) reproScriptsContent.innerHTML = "<p class='muted' style='font-size: 0.85rem;'>Loading scripts...</p>";
+  if (reproScriptsModal) reproScriptsModal.classList.remove("hidden");
+
+  fetch(`/api/runs/${currentRunId}/reproducibility/scripts`, {
+    headers: { "Authorization": `Bearer ${authToken}` }
+  })
+    .then(res => {
+      if (!res.ok) throw new Error("Scripts not found");
+      return res.json();
+    })
+    .then(data => {
+      const scripts = data.scripts || [];
+      if (scripts.length === 0) {
+        if (reproScriptsContent) reproScriptsContent.innerHTML = "<p class='muted' style='font-size: 0.85rem;'>No verification scripts found.</p>";
+        return;
+      }
+      let html = "<div style='display: flex; flex-direction: column; gap: 8px;'>";
+      scripts.forEach(s => {
+        html += `
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); padding: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-weight: 600; font-size: 0.8rem; color: #e4e4e7;">${s.name}</span>
+              <span style="font-size: 0.65rem; color: #71717a;">${s.size_bytes} bytes</span>
+            </div>
+            <pre style="background: #050505; padding: 8px; border-radius: 4px; font-size: 0.7rem; line-height: 1.4; max-height: 200px; overflow-y: auto; margin: 0;" class="mono"><code>${s.code.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code></pre>
+          </div>
+        `;
+      });
+      html += "</div>";
+      if (reproScriptsContent) reproScriptsContent.innerHTML = html;
+    })
+    .catch(err => {
+      if (reproScriptsContent) reproScriptsContent.innerHTML = "<p class='muted' style='font-size: 0.85rem;'>Error: " + err.message + "</p>";
+    });
+}
+
+function closeReproScriptsModal() {
+  if (reproScriptsModal) reproScriptsModal.classList.add("hidden");
+}
 // ── Model Settings Panel (P12) ──────────────────────────────────────────────────
 
 const settingsPanelHeader = document.getElementById("settingsPanelHeader");
