@@ -45,6 +45,7 @@ The project delivers a complete research lifecycle pipeline with all features li
 | **Agentic Chat with Tool-Calling Loop** | ✅ | **P15** |
 | **AI Model Router with Multi-Provider Fallback** | ✅ | **P12** |
 | **Automated Literature Monitoring & Alerting** | ✅ | **P13** |
+| **Agentic Deep Research Engine** | ✅ | **P21** |
 
 ---
 
@@ -99,25 +100,23 @@ The project delivers a complete research lifecycle pipeline with all features li
 - **Per-profile notification preferences** (frequency, email, min relevance threshold)
 - **One-click deep dive**: launch full `run_graph` from a discovered paper
 
+### ✅ P21 — Agentic Deep Research Engine
+**Completed July 2026.** Self-correcting search loop with iterative query refinement, citation chaining, and multi-factor evidence scoring integrated into the core orchestration graph.
+
+**Key deliverables:**
+- **New `deep_research/` module** (`query_refiner.py`, `citation_chainer.py`, `evidence_scorer.py`, `termination.py`)
+- **Iterative query refinement**: LLM analyzes gaps after each search pass, generates 1–2 follow-up queries per task
+- **Citation chaining**: BFS recursive fetch of citing + cited papers (via Semantic Scholar API), up to configurable depth
+- **Multi-factor evidence scoring**: coverage (35%), source authority (25%), recency (15%), citation impact (15%), provider diversity (10%), with contradiction penalty
+- **Search termination heuristics**: novelty decay curve + score plateau detection + min coverage safety net
+- **Deep Research Settings** (`config/schema.py`): 9 config fields (rounds, chain depth, scoring thresholds, etc.)
+- **Worker integration**: `_run_deep_research_task()` replaces single-pass search with multi-round refinement loop
+- **Critic upgrade**: from simple `item_count / 8.0` to 5-factor weighted scoring
+- **State fields**: `search_rounds`, `termination_signals`, `chained_papers`, `chained_paper_ids`
+
 ---
 
 ## Next Up: Core Infrastructure & Agentic Features
-
-### P21 — Agentic Deep Research Engine
-**Why:** Current research is single-pass: plan → execute → compose. A self-correcting loop with iterative query refinement, citation chaining, and expanding search depth produces significantly better results.
-
-**What to build:**
-- [ ] **Iterative query refinement**: after each search pass, LLM analyzes gaps and generates follow-up queries
-- [ ] **Citation chaining**: extract citations from high-value papers, recursively fetch and analyze cited/citing works
-- [ ] **Adaptive search depth**: allocate more iterations to low-confidence sections
-- [ ] **Parallel search strategies**: web search + academic APIs + citation graph simultaneously
-- [ ] **Evidence scoring per section**: confidence-weighted evidence aggregation
-- [ ] **Search termination heuristics**: stop when diminishing returns detected (novelty decay curve)
-
-**Estimated effort:** 3-4 sprints
-**Why now:** Transforms research quality dramatically. Builds directly on P12's multi-provider routing.
-
----
 
 ### P24 — Verified Code Execution Sandbox
 **Why:** ⭐ Unique differentiator — no other research tool verifies paper claims by executing code.
@@ -362,18 +361,17 @@ The project delivers a complete research lifecycle pipeline with all features li
 ## Strategic Sequencing
 
 ```
-Sprint NOW (Complete):   P12 Model Router (multi-provider) → P15 Agentic Chat (tool-calling loop)
+Sprint NOW (Complete):   P12 Model Router → P15 Agentic Chat → P13 Literature Mon.
                          ╔═══════════════════════════════════════════════╗
                          ║  ↓ These features are scoped for implementation  ║
                          ╚═══════════════════════════════════════════════╝
-Sprint NOW (Complete):   P13 Literature Monitoring
+Sprint NOW (Complete):   P21 Deep Research Engine (iterative search + citation chaining)
 Sprint 1-2:              P24 Code Sandbox (unique differentiator)
-Sprint 3-4:              P21 Deep Research Engine (iterative search)
                            → P16 Job Queue (infrastructure)
-Sprint 5-6:              P22 Multi-Modal Analysis → P17 Observability
-Sprint 7-8:              P23 GraphRAG → P28 Personal Library
-Sprint 9-10:             P25 Co-Editing → P27 Submission Pipeline → P18 Security
-Sprint 11+:              P26 Advanced Agentic → P34 Swarm → P19 Plugins
+Sprint 3-4:              P22 Multi-Modal Analysis → P17 Observability
+Sprint 5-6:              P23 GraphRAG → P28 Personal Library
+Sprint 7-8:              P25 Co-Editing → P27 Submission Pipeline → P18 Security
+Sprint 9+:               P26 Advanced Agentic → P34 Swarm → P19 Plugins
 ```
 
 ### First-Mover Advantage Features
@@ -382,7 +380,7 @@ Sprint 11+:              P26 Advanced Agentic → P34 Swarm → P19 Plugins
 |------|---------|----------------|--------|
 | ⭐ | **P24 Verified Code Sandbox** | No other tool verifies paper claims by executing code | 3-4 sprints |
 | 🥇 | **P22 Multi-Modal RAG** | Figure/table/equation understanding is the next frontier | 4-5 sprints |
-| 🥈 | **P21 Deep Research Engine** | Self-correcting search loops with citation chaining | 3-4 sprints |
+| ✅ | **P21 Deep Research Engine** | ✅ Completed July 2026 — iterative query refinement + citation chaining | 3-4 sprints |
 | 🥉 | **P23 GraphRAG** | Cross-run knowledge graphs for multi-hop reasoning | 4-5 sprints |
 | 💡 | **P36 Paper-git** | Research artifact versioning is an unmet need | 3-4 sprints |
 | 🔌 | **P19 Plugin System** | Enables community contributions and marketplace | 3 sprints |
