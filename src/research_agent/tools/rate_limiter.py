@@ -130,6 +130,23 @@ PROVIDER_QUOTAS: dict[str, ProviderQuota] = {
         max_rate=30, time_period=1.0, max_burst=15,
         retry_attempts=2, retry_min_wait=0.5, retry_max_wait=5.0,
     ),
+    # New providers: OpenAI and Anthropic
+    "openai_llm": ProviderQuota(
+        max_rate=60, time_period=1.0, max_burst=20,
+        retry_attempts=3, retry_min_wait=1.0, retry_max_wait=30.0,
+    ),
+    "anthropic_llm": ProviderQuota(
+        max_rate=50, time_period=1.0, max_burst=10,
+        retry_attempts=3, retry_min_wait=1.0, retry_max_wait=30.0,
+    ),
+    "gemini_llm": ProviderQuota(
+        max_rate=60, time_period=1.0, max_burst=20,
+        retry_attempts=3, retry_min_wait=1.0, retry_max_wait=30.0,
+    ),
+    "groq_llm": ProviderQuota(
+        max_rate=30, time_period=1.0, max_burst=15,
+        retry_attempts=3, retry_min_wait=0.5, retry_max_wait=15.0,
+    ),
 }
 
 

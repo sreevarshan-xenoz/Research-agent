@@ -12,6 +12,7 @@ async def test_graph_plans_for_specific_topic(tmp_path: Path, monkeypatch) -> No
         run_id="smoke",
         topic="A comparative analysis of retrieval augmentation for software engineering agents",
         artifact_root=str(tmp_path),
+        max_iterations=1,
     )
     updated = await run_graph(state, registry={})
     assert updated.phase == "completed"

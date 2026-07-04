@@ -153,45 +153,75 @@ class ResearchIndex:
         settings = load_settings()
         embedding_model = settings.retrieval.embedding_model
         
-        # Try local multilingual embeddings first
-        if embedding_model and settings.features.multi_language:
-            try:
-                from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
-                # Cache the model on the class or globally to avoid reloading
-                async with self._lock:
-                    if not hasattr(self, "_st_model"):
-                        self._st_model = SentenceTransformer(embedding_model)
-                    dim = self._st_model.get_sentence_embedding_dimension()
-                    if dim is not None:
-                        self.vector_size = dim
-                    self._ensure_collection(self.vector_size)
-                embeddings = await asyncio.to_thread(self._st_model.encode, texts)
-                return embeddings.tolist()
-            except ImportError:
-                logger.info("sentence-transformers not installed. Falling back to NVIDIA or deterministic embeddings.")
+        embedding_providers = [
+            ("sentence_transformers", embedding_model),
+            ("openai", settings.openai.api_key.get_secret_value() if settings.openai.api_key else os.getenv("OPENAI_API_KEY", "")),
+            ("nvidia", os.getenv("NVIDIA_API_KEY", "") or os.getenv("NVIDIA_NIMS_API_KEY", "")),
+        ]
 
-        api_key = os.getenv("NVIDIA_API_KEY")
-        enable_nvidia = os.getenv("ENABLE_NVIDIA_MODEL", "true").lower() not in ("0", "false")
-        
-        if api_key and enable_nvidia:
-            try:
-                from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings  # type: ignore[import-untyped]
-                embedder = NVIDIAEmbeddings(api_key=api_key)
-                embeddings = await asyncio.to_thread(embedder.embed_documents, texts)
-                # Ensure collection matches the real embedding dimension
-                if embeddings:
+        for prov_name, prov_config in embedding_providers:
+            if prov_name == "sentence_transformers" and prov_config and settings.features.multi_language:
+                try:
+                    from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
                     async with self._lock:
-                        vs = len(embeddings[0])
-                        if vs != self.vector_size:
-                            self.vector_size = vs
+                        if not hasattr(self, "_st_model"):
+                            self._st_model = SentenceTransformer(prov_config)
+                        dim = self._st_model.get_sentence_embedding_dimension()
+                        if dim is not None:
+                            self.vector_size = dim
                         self._ensure_collection(self.vector_size)
-                return embeddings
-            except Exception as exc:
-                logger.warning("NVIDIA embedding failed, falling back to mock: %s: %s", type(exc).__name__, exc)
-        
-        # Fallback: simple deterministic projection for "semantic" search mock
+                    embeddings = await asyncio.to_thread(self._st_model.encode, texts)
+                    logger.info("Using sentence-transformers embeddings (%s)", prov_config)
+                    return embeddings.tolist()
+                except ImportError:
+                    logger.info("sentence-transformers not installed — trying next embedding provider")
+                except Exception as exc:
+                    logger.warning("sentence-transformers embedding failed: %s — trying next provider", exc)
+
+            elif prov_name == "openai" and prov_config:
+                try:
+                    import openai
+                    client = openai.AsyncOpenAI(api_key=prov_config)
+                    response = await client.embeddings.create(
+                        model="text-embedding-3-small",
+                        input=texts,
+                    )
+                    embeddings = [item.embedding for item in response.data]
+                    if embeddings:
+                        async with self._lock:
+                            vs = len(embeddings[0])
+                            if vs != self.vector_size:
+                                self.vector_size = vs
+                            self._ensure_collection(self.vector_size)
+                    logger.info("Using OpenAI embeddings (text-embedding-3-small)")
+                    return embeddings
+                except ImportError:
+                    logger.info("openai package not installed — trying next embedding provider")
+                except Exception as exc:
+                    logger.warning("OpenAI embedding failed: %s — trying next provider", exc)
+
+            elif prov_name == "nvidia" and prov_config:
+                try:
+                    from langchain_nvidia_ai_endpoints import NVIDIAEmbeddings  # type: ignore[import-untyped]
+                    embedder = NVIDIAEmbeddings(api_key=prov_config)
+                    embeddings = await asyncio.to_thread(embedder.embed_documents, texts)
+                    if embeddings:
+                        async with self._lock:
+                            vs = len(embeddings[0])
+                            if vs != self.vector_size:
+                                self.vector_size = vs
+                            self._ensure_collection(self.vector_size)
+                    logger.info("Using NVIDIA embeddings")
+                    return embeddings
+                except ImportError:
+                    logger.info("langchain-nvidia package not installed — falling back to deterministic")
+                except Exception as exc:
+                    logger.warning("NVIDIA embedding failed: %s — falling back to deterministic", exc)
+
+        # Final fallback: simple deterministic projection for "semantic" search mock
         async with self._lock:
             self._ensure_collection(self.vector_size)
+            logger.info("Falling back to deterministic mock embeddings (no provider available)")
             def mock_embed(text: str) -> List[float]:
                 seed = sum(ord(c) for c in text) % 2**32
                 rng = random.Random(seed)
