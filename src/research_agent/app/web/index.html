@@ -143,6 +143,70 @@
         </div>
       </div>
 
+      <div class="panel status-panel">
+        <header class="panel-header" style="cursor: pointer;" id="watchdogPanelHeader">
+          <h2>Latest Papers</h2>
+          <span class="badge small" id="watchdogBadge" style="font-size: 0.6rem;">Monitor</span>
+        </header>
+        <div id="watchdogPanelBody">
+          <div id="watchdogDigests" class="discovery-feed" style="max-height: 180px;">
+            <p class="small muted">Loading watchdog digests...</p>
+          </div>
+          <div style="display: flex; gap: 4px; margin-top: 8px;">
+            <button id="watchdogRefreshBtn" type="button" class="secondary" style="font-size: 0.65rem; padding: 4px 8px; flex: 1;">Refresh</button>
+            <button id="watchdogCheckNowBtn" type="button" class="secondary" style="font-size: 0.65rem; padding: 4px 8px; flex: 1;">Check Now</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel status-panel">
+        <header class="panel-header" style="cursor: pointer;" id="settingsPanelHeader">
+          <h2>Model Settings</h2>
+          <span class="badge small" id="healthBadge" style="font-size: 0.6rem;">Check</span>
+        </header>
+        <div id="settingsPanelBody" class="hidden" style="padding: 0; margin-top: 8px;">
+          <div class="field">
+            <label for="settingsProviderPriority">Provider Priority</label>
+            <input id="settingsProviderPriority" type="text" placeholder="ollama,openrouter,nvidia,openai,anthropic,gemini,groq" style="font-size: 0.75rem; font-family: 'Fira Code', monospace;" />
+          </div>
+          <div class="field" style="margin-top: 8px;">
+            <label for="settingsDefaultProvider">Default Provider</label>
+            <select id="settingsDefaultProvider">
+              <option value="ollama">Ollama</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="nvidia">NVIDIA</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="gemini">Gemini</option>
+              <option value="groq">Groq</option>
+            </select>
+          </div>
+          <div class="field" style="margin-top: 8px;">
+            <label for="settingsTaskType">Task-Specific Models</label>
+            <select id="settingsTaskType" style="margin-bottom: 4px;">
+              <option value="plan">Plan</option>
+              <option value="write">Write</option>
+              <option value="critique">Critique</option>
+              <option value="code">Code</option>
+              <option value="embed">Embed</option>
+            </select>
+            <div style="display: flex; gap: 6px;">
+              <input id="settingsTaskProvider" type="text" placeholder="Provider" style="font-size: 0.75rem; font-family: 'Fira Code', monospace; flex: 1;" />
+              <input id="settingsTaskModel" type="text" placeholder="Model" style="font-size: 0.75rem; font-family: 'Fira Code', monospace; flex: 2;" />
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button id="checkModelsHealthBtn" type="button" class="secondary" style="font-size: 0.75rem; padding: 6px 10px;">
+              Check Models Health
+            </button>
+            <button id="applyModelSettingsBtn" type="button" class="primary" style="font-size: 0.75rem; padding: 6px 10px;">
+              Apply
+            </button>
+          </div>
+          <div id="modelHealthResults" style="margin-top: 8px; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
       <div class="sidebar-actions" style="margin-top: auto; padding-top: 16px;">
         <button id="newSessionBtn" class="secondary">New Session</button>
         <button id="stopRunBtn" class="secondary" style="margin-top: 8px;">Stop Run</button>

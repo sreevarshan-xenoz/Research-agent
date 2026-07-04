@@ -1794,6 +1794,143 @@ subscribeTrendsBtn?.addEventListener("click", async () => {
   }
 });
 
+// ── Model Settings Panel (P12) ──────────────────────────────────────────────────
+
+const settingsPanelHeader = document.getElementById("settingsPanelHeader");
+const settingsPanelBody = document.getElementById("settingsPanelBody");
+const healthBadge = document.getElementById("healthBadge");
+const checkModelsHealthBtn = document.getElementById("checkModelsHealthBtn");
+const applyModelSettingsBtn = document.getElementById("applyModelSettingsBtn");
+const modelHealthResults = document.getElementById("modelHealthResults");
+const settingsProviderPriority = document.getElementById("settingsProviderPriority");
+const settingsDefaultProvider = document.getElementById("settingsDefaultProvider");
+const settingsTaskType = document.getElementById("settingsTaskType");
+const settingsTaskProvider = document.getElementById("settingsTaskProvider");
+const settingsTaskModel = document.getElementById("settingsTaskModel");
+
+// Toggle settings panel visibility
+settingsPanelHeader?.addEventListener("click", () => {
+  settingsPanelBody?.classList.toggle("hidden");
+});
+
+// Load current settings from the server
+async function loadModelSettings() {
+  try {
+    const res = await fetch("/api/health/models", {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    // Update health badge
+    if (healthBadge && data.summary) {
+      const healthy = data.summary.healthy || 0;
+      const total = data.summary.total || 0;
+      healthBadge.textContent = `${healthy}/${total} online`;
+      healthBadge.style.background = healthy > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(244, 63, 94, 0.2)";
+      healthBadge.style.color = healthy > 0 ? "#34d399" : "#f43f5e";
+    }
+  } catch (err) {
+    console.error("Failed to load model settings:", err);
+  }
+}
+
+// Check models health
+checkModelsHealthBtn?.addEventListener("click", async () => {
+  if (!modelHealthResults) return;
+  modelHealthResults.innerHTML = '<div class="mono small" style="opacity: 0.7;">Checking model health...</div>';
+  
+  try {
+    const res = await fetch("/api/health/models", {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) throw new Error("Health check failed");
+    const data = await res.json();
+    
+    // Render health results
+    let html = '<div style="font-size: 0.7rem; display: flex; flex-direction: column; gap: 4px;">';
+    
+    if (data.models) {
+      data.models.forEach(m => {
+        const statusDot = m.status === "healthy" ? "🟢" : m.status === "error" ? "🔴" : "⚪";
+        const latencyStr = m.latency_ms ? `${m.latency_ms}ms` : "-";
+        html += `
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+            <span>${statusDot}</span>
+            <span style="font-weight: 600; min-width: 70px;">${m.provider}</span>
+            <span style="opacity: 0.7; font-size: 0.65rem; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.model || "-"}</span>
+            <span style="opacity: 0.5; min-width: 40px; text-align: right;">${latencyStr}</span>
+            ${m.error ? `<span style="color: #f43f5e; font-size: 0.6rem;" title="${m.error}">⚠</span>` : ""}
+          </div>
+        `;
+      });
+    }
+    
+    if (data.cost_metrics && Object.keys(data.cost_metrics).length > 0) {
+      html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--glass-border);">';
+      html += '<div style="font-weight: 600; font-size: 0.65rem; color: var(--muted); margin-bottom: 4px;">Active Run Costs</div>';
+      Object.entries(data.cost_metrics).forEach(([runId, metrics]) => {
+        html += `<div style="font-size: 0.6rem; opacity: 0.7;">${runId.slice(0, 16)}...: $${metrics.total_cost_usd.toFixed(4)} / $${metrics.budget_usd.toFixed(2)}</div>`;
+      });
+      html += '</div>';
+    }
+    
+    html += '</div>';
+    modelHealthResults.innerHTML = html;
+    
+    // Update badge
+    if (healthBadge && data.summary) {
+      healthBadge.textContent = `${data.summary.healthy}/${data.summary.total} online`;
+      healthBadge.style.background = data.summary.healthy > 0 ? "rgba(16, 185, 129, 0.2)" : "rgba(244, 63, 94, 0.2)";
+      healthBadge.style.color = data.summary.healthy > 0 ? "#34d399" : "#f43f5e";
+    }
+  } catch (err) {
+    modelHealthResults.innerHTML = `<div class="mono small" style="color: #f43f5e;">Error: ${err.message}</div>`;
+  }
+});
+
+// Apply model settings
+applyModelSettingsBtn?.addEventListener("click", async () => {
+  const priority = settingsProviderPriority?.value?.trim();
+  const defaultProvider = settingsDefaultProvider?.value;
+  const taskType = settingsTaskType?.value;
+  const taskProvider = settingsTaskProvider?.value?.trim();
+  const taskModel = settingsTaskModel?.value?.trim();
+  
+  // Build the preferences object to send to the memory endpoint
+  const preferences = {};
+  if (priority) preferences.provider_priority = priority;
+  if (defaultProvider) preferences.default_provider = defaultProvider;
+  if (taskType && taskProvider) preferences[`task_${taskType}_provider`] = taskProvider;
+  if (taskType && taskModel) preferences[`task_${taskType}_model`] = taskModel;
+  
+  if (Object.keys(preferences).length === 0) return;
+  
+  try {
+    // Store in agent memory
+    const targetSessionId = agentSessionId || sessionId || "default";
+    await fetch("/api/chat/memory", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        session_id: targetSessionId,
+        preferences: preferences
+      })
+    });
+    
+    // Show feedback
+    const origText = applyModelSettingsBtn.textContent;
+    applyModelSettingsBtn.textContent = "Saved ✓";
+    setTimeout(() => { applyModelSettingsBtn.textContent = origText; }, 2000);
+  } catch (err) {
+    console.error("Failed to save settings:", err);
+  }
+});
+
+
 // ── Agent Chat Functions (P15) ─────────────────────────────────────────────────
 
 let agentSessionId = null;
@@ -2280,4 +2417,123 @@ chatForm?.addEventListener("submit", async (e) => {
   if (savedAgentSession) {
     agentSessionId = savedAgentSession;
   }
+
+  // Load model settings and health status on startup
+  setTimeout(() => loadModelSettings(), 2000);
+  setTimeout(() => loadWatchdogDigests(), 3000);
 })();
+
+
+// ── Watchdog Dashboard Widget (P13) ──────────────────────────────
+
+const watchdogPanelHeader = document.getElementById("watchdogPanelHeader");
+const watchdogDigests = document.getElementById("watchdogDigests");
+const watchdogBadge = document.getElementById("watchdogBadge");
+const watchdogRefreshBtn = document.getElementById("watchdogRefreshBtn");
+const watchdogCheckNowBtn = document.getElementById("watchdogCheckNowBtn");
+
+// Toggle watchdog panel visibility (always visible, just the header is clickable)
+watchdogPanelHeader?.addEventListener("click", () => {
+  // Could toggle expanded view, but keep it always shown for dashboard
+});
+
+async function loadWatchdogDigests() {
+  if (!watchdogDigests) return;
+  try {
+    const res = await fetch("/api/watchdog/dashboard", {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) {
+      watchdogDigests.innerHTML = '<p class="small muted">Login to see papers</p>';
+      return;
+    }
+    const data = await res.json();
+    
+    // Update badge
+    if (watchdogBadge) {
+      const totalNew = data.total_new_papers || 0;
+      const active = data.active_subscriptions || 0;
+      watchdogBadge.textContent = `${active} subs`;
+      watchdogBadge.style.background = totalNew > 0 ? "rgba(52, 211, 153, 0.2)" : "rgba(255,255,255,0.05)";
+      watchdogBadge.style.color = totalNew > 0 ? "#34d399" : "var(--muted)";
+    }
+    
+    // Render digests
+    let html = "";
+    
+    // Show subscriptions summary
+    if (data.active_subscriptions > 0) {
+      html += `<div style="font-size: 0.6rem; color: #71717a; margin-bottom: 6px; display: flex; justify-content: space-between;">
+        <span>${data.active_subscriptions} active sub${data.active_subscriptions !== 1 ? 's' : ''}</span>
+        <span style="font-weight: 600; color: ${data.total_new_papers > 0 ? '#34d399' : '#71717a'};">${data.total_new_papers} new</span>
+      </div>`;
+    }
+    
+    // Show recent digests
+    const digests = data.recent_digests || [];
+    if (digests.length === 0) {
+      if (data.active_subscriptions > 0) {
+        html += '<p class="small muted">Waiting for next check...</p>';
+      } else {
+        html += '<p class="small muted">No subscriptions yet. Use Agent Chat or Watchdog API.</p>';
+      }
+    } else {
+      digests.slice(0, 3).forEach(d => {
+        const timeAgo = getTimeAgo(d.generated_at);
+        html += `<div class="discovery-item" style="cursor: pointer;" onclick="openWatchdogDigest('${d.digest_id}')">
+          <span class="source">${d.topic}${d.email_sent ? ' ✉' : ''}</span>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${d.paper_count} paper${d.paper_count !== 1 ? 's' : ''}${d.summary ? ': ' + d.summary.substring(0, 60) : ''}</span>
+            <span style="font-size: 0.6rem; color: #52525b;">${timeAgo}</span>
+          </div>
+        </div>`;
+      });
+    }
+    
+    watchdogDigests.innerHTML = html;
+  } catch (err) {
+    console.error("Failed to load watchdog digests:", err);
+    watchdogDigests.innerHTML = '<p class="small muted">Could not load digests</p>';
+  }
+}
+
+function getTimeAgo(timestamp) {
+  const now = Date.now() / 1000;
+  const diff = now - timestamp;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function openWatchdogDigest(digestId) {
+  // Switch to the digests tab in the existing watchdog display
+  if (watchdogDigests) {
+    // Highlight the selected digest — could load full details
+    console.log("Selected digest:", digestId);
+  }
+}
+
+// Refresh watchdog digests
+watchdogRefreshBtn?.addEventListener("click", () => {
+  loadWatchdogDigests();
+});
+
+// Trigger manual check
+watchdogCheckNowBtn?.addEventListener("click", async () => {
+  if (!watchdogDigests) return;
+  watchdogDigests.innerHTML = '<p class="small muted">Checking all subscriptions...</p>';
+  try {
+    const res = await fetch("/api/watchdog/check", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) throw new Error("Check failed");
+    const data = await res.json();
+    watchdogDigests.innerHTML = `<p class="small muted">Checked ${data.profiles_checked || 0} subscription${data.profiles_checked !== 1 ? 's' : ''}. ${data.total_new_papers || 0} new papers found.</p>`;
+    setTimeout(() => loadWatchdogDigests(), 2000);
+  } catch (err) {
+    watchdogDigests.innerHTML = `<p class="small muted">Error: ${err.message}</p>`;
+    setTimeout(() => loadWatchdogDigests(), 3000);
+  }
+});
