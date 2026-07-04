@@ -164,6 +164,18 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("WATCHDOG_FROM_NAME"):
         watchdog_email["from_name"] = env["WATCHDOG_FROM_NAME"]
 
+    # Code Sandbox settings (P24)
+    code_sandbox = data.setdefault("code_sandbox", {})
+    if env.get("CODE_SANDBOX_ENABLED"):
+        val = env["CODE_SANDBOX_ENABLED"].lower().strip()
+        code_sandbox["enabled"] = val in ("true", "1", "yes")
+    if env.get("CODE_SANDBOX_TIMEOUT"):
+        code_sandbox["container_timeout"] = int(env["CODE_SANDBOX_TIMEOUT"])
+    if env.get("CODE_SANDBOX_MEMORY_MB"):
+        code_sandbox["memory_limit_mb"] = int(env["CODE_SANDBOX_MEMORY_MB"])
+    if env.get("CODE_SANDBOX_POOL_SIZE"):
+        code_sandbox["pool_size"] = int(env["CODE_SANDBOX_POOL_SIZE"])
+
     return data
 
 
