@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator, model_serializer, SecretStr
+from pydantic import BaseModel, Field, field_validator, model_validator, SecretStr
 
 
 class RuntimeSettings(BaseModel):
@@ -50,6 +50,16 @@ class GroqSettings(BaseModel):
     api_key: SecretStr = SecretStr("")
     api_base: str | None = Field(default=None, description="Custom API base URL")
     timeout_seconds: int = Field(default=30, ge=10, le=300)
+
+
+class JobQueueSettings(BaseModel):
+    """Configuration for the async job queue (P16)."""
+    enabled: bool = True
+    worker_count: int = Field(default=1, ge=0, le=16, description="Number of worker processes")
+    poll_interval: float = Field(default=1.0, ge=0.1, le=10.0, description="Seconds between queue polls")
+    max_concurrent_per_user: int = Field(default=3, ge=1, le=20, description="Max concurrent research runs per user")
+    default_timeout: int = Field(default=600, ge=60, le=3600, description="Default job timeout in seconds")
+    max_retries: int = Field(default=2, ge=0, le=10, description="Max retries for failed jobs")
 
 
 class CodeSandboxSettings(BaseModel):
@@ -295,23 +305,33 @@ class FeatureFlags(BaseModel):
 
 
 class ObservabilitySettings(BaseModel):
-    """Observability and monitoring configuration."""
-    enable_tracing: bool = False
-    enable_metrics: bool = True
+    """Observability and monitoring configuration (P17).
+
+    Controls Prometheus metrics, JSON structured logging,
+    OpenTelemetry tracing, and Sentry error tracking.
+    """
+    # General
+    enabled: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    json_logging: bool = Field(default=False, description="Enable JSON structured log output (instead of plain text)")
+
+    # Prometheus metrics
+    enable_metrics: bool = True
+    metrics_port: int = Field(default=9090, ge=1024, le=65535, description="Port for Prometheus /metrics HTTP server")
+    metrics_path: str = Field(default="/metrics", description="Path for Prometheus metrics endpoint")
+
+    # OpenTelemetry tracing
+    enable_tracing: bool = Field(default=False, description="Enable OpenTelemetry tracing")
+    otlp_endpoint: str = Field(default="", description="OTLP HTTP exporter endpoint (e.g., http://localhost:4318/v1/traces)")
+    otlp_console_export: bool = Field(default=False, description="Also export spans to console for debugging")
+    tracer_sample_rate: float = Field(default=0.1, ge=0.0, le=1.0, description="Tracing sample rate (0.0-1.0)")
+
+    # Sentry error tracking
+    sentry_dsn: str = Field(default="", description="Sentry DSN for error tracking. Empty = disabled")
+    sentry_environment: str = Field(default="development", description="Environment tag for Sentry")
+    sentry_traces_sample_rate: float = Field(default=0.1, ge=0.0, le=1.0, description="Sentry performance tracing sample rate")
 
 
-    @model_serializer(mode="wrap")
-    def _serialize_safe(self, handler) -> dict:
-        """Serialize settings with secrets masked for debug dumps and logging."""
-        raw = handler(self)
-        # Mask known secret fields in the serialized output
-        for section in ("auth", "openrouter", "vllm"):
-            if section in raw and isinstance(raw[section], dict):
-                for key in ("secret_key", "api_key"):
-                    if key in raw[section]:
-                        raw[section][key] = "***MASKED***"
-        return raw
 
 
 class AppSettings(BaseModel):
@@ -337,3 +357,4 @@ class AppSettings(BaseModel):
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     deep_research: DeepResearchSettings = Field(default_factory=DeepResearchSettings)
     code_sandbox: CodeSandboxSettings = Field(default_factory=CodeSandboxSettings)
+    job_queue: JobQueueSettings = Field(default_factory=JobQueueSettings)

@@ -120,6 +120,25 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("GROQ_API_KEY"):
         data.setdefault("groq", {})["api_key"] = env["GROQ_API_KEY"]
 
+    # Observability settings (P17)
+    if env.get("OBSERVABILITY_ENABLED"):
+        val = env["OBSERVABILITY_ENABLED"].lower().strip()
+        data.setdefault("observability", {})["enabled"] = val in ("true", "1", "yes")
+    if env.get("OBSERVABILITY_LOG_LEVEL"):
+        data.setdefault("observability", {})["log_level"] = env["OBSERVABILITY_LOG_LEVEL"].upper()
+    if env.get("OBSERVABILITY_JSON_LOGGING"):
+        val = env["OBSERVABILITY_JSON_LOGGING"].lower().strip()
+        data.setdefault("observability", {})["json_logging"] = val in ("true", "1", "yes")
+    if env.get("OBSERVABILITY_ENABLE_METRICS"):
+        val = env["OBSERVABILITY_ENABLE_METRICS"].lower().strip()
+        data.setdefault("observability", {})["enable_metrics"] = val in ("true", "1", "yes")
+    if env.get("OBSERVABILITY_METRICS_PORT"):
+        data.setdefault("observability", {})["metrics_port"] = int(env["OBSERVABILITY_METRICS_PORT"])
+    if env.get("OTLP_ENDPOINT"):
+        data.setdefault("observability", {})["otlp_endpoint"] = env["OTLP_ENDPOINT"]
+    if env.get("SENTRY_DSN"):
+        data.setdefault("observability", {})["sentry_dsn"] = env["SENTRY_DSN"]
+
     # Subagent model overrides for new providers
     if env.get("SUBAGENT_OPENAI_MODEL"):
         models["subagent_openai"] = env["SUBAGENT_OPENAI_MODEL"]
