@@ -45,6 +45,9 @@ from research_agent.observability.checkpoints import (
     _event_root,
 )
 from research_agent.observability.logging import ErrorSeverity, log_error
+from research_agent.observability.structured_log import configure_json_logging
+from research_agent.observability.tracing import init_tracing
+from research_agent.observability.error_tracking import init_sentry
 from research_agent.orchestration.graph import close_redis_pool, get_memory_diagnostics, get_redis_pool, run_graph
 from research_agent.orchestration.job_queue import JobPriority, JobStatus, get_job_manager
 from research_agent.orchestration.state import WorkflowState
@@ -179,6 +182,43 @@ def create_app(
             logger.info("Database tables initialized successfully.")
         except Exception as exc:
             logger.error("Failed to initialize database tables: %s", exc)
+
+        # Startup: initialize observability stack
+        obs = settings.observability
+        if obs.enabled:
+            if obs.json_logging:
+                try:
+                    configure_json_logging()
+                    logger.info("JSON structured logging enabled")
+                except Exception as exc:
+                    logger.warning("Failed to configure JSON logging: %s", exc)
+            if obs.enable_metrics:
+                try:
+                    from research_agent.observability.metrics import start_metrics_server
+                    start_metrics_server(port=obs.metrics_port)
+                    logger.info("Prometheus metrics server started on port %d", obs.metrics_port)
+                except Exception as exc:
+                    logger.warning("Failed to start metrics server: %s", exc)
+            if obs.enable_tracing and obs.otlp_endpoint:
+                try:
+                    init_tracing(
+                        service_name="research-agent",
+                        otlp_endpoint=obs.otlp_endpoint,
+                        sample_rate=obs.tracer_sample_rate,
+                    )
+                    logger.info("OpenTelemetry tracing enabled, endpoint: %s", obs.otlp_endpoint)
+                except Exception as exc:
+                    logger.warning("Failed to init tracing: %s", exc)
+            if obs.sentry_dsn:
+                try:
+                    init_sentry(
+                        dsn=obs.sentry_dsn,
+                        environment=obs.sentry_environment,
+                        traces_sample_rate=obs.sentry_traces_sample_rate,
+                    )
+                    logger.info("Sentry error tracking enabled")
+                except Exception as exc:
+                    logger.warning("Failed to init Sentry: %s", exc)
 
         # Startup: start background watchdog scheduler
         watchdog_task = None
@@ -569,7 +609,28 @@ def create_app(
             "healthy": healthy_count > 0,
         }
 
+    @app.get("/metrics")
+    async def metrics_endpoint():
+        """Prometheus metrics endpoint.
+
+        Exposes the Prometheus metrics in plaintext format for scraping.
+        Accessible at /metrics (no auth required for Prometheus scraping).
+        """
+        from research_agent.observability.metrics import get_metrics_text
+        from fastapi.responses import PlainTextResponse
+        try:
+            metrics_data = get_metrics_text()
+            return PlainTextResponse(metrics_data, media_type="text/plain; charset=utf-8")
+        except Exception as exc:
+            logger.warning("Failed to generate metrics: %s", exc)
+            return PlainTextResponse(
+                "Metrics unavailable",
+                status_code=503,
+                media_type="text/plain; charset=utf-8"
+            )
+
     @app.get("/api/health/redis")
+
     async def health_redis():
         """Health check that pings Redis and returns memory diagnostics."""
         diagnostics = await get_memory_diagnostics()

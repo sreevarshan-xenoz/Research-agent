@@ -10,6 +10,7 @@ from research_agent.config.schema import (
     WatchdogEmailSettings,
     DeepResearchSettings,
     CodeSandboxSettings,
+    JobQueueSettings,
 )
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "WatchdogEmailSettings",
     "DeepResearchSettings",
     "CodeSandboxSettings",
+    "JobQueueSettings",
     "load_settings",
     "validate_insecure_defaults",
 ]

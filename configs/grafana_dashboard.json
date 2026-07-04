@@ -1,0 +1,245 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "Research Agent - Observability Dashboard",
+  "uid": "research-agent-observability",
+  "version": 1,
+  "schemaVersion": 39,
+  "tags": ["research-agent", "prometheus"],
+  "timezone": "browser",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "Active Research Runs",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "research_agent_active_runs",
+          "legendFormat": "Active Runs",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "description": "Current number of active research graph executions"
+    },
+    {
+      "title": "Total Research Runs",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [
+        {
+          "expr": "increase(research_agent_runs_total[1h])",
+          "legendFormat": "Runs/hr",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      },
+      "description": "Total number of research runs completed in the last hour"
+    },
+    {
+      "title": "Run Duration (p50/p95/p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(research_agent_run_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(research_agent_run_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(research_agent_run_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "description": "Research run duration percentiles over time"
+    },
+    {
+      "title": "LLM Requests (by provider)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by(provider) (rate(research_agent_llm_requests_total[5m]))",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ],
+      "description": "LLM request rate grouped by provider (ollama, openrouter, nvidia, openai, etc.)"
+    },
+    {
+      "title": "LLM Error Rate (by provider)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum by(provider) (rate(research_agent_llm_requests_total{status=\"error\"}[5m])) / sum by(provider) (rate(research_agent_llm_requests_total[5m])) * 100",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ],
+      "description": "LLM error rate percentage by provider"
+    },
+    {
+      "title": "LLM Latency (by provider, p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le) (rate(research_agent_llm_latency_seconds_bucket{provider=~\"$provider\"}[5m])))",
+          "legendFormat": "p95 - {{provider}}",
+          "refId": "A"
+        }
+      ],
+      "description": "P95 LLM latency by provider"
+    },
+    {
+      "title": "LLM Cost Accumulated",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 12 },
+      "targets": [
+        {
+          "expr": "sum by(provider) (increase(research_agent_llm_cost_total[5m]))",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ],
+      "unit": "currencyUSD",
+      "description": "LLM cost accumulated over time by provider"
+    },
+    {
+      "title": "Run Results Breakdown",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "sum by(result) (increase(research_agent_runs_total[24h]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "displayLabels": ["name", "percent", "value"],
+        "legend": { "placement": "right", "values": true }
+      },
+      "description": "Breakdown of run results (success, failure, interrupted)"
+    },
+    {
+      "title": "Provider Health Status",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "research_agent_llm_requests_total",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "provider": { "aggregations": [] },
+              "status": { "aggregations": [] }
+            }
+          }
+        }
+      ],
+      "description": "Overview of provider health based on request success/failure"
+    },
+    {
+      "title": "Node Execution Timings",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 20 },
+      "targets": [
+        {
+          "expr": "research_agent_node_duration_seconds",
+          "legendFormat": "{{node}}",
+          "refId": "A"
+        }
+      ],
+      "description": "Duration of individual graph node executions (if node-level metrics are enabled)"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "provider",
+        "type": "query",
+        "query": "label_values(research_agent_llm_requests_total, provider)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "label": "Provider"
+      },
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "current": { "text": "Prometheus", "value": "prometheus" },
+        "label": "Data Source"
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Research Run Start/End",
+        "type": "events",
+        "datasource": { "type": "prometheus" },
+        "expr": "research_agent_runs_total",
+        "enable": true,
+        "iconColor": "green",
+        "titleFormat": "Run {{result}}",
+        "textFormat": "Research run completed with result: {{result}}"
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Prometheus Targets",
+      "url": "/targets",
+      "type": "grafana"
+    }
+  ],
+  "refresh": "30s"
+}

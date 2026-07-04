@@ -50,6 +50,8 @@ from research_agent.orchestration.state import GraphState, WorkflowState, from_g
 from research_agent.tools.base import BaseToolAdapter
 from research_agent.observability.checkpoints import cleanup_old_checkpoints
 from research_agent.observability.logging import ErrorSeverity, log_error, log_exception, get_node_timings, reset_trace_context, wrap_node_fn, set_trace_context
+from research_agent.observability.metrics import observe_run_duration, count_run, set_active_runs
+from research_agent.observability.structured_log import set_correlation_id, reset_correlation_id
 
 
 logger = logging.getLogger(__name__)
@@ -362,6 +364,12 @@ async def run_graph(
     # automatically inherit the run_id without needing explicit trace_id=.
     _trace_token = set_trace_context(state.run_id)
 
+    # Set correlation ID for structured logging
+    _cid_token = set_correlation_id(state.run_id)
+
+    # Track active runs in Prometheus
+    set_active_runs(1)
+
     try:
         compiled = build_graph(
             registry=registry,
@@ -384,6 +392,12 @@ async def run_graph(
         # Inspect thread state after invocation to check for breakpoints
         post_thread_state = await compiled.aget_state(config)
         ret_state = from_graph_state(result)
+
+    # Record Prometheus metrics
+    run_duration = time.monotonic() - state._timing_start if hasattr(state, "_timing_start") else 0
+    observe_run_duration(run_duration)
+    result_label = "success" if ret_state.phase == "completed" else ("interrupted" if ret_state.interrupted else "failure")
+    count_run(result=result_label)
         if post_thread_state.next and "plan_validation" in post_thread_state.next:
             ret_state.phase = "awaiting_plan_approval"
             ret_state.stop_reason = "plan_validation_checkpoint"
@@ -413,6 +427,15 @@ async def run_graph(
                 trace_id=state.run_id,
                 exc=exc,
             )
+
+        # Reset correlation ID
+        try:
+            reset_correlation_id(_cid_token)
+        except Exception:
+            pass
+
+        # Track active runs gauge
+        set_active_runs(0)
 
         # Restore the previous trace context (if any)
         try:

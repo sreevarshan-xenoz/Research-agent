@@ -538,6 +538,8 @@ async def agenerate_json(
         await _record_cost_from_response_async(response, model, provider, task_type)  # type: ignore[arg-type]
         return result
     except Exception as e:
+        from research_agent.observability.metrics import count_llm_request
+        count_llm_request(provider or "unknown", status="error")
         logger.warning("LLM Error (agenerate_json, role=%s): %s: %s", role, type(e).__name__, e)
         return None
 
@@ -670,6 +672,8 @@ async def agenerate_text(
             await _record_cost_from_response_async(response, model, provider, task_type)  # type: ignore[arg-type]
             return result
     except Exception as e:
+        from research_agent.observability.metrics import count_llm_request
+        count_llm_request(provider or "unknown", status="error")
         logger.warning("LLM Error (agenerate_text, role=%s): %s: %s", role, type(e).__name__, e)
         return None
 
@@ -719,14 +723,20 @@ def _record_cost_from_response(
             output_tokens = 0
 
     from research_agent.models.cost_tracker import get_cost_tracker_sync
+    from research_agent.observability.metrics import record_llm_cost, count_llm_request
     try:
-        get_cost_tracker_sync(run_id).record_sync(
+        tracker = get_cost_tracker_sync(run_id)
+        tracker.record_sync(
             model=model,
             provider=provider,
             task_type=task_type,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
+        # Estimate per-request cost from token counts
+        estimated_cost = (input_tokens * 0.000002 + output_tokens * 0.000005)
+        record_llm_cost(provider, model, estimated_cost)
+        count_llm_request(provider, status="success")
     except Exception as exc:
         logger.debug("Failed to record cost: %s", exc)
 
@@ -767,6 +777,13 @@ async def _record_cost_from_response_async(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
+        from research_agent.observability.metrics import record_llm_cost, count_llm_request
+        try:
+            estimated_cost = (input_tokens * 0.000002 + output_tokens * 0.000005)
+            record_llm_cost(provider, model, estimated_cost)
+            count_llm_request(provider, status="success")
+        except Exception:
+            pass
     except Exception as exc:
         logger.debug("Failed to record cost (async): %s", exc)
 
@@ -784,14 +801,20 @@ def _record_cost_from_text(
 
     output_tokens = _estimate_tokens(text or "")
     from research_agent.models.cost_tracker import get_cost_tracker_sync
+    from research_agent.observability.metrics import record_llm_cost, count_llm_request
     try:
-        get_cost_tracker_sync(run_id).record_sync(
+        tracker = get_cost_tracker_sync(run_id)
+        tracker.record_sync(
             model=model,
             provider=provider,
             task_type=task_type,
             input_tokens=0,
             output_tokens=output_tokens,
         )
+        # Estimate per-request cost from output tokens only (streaming)
+        estimated_cost = output_tokens * 0.000005
+        record_llm_cost(provider, model, estimated_cost)
+        count_llm_request(provider, status="success")
     except Exception as exc:
         logger.debug("Failed to record cost from text: %s", exc)
 
@@ -818,6 +841,11 @@ async def _record_cost_from_text_async(
             input_tokens=0,
             output_tokens=output_tokens,
         )
+        from research_agent.observability.metrics import record_llm_cost, count_llm_request
+        # Estimate per-request cost from output tokens only (streaming)
+        estimated_cost = output_tokens * 0.000005
+        record_llm_cost(provider, model, estimated_cost)
+        count_llm_request(provider, status="success")
     except Exception as exc:
         logger.debug("Failed to record cost from text (async): %s", exc)
 
@@ -911,6 +939,8 @@ def generate_json(
         _record_cost_from_response(response, model, provider, task_type)  # type: ignore[arg-type]
         return result
     except Exception as e:
+        from research_agent.observability.metrics import count_llm_request
+        count_llm_request(provider or "unknown", status="error")
         logger.warning("LLM Error (generate_json, role=%s): %s: %s", role, type(e).__name__, e)
         return None
 
@@ -1040,5 +1070,7 @@ def generate_text(
             _record_cost_from_response(response, model, provider, task_type)  # type: ignore[arg-type]
             return result
     except Exception as e:
+        from research_agent.observability.metrics import count_llm_request
+        count_llm_request(provider or "unknown", status="error")
         logger.warning("LLM Error (generate_text, role=%s): %s: %s", role, type(e).__name__, e)
         return None
