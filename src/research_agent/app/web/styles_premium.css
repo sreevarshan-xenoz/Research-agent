@@ -1750,3 +1750,91 @@ button:active {
     padding: 12px;
   }
 }
+
+/* ── Reproducibility Dashboard (P29) ────────────────────────────── */
+.reproducibility-panel {
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.2);
+  flex: 1;
+  padding: 16px;
+}
+
+.reproducibility-panel.active {
+  display: flex;
+}
+
+.reproducibility-summary {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.repro-score-card {
+  text-align: center;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  transition: all 0.3s ease;
+}
+
+.repro-score-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.repro-score-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.repro-score-label {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.repro-verdict {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: center;
+  animation: fadeIn 0.3s ease;
+}
+
+.repro-claim-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  transition: all 0.2s ease;
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.repro-claim-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateX(2px);
+}
+
+/* Responsive: stack score cards on smaller screens */
+@media (max-width: 1200px) {
+  .reproducibility-summary {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .reproducibility-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
