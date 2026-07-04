@@ -42,6 +42,7 @@ from research_agent.orchestration.nodes import (
     stop_node,
     workers_complete_node,
     code_execution_node,
+    code_sandbox_node,
     dataset_discovery_node,
     grant_proposal_node,
 )
@@ -245,6 +246,7 @@ def build_graph(
     graph.add_node("poster", wrap_node_fn("poster", poster_generator_node))
     graph.add_node("exporter", wrap_node_fn("exporter", exporter_node))
     graph.add_node("code_execution", wrap_node_fn("code_execution", code_execution_node))
+    graph.add_node("code_sandbox", wrap_node_fn("code_sandbox", code_sandbox_node))
     graph.add_node("dataset_discovery", wrap_node_fn("dataset_discovery", dataset_discovery_node))
     graph.add_node("grant_proposal", wrap_node_fn("grant_proposal", grant_proposal_node))
 
@@ -308,7 +310,8 @@ def build_graph(
     graph.add_edge("peer_reviewer", "presentation")
     graph.add_edge("presentation", "poster")
     graph.add_edge("poster", "exporter")
-    graph.add_edge("exporter", "code_execution")
+    graph.add_edge("exporter", "code_sandbox")
+    graph.add_edge("code_sandbox", "code_execution")
     graph.add_edge("code_execution", "dataset_discovery")
     graph.add_edge("dataset_discovery", "grant_proposal")
     graph.add_edge("grant_proposal", END)
