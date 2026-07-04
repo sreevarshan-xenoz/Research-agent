@@ -60,6 +60,94 @@ class SemanticScholarAdapter(BaseToolAdapter):
             metadata={"query": query, "limit": normalized_limit, "raw_count": len(items)},
         )
 
+    def get_citations_for_paper(self, paper_id: str, limit: int = 10) -> ToolResult:
+        """Fetch papers that cite the given Semantic Scholar paper ID.
+
+        Uses the /paper/{paper_id}/citations endpoint.
+        Returns normalized items with source_type 'citation'.
+        """
+        normalized_limit = safe_limit(limit, default=10, maximum=50)
+        url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}/citations"
+        headers = {"Accept": "application/json"}
+        if self._api_key:
+            headers["x-api-key"] = self._api_key
+
+        params = {
+            "limit": normalized_limit,
+            "fields": "title,url,year,authors,citationCount,abstract,paperId,venue,externalIds",
+        }
+
+        def _do_request() -> dict[str, Any]:
+            resp = self._client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+
+        try:
+            payload = retry_with_backoff_sync(_do_request, "semantic_scholar", api_key=self._api_key)
+            items = []
+            for row in payload.get("data", []):
+                citing_paper = row.get("citingPaper") or {}
+                if citing_paper:
+                    item = self._normalize_item(citing_paper)
+                    item["source_type"] = "citation"
+                    items.append(item)
+        except Exception as exc:
+            return ToolResult(
+                provider=self.provider_name,
+                warnings=[f"semantic_scholar_citations_error:{type(exc).__name__}:{paper_id}"],
+                metadata={"paper_id": paper_id, "limit": normalized_limit},
+            )
+
+        return ToolResult(
+            provider=self.provider_name,
+            items=items,
+            metadata={"paper_id": paper_id, "limit": normalized_limit, "raw_count": len(items)},
+        )
+
+    def get_references_for_paper(self, paper_id: str, limit: int = 10) -> ToolResult:
+        """Fetch papers referenced by the given Semantic Scholar paper ID.
+
+        Uses the /paper/{paper_id}/references endpoint.
+        Returns normalized items with source_type 'reference'.
+        """
+        normalized_limit = safe_limit(limit, default=10, maximum=50)
+        url = f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}/references"
+        headers = {"Accept": "application/json"}
+        if self._api_key:
+            headers["x-api-key"] = self._api_key
+
+        params = {
+            "limit": normalized_limit,
+            "fields": "title,url,year,authors,citationCount,abstract,paperId,venue,externalIds",
+        }
+
+        def _do_request() -> dict[str, Any]:
+            resp = self._client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+
+        try:
+            payload = retry_with_backoff_sync(_do_request, "semantic_scholar", api_key=self._api_key)
+            items = []
+            for row in payload.get("data", []):
+                ref_paper = row.get("citedPaper") or {}
+                if ref_paper:
+                    item = self._normalize_item(ref_paper)
+                    item["source_type"] = "reference"
+                    items.append(item)
+        except Exception as exc:
+            return ToolResult(
+                provider=self.provider_name,
+                warnings=[f"semantic_scholar_references_error:{type(exc).__name__}:{paper_id}"],
+                metadata={"paper_id": paper_id, "limit": normalized_limit},
+            )
+
+        return ToolResult(
+            provider=self.provider_name,
+            items=items,
+            metadata={"paper_id": paper_id, "limit": normalized_limit, "raw_count": len(items)},
+        )
+
     @staticmethod
     def _normalize_item(row: dict[str, Any]) -> dict[str, Any]:
         external_ids = row.get("externalIds") or {}
