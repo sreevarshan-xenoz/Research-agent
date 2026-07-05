@@ -124,7 +124,11 @@ class YjsServerManager:
             if self._yjs_available:
                 self._load_doc_from_disk(doc_name, ydoc)
                 # Auto-save on every update
-                ydoc.observe_updates(lambda upd: self._persist_update(doc_name, upd))
+                # observe_updates may not exist in all y_py versions
+                try:
+                    ydoc.observe_updates(lambda upd: self._persist_update(doc_name, upd))
+                except AttributeError:
+                    logger.warning("y_py YDoc does not support observe_updates; auto-persistence disabled")
             self.rooms[doc_name] = RoomState(ydoc=ydoc)
             logger.info("Created room: %s", doc_name)
         return self.rooms[doc_name]

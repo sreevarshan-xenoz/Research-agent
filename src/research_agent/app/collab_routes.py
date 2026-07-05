@@ -423,53 +423,6 @@ async def list_snapshots(doc_name: str):
     }
 
 
-@router.get("/versions/{doc_name}/{snapshot_id}")
-async def get_snapshot(doc_name: str, snapshot_id: str):
-    """Get a specific snapshot with full content."""
-    doc_snapshots = _version_snapshots.get(doc_name, [])
-
-    for s in doc_snapshots:
-        if s["id"] == snapshot_id:
-            return {
-                "snapshot": {
-                    "id": s["id"],
-                    "label": s["label"],
-                    "created_at": s["created_at"],
-                    "content": s["content"],
-                }
-            }
-
-    raise HTTPException(status_code=404, detail="Snapshot not found")
-
-
-@router.post("/versions/rollback")
-async def rollback_snapshot(
-    req: RollbackRequest,
-    user: User = Depends(current_active_user),
-):
-    """Rollback a document to a previous snapshot.
-
-    Returns the snapshot content for the client to apply.
-    This is a soft rollback — the client uses this content
-    to overwrite the Yjs document state.
-    """
-    doc_snapshots = _version_snapshots.get(req.doc_name, [])
-
-    for s in doc_snapshots:
-        if s["id"] == req.snapshot_id:
-            return {
-                "success": True,
-                "snapshot": {
-                    "id": s["id"],
-                    "label": s["label"],
-                    "content": s["content"],
-                    "rolled_back_at": time.time(),
-                },
-            }
-
-    raise HTTPException(status_code=404, detail="Snapshot not found")
-
-
 @router.get("/versions/diff/{doc_name}")
 async def get_version_diff(
     doc_name: str,
@@ -518,9 +471,51 @@ async def get_version_diff(
     }
 
 
-# ══════════════════════════════════════════════════════════════
-# Collaboration Status (Health)
-# ══════════════════════════════════════════════════════════════
+@router.get("/versions/{doc_name}/{snapshot_id}")
+async def get_snapshot(doc_name: str, snapshot_id: str):
+    """Get a specific snapshot with full content."""
+    doc_snapshots = _version_snapshots.get(doc_name, [])
+
+    for s in doc_snapshots:
+        if s["id"] == snapshot_id:
+            return {
+                "snapshot": {
+                    "id": s["id"],
+                    "label": s["label"],
+                    "created_at": s["created_at"],
+                    "content": s["content"],
+                }
+            }
+
+    raise HTTPException(status_code=404, detail="Snapshot not found")
+
+
+@router.post("/versions/rollback")
+async def rollback_snapshot(
+    req: RollbackRequest,
+    user: User = Depends(current_active_user),
+):
+    """Rollback a document to a previous snapshot.
+
+    Returns the snapshot content for the client to apply.
+    This is a soft rollback — the client uses this content
+    to overwrite the Yjs document state.
+    """
+    doc_snapshots = _version_snapshots.get(req.doc_name, [])
+
+    for s in doc_snapshots:
+        if s["id"] == req.snapshot_id:
+            return {
+                "success": True,
+                "snapshot": {
+                    "id": s["id"],
+                    "label": s["label"],
+                    "content": s["content"],
+                    "rolled_back_at": time.time(),
+                },
+            }
+
+    raise HTTPException(status_code=404, detail="Snapshot not found")
 
 
 @router.get("/status")
