@@ -46,6 +46,11 @@ The project delivers a complete research lifecycle pipeline with all features li
 | **AI Model Router with Multi-Provider Fallback** | ✅ | **P12** |
 | **Automated Literature Monitoring & Alerting** | ✅ | **P13** |
 | **Agentic Deep Research Engine** | ✅ | **P21** |
+| **Verified Code Execution Sandbox** | ✅ | **P24** |
+| **Security Hardening (RBAC, Audit, Rate Limit, SSO)** | ✅ | **P18** |
+| **Automated Peer Review with Confidence Scoring** | ✅ | **P37** |
+| **Multi-Model Ensemble Voting for Critical Tasks** | ✅ | **P31** |
+| **Reproducibility Dashboard with Claim Filtering** | ✅ | **P29** |
 
 ---
 
@@ -114,57 +119,65 @@ The project delivers a complete research lifecycle pipeline with all features li
 - **Critic upgrade**: from simple `item_count / 8.0` to 5-factor weighted scoring
 - **State fields**: `search_rounds`, `termination_signals`, `chained_papers`, `chained_paper_ids`
 
----
+### ✅ P24 — Verified Code Execution Sandbox
+**Completed July 2026.** Unique differentiator — isolated Docker sandbox with LLM-powered claim extraction, code generation, execution engine, and per-claim reproducibility reports.
 
-## Next Up: Core Infrastructure & Agentic Features
+**Key deliverables:**
+- **New `code_sandbox/` module** (8 files): `DockerSandbox` with subprocess fallback, `ClaimExtractor`, `CodeGenerator`, `ExecutionEngine`, `ResultComparator`, `ReproducibilityReport`, graph node
+- **Docker sandbox**: container warm pool, image management, Python/R/Julia support, memory limits
+- **Claim extraction**: LLM identifies empirical claims with verification potential scoring from paper sections
+- **Code generation**: LLM generates Python verification scripts per claim with dependency tracking
+- **Execution engine**: runs code in Docker (fallback subprocess), captures stdout/stderr/timing
+- **Result comparison**: numerical matching (5% tolerance) + LLM fallback for complex claims
+- **Per-claim reproducibility report**: structured pass/fail/partial with evidence, exported to run artifacts
+- **Config settings**: 10 config fields in `CodeSandboxSettings`
+- **Graph integration**: wired between `exporter` and `code_execution` nodes
 
-### P24 — Verified Code Execution Sandbox
-**Why:** ⭐ Unique differentiator — no other research tool verifies paper claims by executing code.
+### ✅ P16 — Async Job Queue & Concurrency
+**Completed July 2026.** Redis-backed async job queue with priority ordering, per-user concurrency limits, job lifecycle management, and REST API.
 
-**What to build:**
-- [ ] **Docker sandbox** for safe code execution (Python, R, Julia)
-- [ ] **Claim extraction from paper**: identify empirical claims with code verification potential
-- [ ] **Code generation from claim descriptions**: LLM generates verification scripts
-- [ ] **Execution engine**: run code in isolated container, capture stdout/stderr/timings
-- [ ] **Result comparison**: compare empirical results against paper claims
-- [ ] **Reproducibility report**: per-claim pass/fail/partial with evidence
-- [ ] **Integration with graph**: auto-trigger for sections with high empirical content
-
-**Estimated effort:** 3-4 sprints
-**Why now:** First-mover advantage. Builds on existing code execution node.
+**Key deliverables:**
+- **New `job_queue/` module** (4 files): `JobManager`, `Job` dataclass, `JobPriority`/`JobStatus`/`JobType` enums, standalone worker process
+- **Redis priority queue**: uses Sorted Sets (zadd/zpopmin) with priority+FIFO scoring, per-user active job tracking
+- **Job lifecycle**: enqueue → dequeue → running → complete/fail, with progress tracking, retries, and cancellation
+- **5 REST API endpoints**: `GET /api/jobs/queue/health`, `POST /api/jobs` (enqueue), `GET /api/jobs` (list), `GET /api/jobs/{id}` (status), `POST /api/jobs/{id}/cancel`
+- **Per-user concurrency limits**: configurable max concurrent runs per user (default 3)
+- **Standalone worker**: `python -m research_agent.orchestration.job_queue.worker` with handlers for research_run, export, watchdog_check
+- **Config settings**: 6 config fields in `JobQueueSettings`
+- **Auth integration**: all endpoints protected with JWT auth + ownership checks
 
 ---
 
 ## Phase: Production Hardening
 
-### P16 — Async Job Queue & Concurrency
-- [ ] **Celery/RQ job queue** for background research runs
-- [ ] **Job priority**: interactive chat high priority, deep research low priority
-- [ ] **Concurrent run limits** per user with fair scheduling
-- [ ] **Run cancellation** via API
-- [ ] **Kubernetes HPA integration** for elastic scaling
+### ✅ P17 — Observability Stack
+**Completed July 2026.** Full observability stack with Prometheus metrics, OpenTelemetry tracing, JSON structured logging, Sentry error tracking, and Grafana dashboards.
 
-**Estimated effort:** 2-3 sprints | **Deps:** Redis
-
----
-
-### P17 — Observability Stack
-- [ ] **OpenTelemetry instrumentation** across all nodes
-- [ ] **Prometheus metrics** (run duration, LLM latency, error rates, cost per run)
-- [ ] **Grafana dashboards** (research pipeline overview, cost breakdown, provider health)
-- [ ] **Structured logging** (JSON logs with correlation IDs)
-- [ ] **Sentry/error tracking** integration
+**Key deliverables:**
+- **`observability/metrics.py`**: Prometheus counters/histograms/gauges for LLM requests, costs, latency, run duration
+- **`observability/structured_log.py`**: JSON logging formatter with correlation IDs via contextvars
+- **`observability/tracing.py`**: OpenTelemetry `init_tracing()` with OTLP HTTP exporter
+- **`observability/error_tracking.py`**: Sentry integration with `init_sentry()` and `capture_message()` helper
+- **Config**: `ObservabilitySettings` with Prometheus, OTel, Sentry fields + env var overrides
+- **Grafana dashboard**: Pre-configured 10-panel dashboard (run stats, LLM latency, provider health)
 
 **Estimated effort:** 2-3 sprints | **Deps:** P16
 
 ---
 
-### P18 — Security Hardening
-- [ ] **RBAC** (viewer/editor/admin roles)
-- [ ] **SSO/OAuth** (Google, GitHub, ORCID)
-- [ ] **API rate limiting** per user/endpoint
-- [ ] **Audit logging** for all research actions
-- [ ] **Secrets management** (encrypted API key storage)
+### ✅ P18 — Security Hardening
+**Completed July 2026.** Full security stack with RBAC, SSO/OAuth, rate limiting, audit logging, and secrets encryption.
+
+**Key deliverables:**
+- **`security.py`**: RBAC role enums/viewer/editor/admin, `is_admin()`/`is_editor()` helpers, `require_role()` dependency factory, `set_user_role()` management, Fernet symmetric encryption (`encrypt_value`/`decrypt_value`) with deterministic SHA-256 key derivation
+- **`audit.py`**: `AuditEntry` dataclass, `AuditStore` with JSONL daily-rotated files, `AuditMiddleware` for FastAPI with automatic action/resource classification, `GET /api/admin/audit` and `GET /api/admin/audit/stats` query endpoints
+- **`rate_limit.py`**: `TokenBucket` implementation, `RateLimitStore` with auto-cleanup, `RateLimitMiddleware` with role-based tiers (60/300/1000 rpm for anonymous/auth/admin), per-endpoint overrides
+- **`sso.py`**: OAuth provider definitions (Google, GitHub, ORCID), SSO router with provider listing, login URL generation, and callback scaffolding
+- **`auth.py`**: Added `role: str = "viewer"` column to User model
+- **`webapp.py`**: Auth context middleware (populates `request.state` from JWT), security middleware stack (rate limit → audit), SSO route integration, 7 admin API endpoints
+- **Admin endpoints**: `GET /api/admin/audit`, `GET /api/admin/audit/stats`, `GET /api/admin/users`, `POST /api/admin/users/{id}/role`, `GET /api/admin/security/status`, `GET /api/admin/encrypt`, `GET /api/admin/decrypt`, `GET /api/admin/rate-limits`
+- **Config schema**: `RBACSettings`, `RateLimitSettings`, `AuditSettings`, `SSOSettings`, `SecretsSettings` with env var overrides
+- **Dependency**: Added `cryptography>=42.0.0` to pyproject.toml
 
 **Estimated effort:** 3-4 sprints | **Deps:** Auth system
 
@@ -172,12 +185,15 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ## Phase: Advanced RAG & Multi-Modal Intelligence
 
-### P22 — Multi-Modal Paper Analysis
-- [ ] **Figure extraction & captioning** from PDFs
-- [ ] **Table parsing & structured extraction** (camelot/tabula)
-- [ ] **Equation extraction & normalization** (LaTeX-OCR)
-- [ ] **Multi-modal Q&A**: "What does Figure 3 show?" with visual grounding
-- [ ] **Chart-to-text generation** for accessibility
+### ✅ P22 — Multi-Modal Paper Analysis
+**Completed July 2026.** Full multi-modal extraction pipeline for figures, tables, equations, and charts.
+
+**Key deliverables:**
+- **Figure extraction & captioning** from PDFs (PyMuPDF + Vision LLM)
+- **Table parsing & structured extraction** (pdfplumber)
+- **Equation extraction & normalization** (Pix2Text / LaTeX-OCR)
+- **Multi-modal Q&A**: "What does Figure 3 show?" with visual grounding
+- **Chart-to-text generation** for accessibility
 
 **Estimated effort:** 4-5 sprints | **Key differentiator**
 
@@ -239,13 +255,21 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ---
 
-### P29 — Reproducibility Dashboard
-- [ ] **Experiment tracking** across runs
-- [ ] **Result comparison** side-by-side
-- [ ] **Run artifact explorer** (browse all generated files per run)
-- [ ] **Research timeline view** (when/what was researched)
+### ✅ P29 — Reproducibility Dashboard
+**Completed July 2026.** Full reproducibility dashboard with score cards, per-claim results, claim filtering by status, text search, sort controls, Markdown + JSON export, and run history comparison.
 
-**Estimated effort:** 2-3 sprints
+**Key deliverables:**
+- **Claim filtering by status**: interactive chips for All/Passed/Failed/Partial/Unverifiable with real-time re-rendering
+- **Claim text search**: real-time search across claim text, claimed values, and actual values
+- **Sort controls**: sort by confidence (asc/desc), runtime (asc/desc), or alphabetically
+- **Download/export**: Download Report (Markdown) + JSON Export buttons with Blob downloads
+- **Run history comparison**: loads reproducibility scores from past sessions with clickable history items to load a different run
+- **Score cards**: 5 metric cards (overall score, passed, failed, partial, unverifiable)
+- **Per-claim cards**: status emoji, claim text, claimed/actual values, confidence %, runtime
+- **Verdict banner**: color-coded strong/partial/poor reproducibility verdict
+- **CSS polish**: hover micro-interactions, filter chip active states, slide-in animations
+
+**Estimated effort:** 2-3 sprints | **Leverages:** existing P24 Code Sandbox artifact structure and 4 API endpoints
 
 ---
 
@@ -293,24 +317,56 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ---
 
-### P37 — Automated Peer Review with Confidence Scoring
-- [ ] **Structured review template** (strengths, weaknesses, questions)
-- [ ] **Per-section confidence scoring** (0.0-1.0)
-- [ ] **Review aggregation**: multiple reviews into meta-review
-- [ ] **Reviewer persona simulation**: theoretical vs. applied vs. experimental reviewer
+### ✅ P17 — Observability Stack
+**Completed July 2026.** Full observability stack with Prometheus metrics, OpenTelemetry tracing, JSON structured logging, Sentry error tracking, and Grafana dashboards.
+
+**Key deliverables:**
+- **`observability/metrics.py`**: Prometheus counters/histograms/gauges for LLM requests, costs, latency, run duration
+- **`observability/structured_log.py`**: JSON logging formatter with correlation IDs via contextvars
+- **`observability/tracing.py`**: OpenTelemetry `init_tracing()` with OTLP HTTP exporter
+- **`observability/error_tracking.py`**: Sentry integration with `init_sentry()` and `capture_message()` helper
+- **Grafana dashboard**: 10-panel dashboard (run stats, LLM latency, provider health)
+- **Config schema**: `ObservabilitySettings` with Prometheus, OTel, Sentry fields
+- **Wired into**: `webapp.py` (lifespan init, /metrics endpoint), `llm_client.py` (per-call metrics), `graph.py` (run duration histogram)
+
+### ✅ P37 — Automated Peer Review with Confidence Scoring
+**Completed July 2026.** Multi-persona peer review with structured templates, per-section heuristic confidence scoring, meta-review aggregation, and 3 simulated reviewer personas.
+
+### ✅ P31 — Multi-Model Ensemble Voting for Critical Tasks
+**Completed July 2026.** Runs N models from different providers in parallel on the same prompt and aggregates responses using configurable voting strategies. Wired into 5 critical graph nodes.
+
+**Key deliverables:**
+- **`models/ensemble.py`**: Core ensemble voter with 3 voting strategies (Majority, Weighted, Consensus), parallel async model calls with provider diversity, rate limiter integration for 5 cloud providers, and robust single-model fallback
+- **Config schema**: `EnsembleSettings` with 4 config fields and per-task overrides for critic, planner, composer, bias_detection, hallucination_guard
+- **Ensemble config env vars**: `ENSEMBLE_ENABLED`, `ENSEMBLE_NUM_MODELS`, `ENSEMBLE_TIMEOUT`, `ENSEMBLE_MIN_SUCCESS_RATIO`
+- **5 wired graph nodes**: critic (weighted, 3 models), planner (majority, 2 models), composer (consensus, 3 models), bias_detector (majority, 3 models), hallucination_guard (weighted, 3 models)
+- **Admin API endpoints**: `GET /api/admin/ensemble/status` (config + model health), `POST /api/admin/ensemble/test` (test round with per-vote detail)
+
+**Key deliverables:**
+- **`peer_review/models.py`**: Dataclasses for `ReviewCriterion`, `ReviewSection`, `PersonaReview`, `MetaReview` with JSON serialization
+- **`peer_review/personas.py`**: 3 reviewer personas (Theoretical, Applied, Experimental) with unique rubrics, focus areas, and emphasis weights
+- **`peer_review/scorer.py`**: Heuristic per-section confidence scoring (length, citations, coherence, academic language) with section-type weighted rubrics
+- **`peer_review/aggregator.py`**: Meta-review aggregation with variance computation, weighted consensus scoring, deduplicated strength/weakness aggregation, and disagreement detection
+- **`peer_reviewer.py`**: Rewritten graph node that runs 3 persona reviews via LLM, parses structured JSON responses, scores sections, and aggregates into a combined report
+- **State fields**: `peer_reviews` (list of individual reviews), `peer_review_meta` (aggregated meta-review), `peer_review_personas` (personas used)
+- **Exporter**: Writes `peer_reviews.json` and `peer_review_meta.json` alongside existing `peer_review.md`
 
 **Estimated effort:** 2-3 sprints
 
 ---
 
-### P38 — Interactive Tutorial & Onboarding
-- [ ] **Guided tour** of research pipeline
-- [ ] **Sample topics** with pre-loaded results
-- [ ] **Command palette** for power users
-- [ ] **Tooltips and contextual help** throughout UI
-- [ ] **Quick-start templates**: "Research a paper topic", "Compare methods", "Find datasets"
+### ✅ P38 — Interactive Tutorial & Onboarding
+**Completed July 2026.** Frontend-only onboarding system with guided tour, contextual tooltips, sample topics panel, and welcome overlay for first-time users.
 
-**Estimated effort:** 2-3 sprints
+**Key deliverables:**
+- **`onboarding_guide.js`**: IIFE-wrapped self-contained module with guided tour (11 steps), contextual tooltips (22 elements), sample topics panel (6 pre-defined research topics with one-click pre-fill), and welcome overlay for first-time users
+- **Guided tour**: Step-by-step walkthrough of sidebar, pipeline tracker, workbench tabs, document editor, LaTeX source, PDF preview, research chat, modes, config panel, kanban board, and session controls. Arrow positioning (top/bottom/left/right) with viewport clamping. Step dots, prev/next/close buttons, highlight pulse animation
+- **Contextual tooltips**: 22 hover/focus tooltip definitions for all key UI elements. Smooth fade-in animation, positioned below target, auto-cleanup on hide. Injected via inline `<style>` in the self-contained script
+- **Sample topics**: 6 one-click research topics (Transformer Architectures, RL for Robotics, Diffusion Models, LLM Reasoning, NLP Trends, Graph Neural Networks). Pre-fills topic text, sets template/depth/mode, flashes send button. Collapsible panel with toggle
+- **Welcome overlay**: Full-screen backdrop with feature grid, 3 action buttons (Take the Tour / Start Exploring / Browse Sample Topics), "Don't show again" checkbox persisted to localStorage
+- **CSS**: ~250 new lines covering welcome overlay, tour tooltip (with arrow pseudo-elements), tour dots/buttons/highlights, sample topics panel/buttons
+
+**Estimated effort:** 2-3 sprints | **Frontend-only, no backend changes**
 
 ---
 
@@ -368,9 +424,9 @@ Sprint NOW (Complete):   P12 Model Router → P15 Agentic Chat → P13 Literatur
 Sprint NOW (Complete):   P21 Deep Research Engine (iterative search + citation chaining)
 Sprint 1-2:              P24 Code Sandbox (unique differentiator)
                            → P16 Job Queue (infrastructure)
-Sprint 3-4:              P22 Multi-Modal Analysis → P17 Observability
+Sprint 3-4:              P22 Multi-Modal Analysis → P17 Observability (Complete)
 Sprint 5-6:              P23 GraphRAG → P28 Personal Library
-Sprint 7-8:              P25 Co-Editing → P27 Submission Pipeline → P18 Security
+Sprint 7-8:              P25 Co-Editing → P27 Submission Pipeline → P18 Security (Complete)
 Sprint 9+:               P26 Advanced Agentic → P34 Swarm → P19 Plugins
 ```
 
