@@ -164,9 +164,60 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
     if env.get("MODEL_ROUTER_DEFAULT_MODEL"):
         data.setdefault("model_router", {})["default_model"] = env["MODEL_ROUTER_DEFAULT_MODEL"]
 
-    # Auth settings
+    # P18: Security settings
     if env.get("SECRET_KEY"):
         data.setdefault("auth", {})["secret_key"] = env["SECRET_KEY"]
+
+    # RBAC settings
+    rbac = data.setdefault("rbac", {})
+    if env.get("RBAC_ENABLED"):
+        rbac["enabled"] = env["RBAC_ENABLED"].lower().strip() in ("true", "1", "yes")
+    if env.get("RBAC_DEFAULT_ROLE"):
+        rbac["default_role"] = env["RBAC_DEFAULT_ROLE"].lower().strip()
+
+    # Rate limiting settings
+    rate_limit = data.setdefault("rate_limit", {})
+    if env.get("RATE_LIMIT_ENABLED"):
+        rate_limit["enabled"] = env["RATE_LIMIT_ENABLED"].lower().strip() in ("true", "1", "yes")
+    if env.get("RATE_LIMIT_DEFAULT_RPM"):
+        rate_limit["default_requests_per_minute"] = int(env["RATE_LIMIT_DEFAULT_RPM"])
+    if env.get("RATE_LIMIT_AUTH_RPM"):
+        rate_limit["authenticated_requests_per_minute"] = int(env["RATE_LIMIT_AUTH_RPM"])
+    if env.get("RATE_LIMIT_ADMIN_RPM"):
+        rate_limit["admin_requests_per_minute"] = int(env["RATE_LIMIT_ADMIN_RPM"])
+
+    # Audit logging settings
+    audit = data.setdefault("audit", {})
+    if env.get("AUDIT_ENABLED"):
+        audit["enabled"] = env["AUDIT_ENABLED"].lower().strip() in ("true", "1", "yes")
+    if env.get("AUDIT_RETENTION_DAYS"):
+        audit["retention_days"] = int(env["AUDIT_RETENTION_DAYS"])
+    if env.get("AUDIT_LOG_BODY"):
+        audit["log_request_body"] = env["AUDIT_LOG_BODY"].lower().strip() in ("true", "1", "yes")
+
+    # SSO/OAuth settings
+    sso = data.setdefault("sso", {})
+    if env.get("SSO_ENABLED"):
+        sso["enabled"] = env["SSO_ENABLED"].lower().strip() in ("true", "1", "yes")
+    if env.get("GOOGLE_CLIENT_ID"):
+        sso["google_client_id"] = env["GOOGLE_CLIENT_ID"]
+    if env.get("GOOGLE_CLIENT_SECRET"):
+        sso["google_client_secret"] = env["GOOGLE_CLIENT_SECRET"]
+    if env.get("GITHUB_CLIENT_ID"):
+        sso["github_client_id"] = env["GITHUB_CLIENT_ID"]
+    if env.get("GITHUB_CLIENT_SECRET"):
+        sso["github_client_secret"] = env["GITHUB_CLIENT_SECRET"]
+    if env.get("ORCID_CLIENT_ID"):
+        sso["orcid_client_id"] = env["ORCID_CLIENT_ID"]
+    if env.get("ORCID_CLIENT_SECRET"):
+        sso["orcid_client_secret"] = env["ORCID_CLIENT_SECRET"]
+
+    # Secrets management
+    secrets_mgmt = data.setdefault("secrets_mgmt", {})
+    if env.get("ENCRYPTION_KEY"):
+        secrets_mgmt["encryption_key"] = env["ENCRYPTION_KEY"]
+    if env.get("ENCRYPT_API_KEYS"):
+        secrets_mgmt["encrypt_api_keys_at_rest"] = env["ENCRYPT_API_KEYS"].lower().strip() in ("true", "1", "yes")
 
     # Watchdog email / SMTP settings
     watchdog_email = data.setdefault("watchdog_email", {})
@@ -194,6 +245,54 @@ def _apply_env_overrides(data: dict, env: Mapping[str, str]) -> dict:
         code_sandbox["memory_limit_mb"] = int(env["CODE_SANDBOX_MEMORY_MB"])
     if env.get("CODE_SANDBOX_POOL_SIZE"):
         code_sandbox["pool_size"] = int(env["CODE_SANDBOX_POOL_SIZE"])
+
+    # Multi-modal settings (P22)
+    multi_modal = data.setdefault("multi_modal", {})
+    if env.get("MULTI_MODAL_ENABLED"):
+        val = env["MULTI_MODAL_ENABLED"].lower().strip()
+        multi_modal["enabled"] = val in ("true", "1", "yes")
+    if env.get("MULTI_MODAL_EXTRACT_FIGURES"):
+        val = env["MULTI_MODAL_EXTRACT_FIGURES"].lower().strip()
+        multi_modal["extract_figures"] = val in ("true", "1", "yes")
+    if env.get("MULTI_MODAL_EXTRACT_TABLES"):
+        val = env["MULTI_MODAL_EXTRACT_TABLES"].lower().strip()
+        multi_modal["extract_tables"] = val in ("true", "1", "yes")
+    if env.get("MULTI_MODAL_EXTRACT_EQUATIONS"):
+        val = env["MULTI_MODAL_EXTRACT_EQUATIONS"].lower().strip()
+        multi_modal["extract_equations"] = val in ("true", "1", "yes")
+    if env.get("MULTI_MODAL_MAX_FIGURES"):
+        multi_modal["max_figures"] = int(env["MULTI_MODAL_MAX_FIGURES"])
+    if env.get("MULTI_MODAL_MAX_TABLES"):
+        multi_modal["max_tables"] = int(env["MULTI_MODAL_MAX_TABLES"])
+    if env.get("MULTI_MODAL_MAX_EQUATIONS"):
+        multi_modal["max_equations"] = int(env["MULTI_MODAL_MAX_EQUATIONS"])
+    if env.get("PIX2TEXT_ENABLED"):
+        val = env["PIX2TEXT_ENABLED"].lower().strip()
+        multi_modal["pix2text_enabled"] = val in ("true", "1", "yes")
+
+    # Template Library settings (P39)
+    template_library = data.setdefault("template_library", {})
+    if env.get("TEMPLATE_LIBRARY_ENABLED"):
+        val = env["TEMPLATE_LIBRARY_ENABLED"].lower().strip()
+        template_library["enabled"] = val in ("true", "1", "yes")
+    if env.get("TEMPLATE_LIBRARY_DEFAULT_TEMPLATE"):
+        template_library["default_template_id"] = env["TEMPLATE_LIBRARY_DEFAULT_TEMPLATE"]
+    if env.get("TEMPLATE_LIBRARY_DEFAULT_PRESET"):
+        template_library["default_preset_id"] = env["TEMPLATE_LIBRARY_DEFAULT_PRESET"]
+    if env.get("TEMPLATE_LIBRARY_STORE_PATH"):
+        template_library["store_path"] = env["TEMPLATE_LIBRARY_STORE_PATH"]
+
+    # Ensemble settings (P31)
+    ensemble = data.setdefault("ensemble", {})
+    if env.get("ENSEMBLE_ENABLED"):
+        val = env["ENSEMBLE_ENABLED"].lower().strip()
+        ensemble["enabled"] = val in ("true", "1", "yes")
+    if env.get("ENSEMBLE_NUM_MODELS"):
+        ensemble["default_num_models"] = int(env["ENSEMBLE_NUM_MODELS"])
+    if env.get("ENSEMBLE_TIMEOUT"):
+        ensemble["default_timeout_s"] = float(env["ENSEMBLE_TIMEOUT"])
+    if env.get("ENSEMBLE_MIN_SUCCESS_RATIO"):
+        ensemble["min_success_ratio"] = float(env["ENSEMBLE_MIN_SUCCESS_RATIO"])
 
     # Job Queue settings (P16)
     job_queue = data.setdefault("job_queue", {})
