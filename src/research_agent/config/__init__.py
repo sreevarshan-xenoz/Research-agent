@@ -11,6 +11,14 @@ from research_agent.config.schema import (
     DeepResearchSettings,
     CodeSandboxSettings,
     JobQueueSettings,
+    EnsembleSettings,
+    MultiModalSettings,
+    TemplateLibrarySettings,
+    RBACSettings,
+    RateLimitSettings,
+    AuditSettings,
+    SSOSettings,
+    SecretsSettings,
 )
 
 __all__ = [
@@ -25,6 +33,14 @@ __all__ = [
     "DeepResearchSettings",
     "CodeSandboxSettings",
     "JobQueueSettings",
+    "EnsembleSettings",
+    "MultiModalSettings",
+    "TemplateLibrarySettings",
+    "RBACSettings",
+    "RateLimitSettings",
+    "AuditSettings",
+    "SSOSettings",
+    "SecretsSettings",
     "load_settings",
     "validate_insecure_defaults",
 ]
