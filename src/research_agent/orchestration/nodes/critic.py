@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from research_agent.models import run_json_ensemble
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.nodes.indexing import get_contradiction_links
 from research_agent.orchestration.state import GraphState, GraphTask
@@ -23,6 +24,11 @@ async def critic_node(state: GraphState) -> dict:
     contradiction_links = await get_contradiction_links(state["run_id"])
     deep_research_enabled = state.get("depth", "balanced") in ("deep", "comprehensive")
 
+    # P31: Multi-Model Ensemble Voting for critic confidence scoring
+    from research_agent.config import load_settings
+    _settings = load_settings()
+    ensemble_enabled = _settings.ensemble.enabled and "critic" in _settings.ensemble.task_overrides
+
     low_confidence_tasks = []
     for task in tasks:
         task_id = str(task["task_id"])
@@ -42,6 +48,37 @@ async def critic_node(state: GraphState) -> dict:
                 contradiction_count=contradiction_count,
             )
             confidence = evidence.overall
+
+            # P31: Ensemble voting for critic confidence
+            if ensemble_enabled and evidence.num_sources >= 3:
+                ensemble_prompt = (
+                    f"Rate the quality and completeness of evidence for research task '{task_id}' on topic '{state['topic']}'.\n"
+                    f"Sources found: {evidence.num_sources}, Providers: {evidence.num_providers}\n"
+                    f"Coverage: {evidence.coverage:.2f}, Source authority: {evidence.source_authority:.2f}\n"
+                    "Output a JSON object with:\n"
+                    "  - 'score': float 0.0-1.0 (overall evidence quality)\n"
+                    "  - 'confidence': float 0.0-1.0 (your confidence in this score)\n"
+                    "  - 'needs_more_research': bool (whether more research is needed)\n"
+                )
+                ensemble_result = await run_json_ensemble(
+                    task_type="critic",
+                    prompt=ensemble_prompt,
+                    temperature=0.2,
+                    max_tokens=512,
+                )
+                if ensemble_result.num_success >= 2 and ensemble_result.aggregated_json:
+                    agg = ensemble_result.aggregated_json
+                    if isinstance(agg, dict):
+                        ensemble_score = agg.get("score") or agg.get("confidence")
+                        if ensemble_score is not None:
+                            confidence = float(ensemble_score)
+                        if agg.get("needs_more_research"):
+                            notes.append(f"Ensemble suggests more research needed for {task_id}")
+                    notes.append(
+                        f"Ensemble consensus for {task_id}: "
+                        f"{ensemble_result.consensus_score:.2f} "
+                        f"({ensemble_result.num_success}/{ensemble_result.num_models} models)"
+                    )
 
             # Build rich critic notes
             if evidence.num_sources == 0:

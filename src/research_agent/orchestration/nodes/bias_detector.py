@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from research_agent.models import agenerate_text
+from research_agent.models import agenerate_text, run_ensemble
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 
@@ -52,12 +52,29 @@ async def bias_detector_node(state: GraphState) -> dict:
         "5. If the source distribution looks healthy and balanced, state that clearly.\n"
     )
 
-    bias_report = await agenerate_text(
-        role="orchestrator",
-        prompt=prompt,
-        temperature=0.3,
-        max_tokens=1500
-    )
+    # P31: Multi-Model Ensemble Voting for bias detection
+    from research_agent.config import load_settings
+    _settings = load_settings()
+    ensemble_enabled = _settings.ensemble.enabled and "bias_detection" in _settings.ensemble.task_overrides
+
+    bias_report = None
+    if ensemble_enabled:
+        ensemble_result = await run_ensemble(
+            task_type="bias_detection",
+            prompt=prompt,
+            temperature=0.3,
+            max_tokens=1500,
+        )
+        if ensemble_result.num_success >= 2:
+            bias_report = ensemble_result.aggregated_text
+
+    if bias_report is None:
+        bias_report = await agenerate_text(
+            role="orchestrator",
+            prompt=prompt,
+            temperature=0.3,
+            max_tokens=1500
+        )
 
     await apublish_progress(
         agent="Bias Detector",

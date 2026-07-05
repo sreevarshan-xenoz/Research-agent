@@ -11,6 +11,7 @@ from research_agent.orchestration.nodes.dependency import (
 )
 from research_agent.orchestration.nodes.exporter import exporter_node
 from research_agent.orchestration.nodes.figure_generator import figure_generator_node
+from research_agent.orchestration.nodes.multi_modal import multi_modal_node
 from research_agent.orchestration.nodes.peer_reviewer import peer_reviewer_node
 from research_agent.orchestration.nodes.presentation import presentation_generator_node
 from research_agent.orchestration.nodes.poster import poster_generator_node
@@ -68,6 +69,7 @@ __all__ = [
 	"comparison_table_node",
 	"citation_graph_node",
 	"exporter_node",
+	"multi_modal_node",
 	"awaiting_user_critic_node",
 	"code_execution_node",
 	"dataset_discovery_node",
