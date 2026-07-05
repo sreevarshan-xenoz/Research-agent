@@ -52,6 +52,29 @@ class GroqSettings(BaseModel):
     timeout_seconds: int = Field(default=30, ge=10, le=300)
 
 
+class EnsembleSettings(BaseModel):
+    """Multi-Model Ensemble Voting configuration (P31).
+
+    Controls which tasks use ensemble voting, how many models to query,
+    which voting strategy to use, and per-model timeouts.
+    """
+    enabled: bool = True
+    # Default ensemble config for all tasks
+    default_num_models: int = Field(default=3, ge=1, le=8, description="Default number of models per ensemble round")
+    default_timeout_s: float = Field(default=30.0, ge=5.0, le=120.0, description="Default timeout per model call")
+    min_success_ratio: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum fraction of models that must succeed")
+    # Per-task overrides: task_type -> {strategy, num_models, timeout_s}
+    task_overrides: dict[str, dict[str, Any]] = Field(
+        default_factory=lambda: {
+            "critic": {"strategy": "weighted", "num_models": 3, "timeout_s": 30.0},
+            "planner": {"strategy": "majority", "num_models": 2, "timeout_s": 30.0},
+            "composer": {"strategy": "consensus", "num_models": 3, "timeout_s": 60.0},
+            "bias_detection": {"strategy": "majority", "num_models": 3, "timeout_s": 30.0},
+            "hallucination_guard": {"strategy": "weighted", "num_models": 3, "timeout_s": 30.0},
+        }
+    )
+
+
 class JobQueueSettings(BaseModel):
     """Configuration for the async job queue (P16)."""
     enabled: bool = True
@@ -60,6 +83,23 @@ class JobQueueSettings(BaseModel):
     max_concurrent_per_user: int = Field(default=3, ge=1, le=20, description="Max concurrent research runs per user")
     default_timeout: int = Field(default=600, ge=60, le=3600, description="Default job timeout in seconds")
     max_retries: int = Field(default=2, ge=0, le=10, description="Max retries for failed jobs")
+
+
+class MultiModalSettings(BaseModel):
+    """Configuration for Multi-Modal Paper Analysis (P22).
+
+    Controls figure extraction, table parsing, equation extraction,
+    chart-to-text generation, and multi-modal Q&A capabilities.
+    """
+    enabled: bool = True
+    extract_figures: bool = Field(default=True, description="Extract embedded images from PDFs")
+    extract_tables: bool = Field(default=True, description="Extract tables via pdfplumber visual detection")
+    extract_equations: bool = Field(default=True, description="Extract LaTeX equations via Pix2Text/regex")
+    generate_chart_descriptions: bool = Field(default=True, description="Generate accessibility descriptions for charts")
+    max_figures: int = Field(default=20, ge=1, le=100)
+    max_tables: int = Field(default=30, ge=1, le=100)
+    max_equations: int = Field(default=50, ge=1, le=200)
+    pix2text_enabled: bool = Field(default=True, description="Attempt Pix2Text OCR-based equation extraction")
 
 
 class CodeSandboxSettings(BaseModel):
@@ -272,6 +312,53 @@ class QdrantSettings(BaseModel):
     prefer_grpc: bool = True
 
 
+class RBACSettings(BaseModel):
+    """Role-based access control settings (P18)."""
+    enabled: bool = True
+    default_role: str = "viewer"  # Default role for new users
+    allow_self_role_upgrade: bool = Field(default=False, description="If True, users can upgrade their own role (dev only)")
+
+
+class RateLimitSettings(BaseModel):
+    """API rate limiting configuration (P18)."""
+    enabled: bool = True
+    default_requests_per_minute: int = Field(default=60, ge=1, le=10000)
+    authenticated_requests_per_minute: int = Field(default=300, ge=1, le=10000)
+    admin_requests_per_minute: int = Field(default=1000, ge=1, le=10000)
+    burst_size: int = Field(default=20, ge=1, le=200)
+    # Per-endpoint overrides (endpoint_path -> limit)
+    endpoint_overrides: dict[str, int] = Field(default_factory=dict)
+
+
+class AuditSettings(BaseModel):
+    """Audit logging configuration (P18)."""
+    enabled: bool = True
+    log_request_body: bool = Field(default=False, description="Log full request bodies (may contain PII)")
+    log_response_status: bool = True
+    retention_days: int = Field(default=90, ge=1, le=365)
+    # Paths to exclude from audit logging (e.g. /health, /metrics)
+    exclude_paths: list[str] = Field(default_factory=lambda: ["/health", "/metrics", "/api/health"])
+
+
+class SSOSettings(BaseModel):
+    """SSO/OAuth provider settings (P18)."""
+    google_client_id: str = Field(default="", description="Google OAuth2 client ID")
+    google_client_secret: SecretStr = SecretStr("")
+    github_client_id: str = Field(default="", description="GitHub OAuth2 client ID")
+    github_client_secret: SecretStr = SecretStr("")
+    orcid_client_id: str = Field(default="", description="ORCID OAuth2 client ID")
+    orcid_client_secret: SecretStr = SecretStr("")
+    enabled: bool = False
+    allow_registration_via_sso: bool = True
+
+
+class SecretsSettings(BaseModel):
+    """Secrets management / encryption settings (P18)."""
+    encryption_key: SecretStr = SecretStr("")  # Fernet key for encrypting stored API keys
+    key_rotation_days: int = Field(default=90, ge=1, le=365)
+    encrypt_api_keys_at_rest: bool = Field(default=True)
+
+
 class AuthSettings(BaseModel):
     """Authentication settings."""
     secret_key: SecretStr = SecretStr("DEV_SECRET_DO_NOT_USE_IN_PROD")
@@ -334,6 +421,17 @@ class ObservabilitySettings(BaseModel):
 
 
 
+class TemplateLibrarySettings(BaseModel):
+    """Configuration for Research Templates & Presets (P39).
+
+    Controls the template library, conference presets, and custom template storage.
+    """
+    enabled: bool = True
+    default_template_id: str = Field(default="standard", description="Default research template ID")
+    default_preset_id: str = Field(default="", description="Default conference preset ID")
+    store_path: str = Field(default=".runtime/templates.json", description="Path for custom template persistence")
+
+
 class AppSettings(BaseModel):
     """Main application settings."""
     version: str = "2.0"
@@ -352,9 +450,17 @@ class AppSettings(BaseModel):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     qdrant: QdrantSettings = Field(default_factory=QdrantSettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    rbac: RBACSettings = Field(default_factory=RBACSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
+    audit: AuditSettings = Field(default_factory=AuditSettings)
+    sso: SSOSettings = Field(default_factory=SSOSettings)
+    secrets_mgmt: SecretsSettings = Field(default_factory=SecretsSettings)
     watchdog_email: WatchdogEmailSettings = Field(default_factory=WatchdogEmailSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
     deep_research: DeepResearchSettings = Field(default_factory=DeepResearchSettings)
     code_sandbox: CodeSandboxSettings = Field(default_factory=CodeSandboxSettings)
     job_queue: JobQueueSettings = Field(default_factory=JobQueueSettings)
+    ensemble: EnsembleSettings = Field(default_factory=EnsembleSettings)
+    multi_modal: MultiModalSettings = Field(default_factory=MultiModalSettings)
+    template_library: TemplateLibrarySettings = Field(default_factory=TemplateLibrarySettings)

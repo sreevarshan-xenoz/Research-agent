@@ -29,6 +29,14 @@ from research_agent.models.latency_tracker import (
     track_latency,
     track_latency_sync,
 )
+from research_agent.models.ensemble import (
+    EnsembleResult,
+    ModelVote,
+    VotingStrategy,
+    run_ensemble,
+    run_json_ensemble,
+    get_ensemble_config,
+)
 
 __all__ = [
     "agenerate_json",
@@ -56,4 +64,11 @@ __all__ = [
     "get_latency_tracker",
     "track_latency",
     "track_latency_sync",
+    # P31: Multi-Model Ensemble Voting
+    "EnsembleResult",
+    "ModelVote",
+    "VotingStrategy",
+    "run_ensemble",
+    "run_json_ensemble",
+    "get_ensemble_config",
 ]
