@@ -63,6 +63,8 @@ async def exporter_node(state: GraphState) -> dict:
         future_research_agenda=state.get("future_research_agenda"),
         comparison_table=state.get("comparison_table"),
         peer_review_report=state.get("peer_review_report"),
+        peer_reviews=state.get("peer_reviews"),
+        peer_review_meta=state.get("peer_review_meta"),
         guard_report=state.get("guard_report"),
         math_verification_report=state.get("math_verification_report"),
         knowledge_graph=state.get("knowledge_graph"),

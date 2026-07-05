@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from research_agent.models import agenerate_json
+from research_agent.models import agenerate_json, run_json_ensemble
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 
@@ -94,8 +94,27 @@ async def planner_node(state: GraphState) -> dict:
             f"Ensure the new tasks specifically address this feedback."
         )
 
-    # Use the HEAD model (local Ollama) for task planning
-    llm_plan = await agenerate_json(role="head", prompt=prompt)
+    # P31: Multi-Model Ensemble Voting for task planning
+    from research_agent.config import load_settings
+    _settings = load_settings()
+    ensemble_enabled = _settings.ensemble.enabled and "planner" in _settings.ensemble.task_overrides
+
+    llm_plan = None
+    if ensemble_enabled:
+        ensemble_result = await run_json_ensemble(
+            task_type="planner",
+            prompt=prompt,
+            temperature=0.2,
+            max_tokens=4096,
+        )
+        if ensemble_result.num_success >= 1 and ensemble_result.aggregated_json:
+            llm_plan = ensemble_result.aggregated_json
+        # Fall through to single model if ensemble fails
+
+    if llm_plan is None:
+        # Fallback: single model call
+        llm_plan = await agenerate_json(role="head", prompt=prompt)
+
     if llm_plan and isinstance(llm_plan, dict) and "tasks" in llm_plan:
         raw_tasks = llm_plan["tasks"]
         valid_tasks = []
