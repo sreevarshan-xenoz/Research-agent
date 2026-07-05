@@ -254,6 +254,7 @@
         <button id="proposalTabBtn" class="tab-btn" type="button">Grant Proposal</button>
         <button id="trendsTabBtn" class="tab-btn" type="button">Research Trends</button>
         <button id="reproducibilityTabBtn" class="tab-btn" type="button">Reproducibility</button>
+        <button id="kgTabBtn" class="tab-btn" type="button">Knowledge Graph</button>
       </header>
 
 
@@ -506,16 +507,58 @@
         <!-- Verdict Banner -->
         <div id="reproVerdict" class="repro-verdict" style="padding: 12px 16px; border-radius: var(--radius-md); margin-bottom: 16px; font-weight: 600; font-size: 0.9rem; text-align: center; display: none;"></div>
 
-        <!-- Per-Claim Results -->
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <!-- Filter & Search Bar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
           <h4 style="margin: 0; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Per-Claim Results</h4>
           <div style="display: flex; gap: 8px;">
-            <button id="reproViewReportBtn" class="btn-icon" style="font-size: 0.7rem; padding: 6px 10px;" type="button">View Full Report</button>
-            <button id="reproViewScriptsBtn" class="btn-icon" style="font-size: 0.7rem; padding: 6px 10px;" type="button">View Scripts</button>
+            <button id="reproViewReportBtn" class="btn-icon" style="font-size: 0.7rem; padding: 6px 10px;" type="button">View Report</button>
+            <button id="reproViewScriptsBtn" class="btn-icon" style="font-size: 0.7rem; padding: 6px 10px;" type="button">Scripts</button>
           </div>
         </div>
+
+        <!-- Filter chips -->
+        <div class="repro-filter-bar" style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+          <span style="font-size: 0.65rem; font-weight: 600; color: #71717a; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px;">Filter:</span>
+          <button class="repro-filter-chip active" data-filter="all" type="button" style="font-size: 0.65rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--glass-border); background: rgba(139,92,246,0.15); color: #c4b5fd; cursor: pointer; font-weight: 600; transition: all 0.2s;">All</button>
+          <button class="repro-filter-chip" data-filter="pass" type="button" style="font-size: 0.65rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--glass-border); background: transparent; color: #34d399; cursor: pointer; font-weight: 600; transition: all 0.2s;">✅ Pass</button>
+          <button class="repro-filter-chip" data-filter="fail" type="button" style="font-size: 0.65rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--glass-border); background: transparent; color: #f43f5e; cursor: pointer; font-weight: 600; transition: all 0.2s;">❌ Fail</button>
+          <button class="repro-filter-chip" data-filter="partial" type="button" style="font-size: 0.65rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--glass-border); background: transparent; color: #f59e0b; cursor: pointer; font-weight: 600; transition: all 0.2s;">🟡 Partial</button>
+          <button class="repro-filter-chip" data-filter="unverifiable" type="button" style="font-size: 0.65rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--glass-border); background: transparent; color: #71717a; cursor: pointer; font-weight: 600; transition: all 0.2s;">⬜ Unverifiable</button>
+          <div style="flex: 1; min-width: 120px; max-width: 200px; margin-left: auto;">
+            <input id="reproClaimSearch" type="text" placeholder="Search claims..." style="width: 100%; padding: 4px 10px; font-size: 0.7rem; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 999px; color: #e4e4e7; outline: none; font-family: 'Inter', sans-serif;" />
+          </div>
+          <select id="reproSortSelect" style="font-size: 0.65rem; padding: 4px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 999px; color: #a1a1aa; outline: none; font-family: 'Inter', sans-serif; width: auto;">
+            <option value="default">Sort: Default</option>
+            <option value="confidence-desc">Confidence ↓</option>
+            <option value="confidence-asc">Confidence ↑</option>
+            <option value="runtime-desc">Runtime ↓</option>
+            <option value="runtime-asc">Runtime ↑</option>
+            <option value="alpha">A–Z</option>
+          </select>
+        </div>
+
+        <!-- Export Buttons -->
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <button id="reproDownloadReportBtn" class="btn-icon" style="font-size: 0.65rem; padding: 4px 10px;" type="button">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download Report
+          </button>
+          <button id="reproDownloadJsonBtn" class="btn-icon" style="font-size: 0.65rem; padding: 4px 10px;" type="button">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            JSON Export
+          </button>
+        </div>
+
         <div id="reproClaimsContainer" class="repro-claims-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0;">
           <p class="small muted" id="reproEmptyState">Load a research run to see reproducibility results.</p>
+        </div>
+
+        <!-- Run History Comparison -->
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--glass-border);">
+          <h4 style="margin: 0 0 8px 0; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Run History Comparison</h4>
+          <div id="reproRunHistory" class="repro-run-history" style="display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; padding: 4px 0;">
+            <p class="small muted" style="margin: 0; font-size: 0.7rem;">Load a research run to see history comparison.</p>
+          </div>
         </div>
 
         <!-- Report Modal -->
@@ -553,6 +596,28 @@
               <button id="reproScriptsModalCloseBtn" class="secondary">Close</button>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- P23: Knowledge Graph Explorer -->
+      <section id="kgWorkbench" class="panel kg-panel" style="display: flex; flex-direction: column; min-height: 500px; position: relative; overflow: hidden; padding: 16px;">
+        <div class="doc-header" style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); margin-bottom: 12px;">
+          <span class="doc-label" style="font-weight: 500;">Knowledge Graph Explorer</span>
+          <div id="kgStatusText" class="mono small" style="opacity: 0.7;">Persistent cross-run entity store</div>
+        </div>
+        <div id="kgContainer" style="flex: 1; width: 100%; min-height: 400px; background: rgba(5,5,7,0.4); border-radius: var(--radius-md); border: 1px solid var(--glass-border); position: relative; overflow: hidden;">
+          <iframe id="kgExplorerIframe" src="/api/knowledge-graph/explorer" style="width: 100%; height: 100%; border: none; border-radius: var(--radius-md);" loading="lazy"></iframe>
+        </div>
+        <div class="doc-actions" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--glass-border); display: flex; gap: 8px; flex-wrap: wrap;">
+          <button id="kgOpenFullscreenBtn" class="btn-icon" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+            Open Full Screen
+          </button>
+          <button id="kgRefreshBtn" class="btn-icon" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            Refresh
+          </button>
+          <span id="kgMeta" class="mono small" style="margin-left: auto; opacity: 0.5; font-size: 0.65rem;"></span>
         </div>
       </section>
 
@@ -753,6 +818,8 @@ Try asking something like "Find recent papers on transformer architectures" or "
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-latex.min.js"></script>
-  <script src="/static/app.js?v=7" defer></script>
+  <script src="/static/app.js?v=8" defer></script>
+  <script src="/static/repro_enhancements.js?v=1" defer></script>
+  <script src="/static/onboarding_guide.js?v=1" defer></script>
 </body>
 </html>

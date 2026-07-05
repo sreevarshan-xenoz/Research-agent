@@ -36,6 +36,10 @@ from research_agent.app.auth import (
     fastapi_users,
     auth_backend,
 )
+from research_agent.app.security import get_user_role, set_user_role, is_admin
+from research_agent.app.audit import AuditMiddleware, get_audit_store
+from research_agent.app.rate_limit import RateLimitMiddleware, start_rate_limit_cleanup
+from research_agent.app.sso import build_sso_router
 from research_agent.config import load_settings, validate_insecure_defaults
 from research_agent.models.llm_client import _resolve_api_key
 from research_agent.output.grant_proposal import generate_grant_proposal
@@ -222,6 +226,17 @@ def create_app(
 
         # Startup: start background watchdog scheduler
         watchdog_task = None
+
+        # P18: Start rate limit cleanup task
+        if settings.rate_limit.enabled:
+            try:
+                rl_cleanup_task = start_rate_limit_cleanup()
+                logger.info("Rate limit cleanup task started")
+            except Exception as exc:
+                logger.warning("Failed to start rate limit cleanup: %s", exc)
+                rl_cleanup_task = None
+        else:
+            rl_cleanup_task = None
         if settings.features.research_watchdog:
             try:
                 from research_agent.orchestration.watchdog import start_watchdog_scheduler
@@ -255,6 +270,51 @@ def create_app(
         allow_headers=["*"],
     )
 
+    # P18: Auth context middleware — populates request.state from JWT for downstream
+    # audit and rate-limit middleware to read user identity.
+    @app.middleware("http")
+    async def _auth_context_middleware(request, call_next):
+        request.state.user_id = "anonymous"
+        request.state.user_role = "anonymous"
+        request.state.session_id = ""
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                from research_agent.app.auth import get_jwt_strategy, async_session_maker, UserManager, User
+                from fastapi_users.db import SQLAlchemyUserDatabase
+                from fastapi import Request as _Req
+                import uuid
+                token = auth_header[len("Bearer "):]
+                strategy = get_jwt_strategy()
+                async with async_session_maker() as _db:
+                    user_db = SQLAlchemyUserDatabase(_db, User)
+                    manager = UserManager(user_db)
+                    user_obj = await strategy.read_token(token, manager)
+                    if user_obj and user_obj.is_active:
+                        request.state.user_id = str(user_obj.id)
+                        request.state.user_role = getattr(user_obj, "role", "viewer") or "viewer"
+            except Exception:
+                pass  # Best-effort; middleware continues with anonymous context
+        return await call_next(request)
+
+    # P18: Security middleware stack (order matters: rate limit before audit)
+    rl = settings.rate_limit
+    if rl.enabled:
+        app.add_middleware(
+            RateLimitMiddleware,
+            default_rpm=rl.default_requests_per_minute,
+            auth_rpm=rl.authenticated_requests_per_minute,
+            admin_rpm=rl.admin_requests_per_minute,
+            burst=rl.burst_size,
+            endpoint_overrides=rl.endpoint_overrides,
+            exclude_paths=["/health", "/metrics", "/api/health"],
+        )
+    if settings.audit.enabled:
+        app.add_middleware(
+            AuditMiddleware,
+            exclude_paths=settings.audit.exclude_paths,
+        )
+
     # Auth routes
     app.include_router(
         fastapi_users.get_auth_router(auth_backend),
@@ -266,6 +326,9 @@ def create_app(
         prefix="/api/auth",
         tags=["auth"],
     )
+    # P18: SSO/OAuth routes
+    sso_router = build_sso_router()
+    app.include_router(sso_router)
 
     tool_registry = registry if registry is not None else build_tool_registry(settings)
 
@@ -627,6 +690,265 @@ def create_app(
                 "Metrics unavailable",
                 status_code=503,
                 media_type="text/plain; charset=utf-8"
+            )
+
+    # ------------------------------------------------------------------ #
+    # P18 Security & Admin Endpoints
+    # ------------------------------------------------------------------ #
+
+    @app.get("/api/admin/audit")
+    async def admin_query_audit(
+        user_id: str | None = None,
+        action_type: str | None = None,
+        resource: str | None = None,
+        path_pattern: str | None = None,
+        status_code: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        days_back: int = 7,
+        user: User = Depends(current_active_user),
+    ):
+        """Query audit logs (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        store = await get_audit_store()
+        entries = await store.query(
+            user_id=user_id or None,
+            action_type=action_type or None,
+            resource=resource or None,
+            path_pattern=path_pattern or None,
+            status_code=status_code,
+            limit=min(limit, 1000),
+            offset=offset,
+            days_back=days_back,
+        )
+        return {"entries": entries, "count": len(entries)}
+
+    @app.get("/api/admin/audit/stats")
+    async def admin_audit_stats(
+        user: User = Depends(current_active_user),
+    ):
+        """Get audit log statistics (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        store = await get_audit_store()
+        stats = await store.get_stats()
+        return stats
+
+    @app.get("/api/admin/users")
+    async def admin_list_users(
+        user: User = Depends(current_active_user),
+    ):
+        """List all users with roles (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        from research_agent.app.auth import async_session_maker, User as UserModel
+        from sqlalchemy import select
+        async with async_session_maker() as session:
+            result = await session.execute(select(UserModel))
+            users = result.scalars().all()
+            return {
+                "users": [
+                    {
+                        "id": str(u.id),
+                        "email": u.email,
+                        "role": getattr(u, "role", "viewer"),
+                        "is_active": u.is_active,
+                        "is_superuser": u.is_superuser,
+                        "is_verified": u.is_verified,
+                    }
+                    for u in users
+                ],
+                "count": len(users),
+            }
+
+    @app.post("/api/admin/users/{user_id}/role")
+    async def admin_update_role(
+        user_id: str,
+        body: dict,
+        user: User = Depends(current_active_user),
+    ):
+        """Update a user's role (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        new_role = body.get("role", "").strip().lower()
+        if new_role not in ("viewer", "editor", "admin"):
+            raise HTTPException(status_code=400, detail="Invalid role. Must be viewer, editor, or admin.")
+        success = await set_user_role(user_id, new_role)
+        if not success:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {"success": True, "user_id": user_id, "role": new_role}
+
+    @app.get("/api/admin/security/status")
+    async def admin_security_status(
+        user: User = Depends(current_active_user),
+    ):
+        """Get security configuration status (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        _settings = load_settings()
+        return {
+            "rbac_enabled": _settings.rbac.enabled,
+            "default_role": _settings.rbac.default_role,
+            "rate_limiting_enabled": _settings.rate_limit.enabled,
+            "audit_logging_enabled": _settings.audit.enabled,
+            "sso_configured": is_sso_configured(),
+            "sso_enabled": _settings.sso.enabled,
+            "encryption_configured": bool(str(_settings.secrets_mgmt.encryption_key)),
+            "auth_configured": str(_settings.auth.secret_key) != "DEV_SECRET_DO_NOT_USE_IN_PROD",
+        }
+
+    @app.get("/api/admin/encrypt")
+    async def admin_encrypt_value(
+        plaintext: str,
+        user: User = Depends(current_active_user),
+    ):
+        """Encrypt a value using the configured encryption key (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        encrypted = encrypt_value(plaintext)
+        return {"encrypted": encrypted, "plaintext_length": len(plaintext)}
+
+    @app.get("/api/admin/decrypt")
+    async def admin_decrypt_value(
+        encrypted: str,
+        user: User = Depends(current_active_user),
+    ):
+        """Decrypt a value (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        if not encrypted.startswith("enc:"):
+            raise HTTPException(status_code=400, detail="Value does not appear to be encrypted (missing 'enc:' prefix)")
+        decrypted = decrypt_value(encrypted)
+        return {"decrypted": decrypted}
+
+    @app.get("/api/admin/rate-limits")
+    async def admin_rate_limit_status(
+        user: User = Depends(current_active_user),
+    ):
+        """Get rate limit configuration (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        _settings = load_settings()
+        return {
+            "default_rpm": _settings.rate_limit.default_requests_per_minute,
+            "authenticated_rpm": _settings.rate_limit.authenticated_requests_per_minute,
+            "admin_rpm": _settings.rate_limit.admin_requests_per_minute,
+            "burst_size": _settings.rate_limit.burst_size,
+            "endpoint_overrides": _settings.rate_limit.endpoint_overrides,
+        }
+
+    # ------------------------------------------------------------------ #
+    # P31: Ensemble Voting Admin Endpoints
+    # ------------------------------------------------------------------ #
+
+    @app.get("/api/admin/ensemble/status")
+    async def admin_ensemble_status(
+        user: User = Depends(current_active_user),
+    ):
+        """Get ensemble voting configuration and model health (admin only)."""
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        _settings = load_settings()
+
+        from research_agent.models.ensemble import _resolve_ensemble_models, get_ensemble_config
+        available_models = _resolve_ensemble_models(8)
+        models_health = []
+        for mc in available_models:
+            model_name = mc["model"]
+            provider = mc["provider"]
+            has_key = bool(mc.get("extra", {}).get("api_key"))
+            models_health.append({
+                "model": model_name,
+                "provider": provider,
+                "api_key_configured": has_key,
+            })
+
+        task_configs = {}
+        for task_type in ["critic", "planner", "composer", "bias_detection", "hallucination_guard"]:
+            strategy, num_models, min_success, timeout = get_ensemble_config(task_type)
+            task_configs[task_type] = {
+                "strategy": strategy.value,
+                "num_models": num_models,
+                "min_success": min_success,
+                "timeout_s": timeout,
+            }
+
+        return {
+            "enabled": _settings.ensemble.enabled,
+            "default_num_models": _settings.ensemble.default_num_models,
+            "default_timeout_s": _settings.ensemble.default_timeout_s,
+            "min_success_ratio": _settings.ensemble.min_success_ratio,
+            "task_configs": task_configs,
+            "available_models": models_health,
+            "total_available_models": len(available_models),
+            "settings_override_tasks": list(_settings.ensemble.task_overrides.keys()),
+        }
+
+    @app.post("/api/admin/ensemble/test")
+    async def admin_ensemble_test(
+        body: dict,
+        user: User = Depends(current_active_user),
+    ):
+        """Run a test ensemble round with a custom prompt (admin only).
+
+        Request body:
+            task_type (str, optional): Task type (default: "critic").
+            prompt (str, optional): Custom prompt. If empty, uses a default test prompt.
+            num_models (int, optional): Override number of models.
+            temperature (float, optional): Override temperature.
+        """
+        if not is_admin(user):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
+        from research_agent.models.ensemble import run_ensemble
+
+        task_type = body.get("task_type", "critic")
+        custom_prompt = body.get("prompt", "").strip()
+        num_models = body.get("num_models", None)
+        temperature = body.get("temperature", 0.3)
+
+        prompt = custom_prompt or ("You are a research quality evaluator. "
+            "Rate the research topic 'Multi-Model Ensemble Voting' on a scale of 0.0-1.0. "
+            "Output a JSON object with 'score' (float 0.0-1.0) and 'confidence' (float 0.0-1.0)."
+        )
+
+        try:
+            result = await run_ensemble(
+                task_type=task_type,
+                prompt=prompt,
+                temperature=float(temperature),
+                max_tokens=512,
+                num_models=int(num_models) if num_models is not None else None,
+            )
+
+            return {
+                "success": result.num_success > 0,
+                "task_type": result.task_type,
+                "strategy": result.strategy.value,
+                "num_models": result.num_models,
+                "num_success": result.num_success,
+                "num_failures": result.num_failures,
+                "consensus_score": result.consensus_score,
+                "disagreement_detected": result.disagreement_detected,
+                "disagreement_detail": result.disagreement_detail,
+                "total_latency_ms": result.total_latency_ms,
+                "aggregated_text_preview": result.aggregated_text[:500] if result.aggregated_text else "",
+                "votes": [
+                    {
+                        "model": v.model_name,
+                        "provider": v.provider,
+                        "latency_ms": v.latency_ms,
+                        "error": v.error,
+                        "text_preview": v.raw_text[:200] if v.raw_text else "",
+                    }
+                    for v in result.votes
+                ],
+            }
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ensemble test failed: {type(exc).__name__}: {exc}",
             )
 
     @app.get("/api/health/redis")
@@ -1516,7 +1838,59 @@ def create_app(
         
         return {"nodes": nodes, "edges": edges}
 
-    @app.get("/api/runs/{run_id}/citation-graph")
+        # ------------------------------------------------------------------ #
+    # P23: Knowledge Graph Explorer Endpoints
+    # ------------------------------------------------------------------ #
+
+    @app.get("/api/knowledge-graph/data")
+    async def get_knowledge_graph_data():
+        """Get the persistent knowledge graph data for the interactive explorer."""
+        from research_agent.rag import KnowledgeGraphStore
+        try:
+            kg_store = KnowledgeGraphStore()
+            data = kg_store.export_for_explorer("threejs")
+            return data
+        except Exception as exc:
+            logger.warning("Failed to load knowledge graph: %s", exc)
+            return {"nodes": [], "edges": [], "error": str(exc)}
+
+    @app.get("/api/knowledge-graph/explorer")
+    async def get_knowledge_graph_explorer():
+        """Serve the interactive knowledge graph explorer HTML page."""
+        kg_explorer_path = Path(static_dir) / "kg_explorer.html"
+        if kg_explorer_path.exists():
+            return HTMLResponse(kg_explorer_path.read_text(encoding="utf-8"))
+        raise HTTPException(status_code=404, detail="Knowledge graph explorer not found")
+
+    @app.get("/api/knowledge-graph/landscape")
+    async def get_knowledge_graph_landscape():
+        """Get the time-based landscape evolution data."""
+        from research_agent.rag import KnowledgeGraphStore
+        try:
+            kg_store = KnowledgeGraphStore()
+            evolution = kg_store.get_landscape_evolution()
+            return {"evolution": evolution}
+        except Exception as exc:
+            logger.warning("Failed to get landscape evolution: %s", exc)
+            return {"evolution": [], "error": str(exc)}
+
+    @app.get("/api/knowledge-graph/search")
+    async def search_knowledge_graph(
+        q: str
+    ):
+        """Search the knowledge graph by entity name."""
+        from research_agent.rag import KnowledgeGraphStore
+        try:
+            kg_store = KnowledgeGraphStore()
+            nodes = []
+            for node_id, data in kg_store.graph.nodes(data=True):
+                if q.lower() in node_id.lower() or q.lower() in data.get("label", "").lower():
+                    nodes.append({"id": node_id, **data})
+            return {"results": nodes, "count": len(nodes)}
+        except Exception as exc:
+            return {"results": [], "count": 0, "error": str(exc)}
+
+@app.get("/api/runs/{run_id}/citation-graph")
     async def get_citation_graph(
         run_id: str,
         user: User = Depends(current_active_user)
@@ -2686,6 +3060,112 @@ def create_app(
             "tectonic_available": tectonic_avail,
             "docker_available": docker_avail,
         }
+
+    # ------------------------------------------------------------------ #
+    # P39: Research Templates & Presets API
+    # ------------------------------------------------------------------ #
+
+    from research_agent.output.template_library import (
+        list_templates as _list_templates,
+        get_template as _get_template,
+        create_template as _create_template,
+        update_template as _update_template,
+        delete_template as _delete_template,
+        list_presets as _list_presets,
+        get_preset as _get_preset,
+        create_preset as _create_preset,
+        delete_preset as _delete_preset,
+        get_merged_template_config as _get_merged_template_config,
+        set_template_store_path as _set_template_store_path,
+    )
+
+    # Initialize template store path from settings
+    _set_template_store_path(settings.template_library.store_path)
+
+    @app.get("/api/templates")
+    async def get_all_templates(user: User = Depends(current_active_user)):
+        """List all available research templates (built-in + custom)."""
+        return {"templates": _list_templates()}
+
+    @app.get("/api/templates/{template_id}")
+    async def get_template_by_id(template_id: str, user: User = Depends(current_active_user)):
+        """Get a single research template by ID."""
+        tpl = _get_template(template_id)
+        if not tpl:
+            raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found")
+        return {"template": tpl}
+
+    @app.post("/api/templates")
+    async def create_new_template(body: dict, user: User = Depends(current_active_user)):
+        """Create a new custom research template."""
+        try:
+            created = _create_template(body)
+            return {"template": created}
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to create template: {exc}")
+
+    @app.put("/api/templates/{template_id}")
+    async def update_existing_template(template_id: str, body: dict, user: User = Depends(current_active_user)):
+        """Update an existing custom template."""
+        updated = _update_template(template_id, body)
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found or is built-in")
+        return {"template": updated}
+
+    @app.delete("/api/templates/{template_id}")
+    async def delete_existing_template(template_id: str, user: User = Depends(current_active_user)):
+        """Delete a custom template."""
+        deleted = _delete_template(template_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found or is built-in")
+        return {"success": True}
+
+    @app.get("/api/presets")
+    async def get_all_presets(user: User = Depends(current_active_user)):
+        """List all available conference presets (built-in + custom)."""
+        return {"presets": _list_presets()}
+
+    @app.get("/api/presets/{preset_id}")
+    async def get_preset_by_id(preset_id: str, user: User = Depends(current_active_user)):
+        """Get a single conference preset by ID."""
+        prs = _get_preset(preset_id)
+        if not prs:
+            raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found")
+        return {"preset": prs}
+
+    @app.post("/api/presets")
+    async def create_new_preset(body: dict, user: User = Depends(current_active_user)):
+        """Create a new custom conference preset."""
+        try:
+            created = _create_preset(body)
+            return {"preset": created}
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to create preset: {exc}")
+
+    @app.delete("/api/presets/{preset_id}")
+    async def delete_existing_preset(preset_id: str, user: User = Depends(current_active_user)):
+        """Delete a custom preset."""
+        deleted = _delete_preset(preset_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Preset '{preset_id}' not found or is built-in")
+        return {"success": True}
+
+    @app.post("/api/apply-template")
+    async def apply_template_config(body: dict, user: User = Depends(current_active_user)):
+        """Merge template, preset, and manual overrides into a unified config.
+
+        Returns a merged configuration dict suitable for initializing a WorkflowState.
+        """
+        try:
+            config = _get_merged_template_config(
+                template_id=body.get("template_id"),
+                preset_id=body.get("preset_id"),
+                manual_overrides=body.get("overrides"),
+            )
+            return config
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to apply config: {exc}")
+
 
     return app
 

@@ -199,25 +199,17 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ---
 
-### P23 — GraphRAG Knowledge Graph Retrieval
-- [ ] **Persistent entity store** across runs (Neo4j or NetworkX serialized)
-- [ ] **Entity resolution/deduplication** across papers
-- [ ] **Multi-hop retrieval**: "What papers cite the method used in Paper X?"
-- [ ] **Interactive graph explorer** (three.js or Sigma.js)
-- [ ] **Time-based landscape evolution**: animate research trends over years
+### ✅ P23 — GraphRAG Knowledge Graph Retrieval
+**Completed July 2026.** Persistent cross-run entity store with entity resolution/deduplication, multi-hop retrieval, interactive D3 force-directed graph explorer, time-based landscape evolution, and semantic search.
 
-**Estimated effort:** 4-5 sprints | **Key differentiator**
+**Key deliverables:**
+- **Persistent `KnowledgeGraphStore`** (NetworkX-based): entity resolution, deduplication, multi-hop retrieval (`get_multi_hop_retrieval()`), landscape evolution (`get_landscape_evolution()`), explorer export (`export_for_explorer()`)
+- **Interactive graph explorer** (`kg_explorer.html`): D3 force-directed layout with zoom/pan, drag, link arrowheads, color-coded node types (Paper/Author/Method/Dataset/Task), tooltip on click with connected node highlighting, legend, reset/toggle/export controls
+- **Wired into graph pipeline**: `knowledge_graph_node` now instantiates `KnowledgeGraphStore` and persists entities/relations after each run's combiner phase
+- **3 API endpoints**: `GET /api/knowledge-graph/data` (node-link JSON), `GET /api/knowledge-graph/explorer` (HTML page), `GET /api/knowledge-graph/landscape` (time-based evolution), `GET /api/knowledge-graph/search` (semantic query)
+- **Web UI integration**: KG tab button in workbench, iframe-based explorer panel, wired into `app.js` with `loadKgExplorer()` function
 
----
-
-### P14 — Research Knowledge Graph Explorer
-- [ ] **Persistent graph store** (Neo4j/NetworkX)
-- [ ] **Entity deduplication** across runs
-- [ ] **Interactive graph explorer** (three.js or Sigma.js)
-- [ ] **Semantic search** over the KG
-- [ ] **Time-based animation** of research landscape evolution
-
-**Estimated effort:** 4-5 sprints | **Note:** P23 subsumes this — prioritize P23 instead
+**Estimated effort:** 4-5 sprints | **Key differentiator** ✅ *P14 subsumed into P23*
 
 ---
 

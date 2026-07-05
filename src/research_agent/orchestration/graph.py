@@ -45,6 +45,7 @@ from research_agent.orchestration.nodes import (
     code_sandbox_node,
     dataset_discovery_node,
     grant_proposal_node,
+    multi_modal_node,
 )
 from research_agent.orchestration.state import GraphState, WorkflowState, from_graph_state, to_graph_state
 from research_agent.tools.base import BaseToolAdapter
@@ -251,6 +252,7 @@ def build_graph(
     graph.add_node("code_sandbox", wrap_node_fn("code_sandbox", code_sandbox_node))
     graph.add_node("dataset_discovery", wrap_node_fn("dataset_discovery", dataset_discovery_node))
     graph.add_node("grant_proposal", wrap_node_fn("grant_proposal", grant_proposal_node))
+    graph.add_node("multi_modal", wrap_node_fn("multi_modal", multi_modal_node))
 
 
 
@@ -316,7 +318,8 @@ def build_graph(
     graph.add_edge("code_sandbox", "code_execution")
     graph.add_edge("code_execution", "dataset_discovery")
     graph.add_edge("dataset_discovery", "grant_proposal")
-    graph.add_edge("grant_proposal", END)
+    graph.add_edge("grant_proposal", "multi_modal")
+    graph.add_edge("multi_modal", END)
 
 
 
@@ -393,15 +396,17 @@ async def run_graph(
         post_thread_state = await compiled.aget_state(config)
         ret_state = from_graph_state(result)
 
-    # Record Prometheus metrics
-    run_duration = time.monotonic() - state._timing_start if hasattr(state, "_timing_start") else 0
-    observe_run_duration(run_duration)
-    result_label = "success" if ret_state.phase == "completed" else ("interrupted" if ret_state.interrupted else "failure")
-    count_run(result=result_label)
+        # Check if we're at a breakpoint (plan_validation)
         if post_thread_state.next and "plan_validation" in post_thread_state.next:
             ret_state.phase = "awaiting_plan_approval"
             ret_state.stop_reason = "plan_validation_checkpoint"
-            
+
+        # Record Prometheus metrics
+        run_duration = time.monotonic() - state._timing_start if hasattr(state, "_timing_start") else 0
+        observe_run_duration(run_duration)
+        result_label = "success" if ret_state.phase == "completed" else ("interrupted" if ret_state.interrupted else "failure")
+        count_run(result=result_label)
+
         return ret_state
     finally:
         # Return Redis client to pool (does NOT close the pool).

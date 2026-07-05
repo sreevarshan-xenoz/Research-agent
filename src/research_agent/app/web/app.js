@@ -331,6 +331,7 @@ function switchWorkbenchTab(tab) {
   const proposalPanel = document.querySelector(".proposal-panel");
   const trendsPanel = document.querySelector(".trends-panel");
   const reproducibilityPanel = document.querySelector(".reproducibility-panel");
+  const kgPanel = document.querySelector(".kg-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
   if (latexPanel) latexPanel.classList.toggle("active", tab === "latex");
@@ -341,6 +342,7 @@ function switchWorkbenchTab(tab) {
   if (proposalPanel) proposalPanel.classList.toggle("active", tab === "proposal");
   if (trendsPanel) trendsPanel.classList.toggle("active", tab === "trends");
   if (reproducibilityPanel) reproducibilityPanel.classList.toggle("active", tab === "reproducibility");
+  if (kgPanel) kgPanel.classList.toggle("active", tab === "kg");
 
   if (tab === "citation") {
     loadCitationGraph();
@@ -352,10 +354,33 @@ function switchWorkbenchTab(tab) {
     loadTrendsTab();
   } else if (tab === "reproducibility") {
     loadReproducibilityData();
+  } else if (tab === "kg") {
+    loadKgExplorer();
   }
 }
 
-
+function loadKgExplorer() {
+  if (!kgTabBtn) return;
+  if (kgStatusText) kgStatusText.textContent = "Loading knowledge graph...";
+  if (kgExplorerIframe) {
+    // Refresh the iframe to ensure latest data
+    kgExplorerIframe.src = "/api/knowledge-graph/explorer?t=" + Date.now();
+  }
+  // Fetch metadata
+  fetch("/api/knowledge-graph/data", {
+    headers: { "Authorization": `Bearer ${authToken}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      const nodeCount = data.nodes ? data.nodes.length : 0;
+      const edgeCount = data.edges ? data.edges.length : 0;
+      if (kgStatusText) kgStatusText.textContent = `${nodeCount} entities, ${edgeCount} relations`;
+      if (kgMeta) kgMeta.textContent = `Cross-run knowledge graph`;
+    })
+    .catch(err => {
+      if (kgStatusText) kgStatusText.textContent = "No knowledge graph data yet";
+    });
+}
 
 function setDocStatus(status, text) {
   if (!docStatusEl) return;
@@ -1015,7 +1040,10 @@ citationTabBtn?.addEventListener("click", () => switchWorkbenchTab("citation"));
 datasetsTabBtn?.addEventListener("click", () => switchWorkbenchTab("datasets"));
 proposalTabBtn?.addEventListener("click", () => switchWorkbenchTab("proposal"));
 trendsTabBtn?.addEventListener("click", () => switchWorkbenchTab("trends"));
+const kgTabBtn = document.getElementById("kgTabBtn");
+
 reproducibilityTabBtn?.addEventListener("click", () => switchWorkbenchTab("reproducibility"));
+kgTabBtn?.addEventListener("click", () => switchWorkbenchTab("kg"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
 
 
