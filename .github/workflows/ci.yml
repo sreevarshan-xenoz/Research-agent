@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -31,3 +31,28 @@ jobs:
 
       - name: Run unit tests
         run: pytest tests/unit/ -v --tb=short
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run integration tests
+        run: pytest tests/integration/ -v --tb=short
