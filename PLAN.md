@@ -232,11 +232,17 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ---
 
-### P27 — Multi-Format Submission Pipeline
-- [ ] **Format converters**: IEEE ↔ ACM ↔ Springer ↔ Elsevier
-- [ ] **Style compliance checker**: validate against conference guidelines
-- [ ] **Auto-wrap content** to match template constraints
-- [ ] **One-click export** for Overleaf, arXiv, conference submission
+### ✅ P27 — Multi-Format Submission Pipeline
+**Completed July 2026.** Full submission pipeline with format conversion, style compliance checking, content adaptation, and one-click export.
+
+**Key deliverables:**
+- **Format converter** (`format_converter.py`): IEEE ↔ ACM ↔ Springer ↔ Elsevier LaTeX format conversion using LLM with template-specific rules
+- **Style compliance checker** (`style_checker.py`): 10-point validation including required sections, page limits, reference counts, figure/table limits, forbidden packages, abstract word count, title length, format-specific checks (CCS concepts for ACM, pubid for IEEE), and common LaTeX errors (unmatched braces, unclosed environments, non-ASCII characters)
+- **Content adapter** (`content_adapter.py`): Auto-wrap content to match template constraints (section reorganization, bibliography format, figure wrapping, abstract shortening)
+- **Submission pipeline** (`submission_pipeline.py`): Full-stack orchestration — format conversion → style check → content adaptation → ZIP export, with per-run artifact handling
+- **API endpoints** (`submission_routes.py`): `POST /api/submission/style-check`, `POST /api/submission/convert`, `POST /api/submission/adapt`, `POST /api/submission/pipeline`, `GET /api/submission/export-zip/{run_id}`, `GET /api/submission/formats`
+- **Frontend UI**: Submission tab in workbench with format selector, style check results (score, errors, warnings, info), issue cards with severity colors, download .tex / download ZIP export buttons
+- **Web UI**: Full submission panel in index.html, wired into app.js with `loadSubmissionPipeline()` function, CSS styling in styles_premium.css
 
 **Estimated effort:** 3-4 sprints
 

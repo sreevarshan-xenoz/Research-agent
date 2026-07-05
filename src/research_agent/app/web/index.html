@@ -255,6 +255,7 @@
         <button id="trendsTabBtn" class="tab-btn" type="button">Research Trends</button>
         <button id="reproducibilityTabBtn" class="tab-btn" type="button">Reproducibility</button>
         <button id="kgTabBtn" class="tab-btn" type="button">Knowledge Graph</button>
+        <button id="submissionTabBtn" class="tab-btn" type="button">Submission</button>
       </header>
 
 
@@ -661,6 +662,75 @@
             Refresh
           </button>
           <span id="kgMeta" class="mono small" style="margin-left: auto; opacity: 0.5; font-size: 0.65rem;"></span>
+        </div>
+      </section>
+
+      <!-- P27: Submission Pipeline -->
+      <section id="submissionWorkbench" class="panel submission-panel" style="display: flex; flex-direction: column; min-height: 500px; padding: 16px;">
+        <div class="doc-header" style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--glass-border); margin-bottom: 12px;">
+          <span class="doc-label" style="font-weight: 500;">Submission Pipeline</span>
+          <div id="submissionStatusText" class="mono small" style="opacity: 0.7;">Select format and run checks</div>
+        </div>
+
+        <!-- Format Selector -->
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 200px;">
+            <label for="submissionFormatSelect" style="font-size: 0.75rem; font-weight: 600; display: block; margin-bottom: 4px; color: #a1a1aa;">Target Format</label>
+            <select id="submissionFormatSelect" style="width: 100%; background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); color: #fff; padding: 8px 10px; font-size: 0.85rem;">
+              <option value="ieee">IEEE (conference, 2-column)</option>
+              <option value="acm">ACM (sigconf)</option>
+              <option value="springer">Springer LNCS</option>
+              <option value="elsevier">Elsevier (5p)</option>
+            </select>
+          </div>
+          <div style="display: flex; align-items: flex-end; gap: 8px; padding-bottom: 2px;">
+            <button id="submissionRunCheckBtn" class="btn-icon primary" style="padding: 8px 16px; border-radius: var(--radius-sm); border: none; font-size: 0.85rem; background: var(--primary-glow);" type="button">Run Checks</button>
+            <button id="submissionRunPipelineBtn" class="btn-icon" style="padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--glass-border); font-size: 0.85rem;" type="button">Full Pipeline</button>
+          </div>
+        </div>
+
+        <!-- Style Check Results -->
+        <div id="submissionResults" class="hidden" style="flex: 1; display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+          <!-- Score Summary -->
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="result-card" id="submissionScoreCard" style="flex: 1; min-width: 120px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); text-align: center;">
+              <div id="submissionScore" style="font-size: 1.5rem; font-weight: 700; color: #06b6d4;">—</div>
+              <div style="font-size: 0.65rem; opacity: 0.6; margin-top: 2px;">Compliance Score</div>
+            </div>
+            <div class="result-card" style="flex: 1; min-width: 80px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); text-align: center;">
+              <div id="submissionErrors" style="font-size: 1.3rem; font-weight: 700; color: #f43f5e;">—</div>
+              <div style="font-size: 0.65rem; opacity: 0.6; margin-top: 2px;">Errors</div>
+            </div>
+            <div class="result-card" style="flex: 1; min-width: 80px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); text-align: center;">
+              <div id="submissionWarnings" style="font-size: 1.3rem; font-weight: 700; color: #f59e0b;">—</div>
+              <div style="font-size: 0.65rem; opacity: 0.6; margin-top: 2px;">Warnings</div>
+            </div>
+            <div class="result-card" style="flex: 1; min-width: 80px; padding: 12px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-md); text-align: center;">
+              <div id="submissionInfoCount" style="font-size: 1.3rem; font-weight: 700; color: #71717a;">—</div>
+              <div style="font-size: 0.65rem; opacity: 0.6; margin-top: 2px;">Info</div>
+            </div>
+          </div>
+
+          <!-- Issues List -->
+          <div style="flex: 1; overflow-y: auto;">
+            <h4 style="margin: 0 0 8px 0; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">Issues</h4>
+            <div id="submissionIssuesList" style="display: flex; flex-direction: column; gap: 4px;">
+              <p class="small muted">Run checks to see results.</p>
+            </div>
+          </div>
+
+          <!-- Export Options -->
+          <div style="border-top: 1px solid var(--glass-border); padding-top: 12px;">
+            <h4 style="margin: 0 0 8px 0; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted);">One-Click Export</h4>
+            <div id="submissionExportOptions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <p class="small muted">Run the full pipeline to see export options.</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="submissionEmptyState" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 300px;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 12px; opacity: 0.3;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
+          <p style="color: #71717a; font-size: 0.85rem;">Run a research topic first, then check submission readiness.</p>
         </div>
       </section>
 

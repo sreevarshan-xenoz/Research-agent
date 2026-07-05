@@ -2884,3 +2884,55 @@ button:active {
   background: rgba(16, 185, 129, 0.15);
   border-color: rgba(16, 185, 129, 0.3);
 }
+
+
+/* ── P27: Submission Pipeline ───────────────────────────────── */
+
+.submission-panel {
+  display: none !important;
+}
+
+.submission-panel.active {
+  display: flex !important;
+  animation: fadeIn 0.3s ease;
+}
+
+.submission-panel .result-card {
+  transition: all 0.3s ease;
+}
+
+.submission-panel .result-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+#submissionExportOptions button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#submissionExportOptions button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+#submissionExportOptions button:active {
+  transform: translateY(0);
+}
+
+#submissionIssuesList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+#submissionIssuesList > div {
+  animation: fadeIn 0.2s ease;
+}
+
+@media (max-width: 768px) {
+  .submission-panel > div:first-child {
+    flex-direction: column;
+  }
+}

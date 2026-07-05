@@ -321,6 +321,7 @@ function switchWorkbenchTab(tab) {
   if (proposalTabBtn) proposalTabBtn.classList.toggle("active", tab === "proposal");
   if (trendsTabBtn) trendsTabBtn.classList.toggle("active", tab === "trends");
   if (reproducibilityTabBtn) reproducibilityTabBtn.classList.toggle("active", tab === "reproducibility");
+  if (submissionTabBtn) submissionTabBtn.classList.toggle("active", tab === "submission");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
@@ -331,6 +332,7 @@ function switchWorkbenchTab(tab) {
   const proposalPanel = document.querySelector(".proposal-panel");
   const trendsPanel = document.querySelector(".trends-panel");
   const reproducibilityPanel = document.querySelector(".reproducibility-panel");
+  const submissionPanel = document.querySelector(".submission-panel");
   const kgPanel = document.querySelector(".kg-panel");
 
   if (docPanel) docPanel.classList.toggle("active", tab === "doc");
@@ -342,6 +344,7 @@ function switchWorkbenchTab(tab) {
   if (proposalPanel) proposalPanel.classList.toggle("active", tab === "proposal");
   if (trendsPanel) trendsPanel.classList.toggle("active", tab === "trends");
   if (reproducibilityPanel) reproducibilityPanel.classList.toggle("active", tab === "reproducibility");
+  if (submissionPanel) submissionPanel.classList.toggle("active", tab === "submission");
   if (kgPanel) kgPanel.classList.toggle("active", tab === "kg");
 
   if (tab === "citation") {
@@ -356,6 +359,8 @@ function switchWorkbenchTab(tab) {
     loadReproducibilityData();
   } else if (tab === "kg") {
     loadKgExplorer();
+  } else if (tab === "submission") {
+    loadSubmissionPipeline();
   }
 }
 
@@ -1041,9 +1046,11 @@ datasetsTabBtn?.addEventListener("click", () => switchWorkbenchTab("datasets"));
 proposalTabBtn?.addEventListener("click", () => switchWorkbenchTab("proposal"));
 trendsTabBtn?.addEventListener("click", () => switchWorkbenchTab("trends"));
 const kgTabBtn = document.getElementById("kgTabBtn");
+const submissionTabBtn = document.getElementById("submissionTabBtn");
 
 reproducibilityTabBtn?.addEventListener("click", () => switchWorkbenchTab("reproducibility"));
 kgTabBtn?.addEventListener("click", () => switchWorkbenchTab("kg"));
+submissionTabBtn?.addEventListener("click", () => switchWorkbenchTab("submission"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
 
 
@@ -2794,3 +2801,179 @@ watchdogCheckNowBtn?.addEventListener("click", async () => {
     setTimeout(() => loadWatchdogDigests(), 3000);
   }
 });
+
+
+// ── P27: Submission Pipeline Functions ──────────────────────────────────
+
+const submissionStatusText = document.getElementById("submissionStatusText");
+const submissionResults = document.getElementById("submissionResults");
+const submissionScore = document.getElementById("submissionScore");
+const submissionErrors = document.getElementById("submissionErrors");
+const submissionWarnings = document.getElementById("submissionWarnings");
+const submissionInfoCount = document.getElementById("submissionInfoCount");
+const submissionIssuesList = document.getElementById("submissionIssuesList");
+const submissionExportOptions = document.getElementById("submissionExportOptions");
+const submissionFormatSelect = document.getElementById("submissionFormatSelect");
+const submissionEmptyState = document.getElementById("submissionEmptyState");
+const submissionRunCheckBtn = document.getElementById("submissionRunCheckBtn");
+const submissionRunPipelineBtn = document.getElementById("submissionRunPipelineBtn");
+
+async function loadSubmissionPipeline() {
+  if (!currentRunId) {
+    if (submissionEmptyState) submissionEmptyState.style.display = "flex";
+    if (submissionResults) submissionResults.classList.add("hidden");
+    if (submissionStatusText) submissionStatusText.textContent = "No active run loaded yet.";
+    return;
+  }
+
+  if (submissionEmptyState) submissionEmptyState.style.display = "none";
+  if (submissionStatusText) submissionStatusText.textContent = "Loading paper data...";
+  if (submissionResults) submissionResults.classList.remove("hidden");
+
+  try {
+    var tex = localStorage.getItem("run_latex_" + currentRunId) || "";
+    if (!tex) {
+      if (submissionStatusText) submissionStatusText.textContent = "No LaTeX content available. Generate a paper first.";
+      return;
+    }
+
+    if (submissionStatusText) submissionStatusText.textContent = "Running checks...";
+    var format = submissionFormatSelect ? submissionFormatSelect.value : "ieee";
+
+    var checkRes = await fetch("/api/submission/style-check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
+      body: JSON.stringify({ tex: tex, format: format })
+    });
+
+    if (!checkRes.ok) throw new Error("Style check failed");
+    var checkData = await checkRes.json();
+
+    var scorePct = Math.round((checkData.score || 0) * 100);
+    if (submissionScore) submissionScore.textContent = scorePct + "%";
+    if (submissionScore) submissionScore.style.color = scorePct >= 80 ? "#34d399" : scorePct >= 50 ? "#f59e0b" : "#f43f5e";
+    if (submissionErrors) submissionErrors.textContent = checkData.errors || 0;
+    if (submissionWarnings) submissionWarnings.textContent = checkData.warnings || 0;
+    if (submissionInfoCount) submissionInfoCount.textContent = checkData.info || 0;
+
+    if (submissionStatusText) submissionStatusText.textContent = checkData.passed ? "All checks passed!" : checkData.errors + " errors found";
+
+    var issues = checkData.issues || [];
+    if (submissionIssuesList) {
+      if (issues.length === 0) {
+        submissionIssuesList.innerHTML = '<div style="padding: 12px; text-align: center; color: #34d399;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> All checks passed!</div>';
+      } else {
+        submissionIssuesList.innerHTML = issues.map(function(i) {
+          var sev = i.severity || "info";
+          var icon = sev === "error" ? "\u274c" : sev === "warning" ? "\u26a0\ufe0f" : "\u2139\ufe0f";
+          var color = sev === "error" ? "#f43f5e" : sev === "warning" ? "#f59e0b" : "#71717a";
+          return (
+            '<div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); border-radius: var(--radius-sm); font-size: 0.78rem;">' +
+              '<span style="font-size: 0.85rem; line-height: 1.4;">' + icon + "</span>" +
+              '<div style="flex: 1; min-width: 0;">' +
+                '<div style="font-weight: 600; color: ' + color + '; margin-bottom: 2px;">' + i.message + "</div>" +
+                (i.detail ? '<div style="opacity: 0.6; font-size: 0.7rem;">' + i.detail + "</div>" : "") +
+              "</div>" +
+            "</div>"
+          );
+        }).join("");
+      }
+    }
+
+    if (submissionExportOptions) {
+      submissionExportOptions.innerHTML =
+        '<button id="submissionDownloadTexBtn" class="btn-icon" type="button" style="padding: 8px 14px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm);">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Download .tex' +
+        '</button>' +
+        '<button id="submissionDownloadZipBtn" class="btn-icon" type="button" style="margin-left: 6px; padding: 8px 14px; border: 1px solid var(--glass-border); border-radius: var(--radius-sm);">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Download ZIP' +
+        '</button>';
+
+      setTimeout(function() {
+        var downloadBtn = document.getElementById("submissionDownloadTexBtn");
+        if (downloadBtn) {
+          downloadBtn.addEventListener("click", function() {
+            var blob = new Blob([tex], { type: "application/x-latex" });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "paper-" + format + ".tex";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          });
+        }
+        var zipBtn = document.getElementById("submissionDownloadZipBtn");
+        if (zipBtn) {
+          zipBtn.addEventListener("click", async function() {
+            try {
+              var zipRes = await fetch("/api/submission/export-zip/" + currentRunId + "?format=" + format, {
+                headers: { "Authorization": "Bearer " + authToken }
+              });
+              if (!zipRes.ok) throw new Error("ZIP export failed");
+              var blob = await zipRes.blob();
+              var url = URL.createObjectURL(blob);
+              var a = document.createElement("a");
+              a.href = url;
+              a.download = "paper-" + format + ".zip";
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error("ZIP download failed:", err);
+            }
+          });
+        }
+      }, 100);
+    }
+
+  } catch (err) {
+    console.error("Submission pipeline error:", err);
+    if (submissionStatusText) submissionStatusText.textContent = "Error: " + err.message;
+  }
+}
+
+// Format change handler
+document.addEventListener("change", function(e) {
+  if (e.target && e.target.id === "submissionFormatSelect") {
+    var resultsVisible = document.getElementById("submissionResults");
+    if (resultsVisible && !resultsVisible.classList.contains("hidden")) {
+      loadSubmissionPipeline();
+    }
+  }
+});
+
+// Run check button
+if (submissionRunCheckBtn) submissionRunCheckBtn.addEventListener("click", loadSubmissionPipeline);
+
+// Full pipeline button
+if (submissionRunPipelineBtn) {
+  submissionRunPipelineBtn.addEventListener("click", async function() {
+    if (!currentRunId) return;
+    var tex = localStorage.getItem("run_latex_" + currentRunId);
+    if (!tex) return;
+    var btn = submissionRunPipelineBtn;
+    btn.disabled = true;
+    btn.textContent = "Running...";
+    try {
+      var format = submissionFormatSelect ? submissionFormatSelect.value : "ieee";
+      var res = await fetch("/api/submission/pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
+        body: JSON.stringify({ tex: tex, format: format, check_only: false })
+      });
+      if (res.ok) {
+        loadSubmissionPipeline();
+      }
+    } catch (err) {
+      console.error("Pipeline error:", err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Full Pipeline";
+    }
+  });
+}
+
+// ── End of Submission Pipeline ───────────────────────────────────────────
