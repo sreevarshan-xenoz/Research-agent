@@ -95,14 +95,9 @@
           color: this.userColor,
         });
 
-        // Register cursor module for Quill
-        try {
-          const QuillCursors = window.QuillCursors;
-          if (QuillCursors && !this.quill.getModule("cursors")) {
-            this.quill.addModule("cursors", new QuillCursors(this.quill));
-          }
-        } catch (e) {
-          // Cursor module optional
+        // Cursor module is already registered in app.js before Quill creation
+        if (this.quill.getModule && !this.quill.getModule("cursors")) {
+          console.warn("[Collab] Cursors module not available; cursor presence disabled");
         }
 
         this.binding = new QuillBinding(this.ytext, this.quill, this.awareness);
@@ -195,13 +190,21 @@
         document.head.appendChild(s);
       }
 
-      // Finally QuillCursors (non-critical)
+      // QuillCursors is loaded via index.html CDN (before app.js).
+      // Try dynamic load only if not already available (e.g. offline).
       function loadCursors() {
-        if (window.QuillCursors) { self._setStatus("connecting", "Libraries loaded, connecting..."); self.connect(); return; }
+        if (window.QuillCursors) { 
+          // Fallback register if app.js didn't do it yet
+          if (window.Quill && window.Quill.register) {
+            try { window.Quill.register('modules/cursors', window.QuillCursors); } catch (e) {}
+          }
+          self._setStatus("connecting", "Libraries loaded, connecting..."); 
+          self.connect(); 
+          return; 
+        }
         var s = document.createElement("script");
         s.src = "https://cdn.jsdelivr.net/npm/quill-cursors@4.0.3/dist/quill-cursors.min.js";
         s.onload = function () {
-          // Register cursor module on Quill before connect
           try {
             if (window.Quill && window.QuillCursors) {
               window.Quill.register('modules/cursors', window.QuillCursors);

@@ -166,6 +166,14 @@ const authSubmitBtnEl = document.getElementById("authSubmitBtn");
 const authToggleBtnEl = document.getElementById("authToggleBtn");
 const authToggleTextEl = document.getElementById("authToggleText");
 
+// Register QuillCursors module before Quill creation (for cursor presence)
+if (typeof Quill !== "undefined" && typeof QuillCursors !== "undefined") {
+  try {
+    Quill.register("modules/cursors", QuillCursors);
+  } catch (e) {
+    console.warn("Failed to register QuillCursors:", e);
+  }
+}
 // Initialize Quill Editor (if element exists)
 let quill = null;
 try {
@@ -173,6 +181,7 @@ try {
     quill = new Quill("#docEditor", {
       theme: "snow",
       modules: {
+        cursors: true,
         toolbar: [
           [{ header: [1, 2, 3, false] }],
           ["bold", "italic", "underline", "strike"],
