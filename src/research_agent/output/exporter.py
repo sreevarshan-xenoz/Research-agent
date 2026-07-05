@@ -69,6 +69,8 @@ def export_run_artifacts(
     future_research_agenda: str | None = None,
     comparison_table: str | None = None,
     peer_review_report: str | None = None,
+    peer_reviews: list[dict[str, object]] | None = None,
+    peer_review_meta: dict[str, object] | None = None,
     guard_report: str | None = None,
     math_verification_report: str | None = None,
     knowledge_graph: dict[str, Any] | None = None,
@@ -92,6 +94,16 @@ def export_run_artifacts(
         (run_dir / "comparison_table.tex").write_text(comparison_table, encoding="utf-8")
     if peer_review_report:
         (run_dir / "peer_review.md").write_text(peer_review_report, encoding="utf-8")
+    if peer_reviews:
+        (run_dir / "peer_reviews.json").write_text(
+            json.dumps(peer_reviews, indent=2, ensure_ascii=True),
+            encoding="utf-8",
+        )
+    if peer_review_meta:
+        (run_dir / "peer_review_meta.json").write_text(
+            json.dumps(peer_review_meta, indent=2, ensure_ascii=True),
+            encoding="utf-8",
+        )
     if guard_report:
         (run_dir / "guard_report.md").write_text(guard_report, encoding="utf-8")
     if math_verification_report:
