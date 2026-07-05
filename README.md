@@ -1,5 +1,7 @@
 # Research Agent
 
+[![CI](https://github.com/sreevarshan-xenoz/Research-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/sreevarshan-xenoz/Research-agent/actions)
+
 API-first, subagent-driven research system that performs iterative topic research and exports grounded LaTeX source packages.
 
 Current implementation is a working v1 pipeline with:
