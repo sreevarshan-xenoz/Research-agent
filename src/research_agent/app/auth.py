@@ -54,7 +54,8 @@ class Base(DeclarativeBase):
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
-    pass
+    __tablename__ = "user"
+    role: str = "viewer"  # P18: viewer | editor | admin
 
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
