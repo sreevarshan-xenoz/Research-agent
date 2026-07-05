@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-from research_agent.models import agenerate_json
+from research_agent.models import agenerate_json, run_json_ensemble
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 from research_agent.output.latex.renderer import render_main_tex, build_bibtex, escape_latex
@@ -42,11 +42,32 @@ async def composer_node(state: GraphState) -> dict:
         "4. Output exactly one JSON object with these keys: 'title', 'abstract', 'body' (LaTeX content without preamble).\n"
     )
 
-    composed_json = await agenerate_json(
-        role="orchestrator",
-        prompt=prompt,
-        temperature=0.2
-    )
+    # P31: Multi-Model Ensemble Voting for composition
+    from research_agent.config import load_settings
+    _settings = load_settings()
+    ensemble_enabled = _settings.ensemble.enabled and "composer" in _settings.ensemble.task_overrides
+
+    composed_json = None
+    if ensemble_enabled:
+        ensemble_result = await run_json_ensemble(
+            task_type="composer",
+            prompt=prompt,
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        if ensemble_result.num_success >= 2 and ensemble_result.aggregated_json:
+            composed_json = ensemble_result.aggregated_json
+            run_warnings.append(
+                f"Composer ensemble: {ensemble_result.num_success}/{ensemble_result.num_models} "
+                f"models, consensus={ensemble_result.consensus_score:.2f}"
+            )
+
+    if composed_json is None:
+        composed_json = await agenerate_json(
+            role="orchestrator",
+            prompt=prompt,
+            temperature=0.2
+        )
 
     if not composed_json or not isinstance(composed_json, dict):
         # Fallback

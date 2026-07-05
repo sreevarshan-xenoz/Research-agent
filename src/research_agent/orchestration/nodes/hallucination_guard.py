@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from research_agent.models import agenerate_text
+from research_agent.models import agenerate_text, run_ensemble
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
 
@@ -36,12 +36,29 @@ async def hallucination_guard_node(state: GraphState) -> dict:
         f"{context}"
     )
 
-    guard_report = await agenerate_text(
-        role="orchestrator",
-        prompt=prompt,
-        temperature=0.2,
-        max_tokens=1000
-    )
+    # P31: Multi-Model Ensemble Voting for hallucination guard
+    from research_agent.config import load_settings
+    _settings = load_settings()
+    ensemble_enabled = _settings.ensemble.enabled and "hallucination_guard" in _settings.ensemble.task_overrides
+
+    guard_report = None
+    if ensemble_enabled:
+        ensemble_result = await run_ensemble(
+            task_type="hallucination_guard",
+            prompt=prompt,
+            temperature=0.2,
+            max_tokens=1000,
+        )
+        if ensemble_result.num_success >= 2:
+            guard_report = ensemble_result.aggregated_text
+
+    if guard_report is None:
+        guard_report = await agenerate_text(
+            role="orchestrator",
+            prompt=prompt,
+            temperature=0.2,
+            max_tokens=1000
+        )
 
     # Append to run warnings if hallucinations found
     run_warnings = state.get("run_warnings", [])

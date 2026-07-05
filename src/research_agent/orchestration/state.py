@@ -49,6 +49,12 @@ class GraphState(TypedDict):
     guard_report: str | None
     math_verification_report: str | None
     peer_review_report: str | None
+    # P22: Multi-modal analysis results
+    multi_modal_results: list[dict[str, Any]]
+    # P37: Multi-persona peer review with confidence scoring
+    peer_reviews: list[dict[str, Any]]  # Individual persona reviews as dicts
+    peer_review_meta: dict[str, Any] | None  # Aggregated meta-review
+    peer_review_personas: list[str]  # Personas used
     knowledge_graph: dict[str, Any] | None
     citation_graph_data: dict[str, Any] | None
     bias_report: str | None
@@ -113,6 +119,12 @@ class WorkflowState:
     guard_report: Optional[str] = None
     math_verification_report: Optional[str] = None
     peer_review_report: Optional[str] = None
+    # P22: Multi-modal analysis results
+    multi_modal_results: List[Dict[str, Any]] = field(default_factory=list)
+    # P37: Multi-persona peer review with confidence scoring
+    peer_reviews: List[Dict[str, Any]] = field(default_factory=list)
+    peer_review_meta: Optional[Dict[str, Any]] = None
+    peer_review_personas: List[str] = field(default_factory=list)
     knowledge_graph: Optional[Dict[str, Any]] = None
     citation_graph_data: Optional[Dict[str, Any]] = None
     bias_report: Optional[str] = None
@@ -177,6 +189,9 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "guard_report": state.guard_report,
         "math_verification_report": state.math_verification_report,
         "peer_review_report": state.peer_review_report,
+        "peer_reviews": state.peer_reviews,
+        "peer_review_meta": state.peer_review_meta,
+        "peer_review_personas": state.peer_review_personas,
         "knowledge_graph": state.knowledge_graph,
         "citation_graph_data": state.citation_graph_data,
         "bias_report": state.bias_report,
@@ -191,6 +206,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "empirical_claims": state.empirical_claims,
         "code_verification_items": state.code_verification_items,
         "code_reproducibility_report": state.code_reproducibility_report,
+        "multi_modal_results": state.multi_modal_results,
     }
 
 
@@ -240,6 +256,9 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         guard_report=state.get("guard_report"),
         math_verification_report=state.get("math_verification_report"),
         peer_review_report=state.get("peer_review_report"),
+        peer_reviews=list(state.get("peer_reviews", [])),
+        peer_review_meta=state.get("peer_review_meta"),
+        peer_review_personas=list(state.get("peer_review_personas", [])),
         knowledge_graph=state.get("knowledge_graph"),
         citation_graph_data=state.get("citation_graph_data"),
         bias_report=state.get("bias_report"),
@@ -254,4 +273,5 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         empirical_claims=state.get("empirical_claims", []),
         code_verification_items=state.get("code_verification_items", []),
         code_reproducibility_report=state.get("code_reproducibility_report"),
+        multi_modal_results=state.get("multi_modal_results", []),
     )
