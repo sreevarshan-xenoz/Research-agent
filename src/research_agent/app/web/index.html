@@ -272,6 +272,49 @@
         <div class="doc-progress-bar" id="docProgressBar">
           <div class="doc-progress-fill"></div>
         </div>
+
+          <div class="collab-bar">
+            <span id="collabIndicator" class="collab-indicator">Offline</span>
+            <span id="collabStatus" class="collab-status disconnected">Not connected</span>
+            <div class="collab-lock-controls">
+              <select id="collabSectionSelect">
+                <option value="general">General</option>
+                <option value="introduction">Introduction</option>
+                <option value="background">Background</option>
+                <option value="methodology">Methodology</option>
+                <option value="results">Results</option>
+                <option value="discussion">Discussion</option>
+                <option value="conclusion">Conclusion</option>
+              </select>
+              <button id="collabLockBtn" class="collab-lock-btn" type="button">Lock Section</button>
+            </div>
+            <button id="collabCreateSnapshotBtn" class="collab-create-snapshot-btn" type="button">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Snapshot
+            </button>
+          </div>
+          <div id="collabCommentsPanel" class="collab-comments-panel">
+            <div class="collab-comments-header">
+              <h4>Comments</h4>
+              <span class="small muted" id="collabCommentCount">0</span>
+            </div>
+            <div id="collabCommentsList" class="collab-comments-list">
+              <p class="small muted">No comments yet.</p>
+            </div>
+            <div class="collab-comment-input-row">
+              <input id="collabCommentInput" type="text" placeholder="Add a comment..." />
+              <button id="collabCommentSubmit" type="button">Send</button>
+            </div>
+          </div>
+          <div id="collabVersionPanel" class="collab-version-panel">
+            <div class="collab-version-header">
+              <h4>Version History</h4>
+            </div>
+            <div id="collabVersionList" class="collab-version-list">
+              <p class="small muted">No snapshots yet.</p>
+            </div>
+          </div>
+
         <div id="editorToolbar"></div>
         <div id="docEditor" class="doc-editor"></div>
         <div class="doc-actions">
@@ -821,5 +864,6 @@ Try asking something like "Find recent papers on transformer architectures" or "
   <script src="/static/app.js?v=8" defer></script>
   <script src="/static/repro_enhancements.js?v=1" defer></script>
   <script src="/static/onboarding_guide.js?v=1" defer></script>
+  <script src="/static/collaborative-editor.js?v=1" defer></script>
 </body>
 </html>

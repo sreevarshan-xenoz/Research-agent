@@ -215,12 +215,18 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ## Phase: Human-Centric Collaboration & UX
 
-### P25 — Collaborative Real-Time Co-Editing
-- [ ] **CRDT-based co-editing** via WebSocket (Yjs)
-- [ ] **Per-section locking** and conflict resolution
-- [ ] **Comment threads** on paper sections
-- [ ] **Cursor presence**: see who's editing what in real-time
-- [ ] **Version history** with diff viewer and rollback
+### ✅ P25 — Collaborative Real-Time Co-Editing
+**Completed July 2026.** Full CRDT-based real-time co-editing using Yjs with y-py Python backend, section locking, comment threads, cursor presence, and version history with snapshots.
+
+**Key deliverables:**
+- **Yjs WebSocket server** (`yjs_server.py`): Python-based Yjs sync protocol handler using `y-py` bindings. Manages per-document rooms, sync step1/step2 handshake, update broadcasting, awareness relay, and file-system persistence for document recovery
+- **Section locking API** (`collab_routes.py`): REST endpoints for acquiring/releasing per-section locks with 5-minute TTL, conflict detection, and multi-user exclusion
+- **Comment threads API**: Add, list, resolve, and delete comments per section with reply support and persistence
+- **Version history API**: Create named snapshots, list history, view snapshot content, rollback to any snapshot, and line-based diff viewer
+- **Frontend collaborative editor** (`collaborative-editor.js`): IIFE module integrating Yjs with Quill.js via y-quill binding, lazy-loads Yjs/y-websocket/y-quill/QuillCursors from CDN, provides cursor presence awareness, section lock UI controls, comment input panel, and snapshot/rollback controls
+- **Web UI integration**: Collab status bar in Document Editor with live user counter, section dropdown + lock button, comments panel, version history panel, and snapshot creation button
+- **CSS polish**: Status indicators (connected/connecting/locked/error), comment cards with resolve actions, version history cards with rollback buttons
+- **Dependency**: Added `y-py>=0.6.0` to pyproject.toml
 
 **Estimated effort:** 5-6 sprints | **Deps:** WebSocket infra exists
 

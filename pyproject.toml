@@ -41,7 +41,11 @@ dependencies = [
   "opentelemetry-sdk>=1.27.0",
   "opentelemetry-exporter-otlp>=1.27.0",
   "sentry-sdk>=2.0.0",
-  "python-json-logger>=2.0.0"
+  "python-json-logger>=2.0.0",
+  "cryptography>=42.0.0",
+  "pdfplumber>=0.11.0",
+  "networkx>=3.0",
+  "y-py>=0.6.0"
 ]
 
 [project.optional-dependencies]

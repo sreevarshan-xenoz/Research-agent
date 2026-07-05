@@ -40,6 +40,7 @@ from research_agent.app.security import get_user_role, set_user_role, is_admin
 from research_agent.app.audit import AuditMiddleware, get_audit_store
 from research_agent.app.rate_limit import RateLimitMiddleware, start_rate_limit_cleanup
 from research_agent.app.sso import build_sso_router
+from research_agent.app.collab_routes import router as collab_router
 from research_agent.config import load_settings, validate_insecure_defaults
 from research_agent.models.llm_client import _resolve_api_key
 from research_agent.output.grant_proposal import generate_grant_proposal
@@ -329,6 +330,8 @@ def create_app(
     # P18: SSO/OAuth routes
     sso_router = build_sso_router()
     app.include_router(sso_router)
+    # P25: Collaborative editing routes
+    app.include_router(collab_router)
 
     tool_registry = registry if registry is not None else build_tool_registry(settings)
 
