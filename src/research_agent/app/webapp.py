@@ -1896,7 +1896,7 @@ def create_app(
         except Exception as exc:
             return {"results": [], "count": 0, "error": str(exc)}
 
-@app.get("/api/runs/{run_id}/citation-graph")
+    @app.get("/api/runs/{run_id}/citation-graph")
     async def get_citation_graph(
         run_id: str,
         user: User = Depends(current_active_user)
