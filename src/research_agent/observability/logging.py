@@ -229,20 +229,25 @@ def reset_node_timings() -> None:
 
 
 def wrap_node_fn(node_name: str, fn):
-    """Wrap a sync or async graph node function with NodeTimer timing.
+    """Wrap a sync or async graph node function with NodeTimer timing
+    AND Prometheus metrics recording.
 
     The wrapper automatically:
     - Captures execution duration via NodeTimer
-    - Records timing via record_node_timing()
+    - Records timing via record_node_timing() into the in-memory diagnostics store
+    - Records Prometheus node_duration_seconds histogram (observe_node_duration)
+    - Records Prometheus node_errors_total on exceptions (count_node_error)
     - Extracts trace_id from state["run_id"] if available
 
     Args:
-        node_name: Logical graph node name (used in diagnostics)
+        node_name: Logical graph node name (used in diagnostics and Prometheus labels)
         fn: The target node function (sync or async)
 
     Returns:
         A wrapped function with the same signature as fn.
     """
+    from research_agent.observability.metrics import observe_node_duration, count_node_error
+
     if asyncio.iscoroutinefunction(fn):
         async def async_wrapper(state):
             trace_id = state.get("run_id", "") if isinstance(state, dict) else ""
@@ -250,9 +255,13 @@ def wrap_node_fn(node_name: str, fn):
             timer.__enter__()
             try:
                 result = await fn(state)
+            except Exception:
+                count_node_error(node_name, severity="fatal")
+                raise
             finally:
                 timer.__exit__(None, None, None)
                 await record_node_timing(node_name, timer.duration_ms)
+                observe_node_duration(node_name, timer.duration_ms / 1000.0)
             return result
 
         async_wrapper.__name__ = fn.__name__
@@ -266,9 +275,13 @@ def wrap_node_fn(node_name: str, fn):
             timer.__enter__()
             try:
                 result = fn(state)
+            except Exception:
+                count_node_error(node_name, severity="fatal")
+                raise
             finally:
                 timer.__exit__(None, None, None)
                 _node_timings.setdefault(node_name, []).append(timer.duration_ms)
+                observe_node_duration(node_name, timer.duration_ms / 1000.0)
             return result
 
         sync_wrapper.__name__ = fn.__name__
