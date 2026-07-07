@@ -1,7 +1,7 @@
 # Research Agent v2 — Strategic Roadmap
 
-> **Last updated:** July 4, 2026
-> **Status:** Active development — 30+ pipeline nodes, 8+ integrated providers, full research lifecycle automated
+> **Last updated:** July 7, 2026
+> **Status:** Active development — 45+ pipeline nodes, 8+ integrated providers, full research lifecycle automated
 > **Research sources:** STORM, GPT-Researcher, Agent Laboratory, AI-Researcher, Elicit, Scite, Consensus, NotebookLM, GraphRAG, MG²-RAG, MiA-RAG
 
 ---
@@ -51,6 +51,11 @@ The project delivers a complete research lifecycle pipeline with all features li
 | **Automated Peer Review with Confidence Scoring** | ✅ | **P37** |
 | **Multi-Model Ensemble Voting for Critical Tasks** | ✅ | **P31** |
 | **Reproducibility Dashboard with Claim Filtering** | ✅ | **P29** |
+| **Personal Research Library (Zotero/BibTeX/RIS/CSL JSON)** | ✅ | **P28** |
+| **Paper-git Version Control with Diff/Branch/PR** | ✅ | **P36** |
+| **Plugin System with Discovery and Lifecycle Hooks** | ✅ | **P19** |
+| **PWA Mobile & Offline Support** | ✅ | **P20** |
+| **Interactive Onboarding & Guided Tour** | ✅ | **P38** |
 
 ---
 
@@ -248,14 +253,18 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ---
 
-### P28 — Personal Research Library
-- [ ] **Zotero import** via CSL/BibTeX
-- [ ] **Auto-tagging** with LLM-based topic classification
-- [ ] **Smart collections** based on research themes
-- [ ] **PDF annotation viewer** with highlights and notes
-- [ ] **Reading list management** (to-read, reading, completed)
+### ✅ P28 — Personal Research Library
+**Completed July 2026.** Full personal library with Zotero/BibTeX import, LLM auto-tagging, smart collections, PDF annotations, reading list, multi-format export, and multi-select.
 
-**Estimated effort:** 4-5 sprints
+**Key deliverables:**
+- **Zotero import** via API key + CSL JSON/BibTeX/RIS file upload
+- **LLM auto-tagging** with topic classification and suggested tags
+- **Smart collections** with rule builder (field/operator/value, AND logic)
+- **PDF annotation viewer** with highlights, notes, comments, color coding
+- **Reading list management** (to-read, reading, completed, skipped) with priority and progress tracking
+- **Multi-format export**: BibTeX (.bib), RIS (.ris), CSL JSON (.json) with format selector dropdown
+- **Multi-select checkboxes**: batch select with Select All/Clear, export checked items
+- **Copy as BibTeX**: one-click clipboard copy in item detail view
 
 ---
 
@@ -310,14 +319,16 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ---
 
-### P36 — Paper-git: Version Control for Research
-- [ ] **Git-like diff** for LaTeX documents
-- [ ] **Branch/merge** for research experiments
-- [ ] **Checkpoint restore** per run/section
-- [ ] **Collaborative review workflow** (PR-style)
-- [ ] **Conflict resolution UI** for parallel edits
+### ✅ P36 — Paper-git: Version Control for Research
+**Completed July 2026.** Full version control system with snapshot timeline, branch management, PR review workflow, and diff viewer.
 
-**Estimated effort:** 3-4 sprints
+**Key deliverables:**
+- **Git-like diff** for LaTeX documents with colored hunks (additions/deletions/modifications)
+- **Branch/merge** for research experiments with snapshot selection
+- **Checkpoint restore** per run/section with timeline grouped by branch
+- **Collaborative review workflow** (PR-style): approve, request changes, merge, close, threaded comments
+- **Diff viewer**: two-snapshot selector with Compare button, file-level diff rendering
+- **Full frontend UI**: 4 sub-tabs (Timeline, Branches, Pull Requests, Diff Viewer) with inline rendering
 
 ---
 
@@ -364,37 +375,39 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 **Key deliverables:**
 - **`onboarding_guide.js`**: IIFE-wrapped self-contained module with guided tour (11 steps), contextual tooltips (22 elements), sample topics panel (6 pre-defined research topics with one-click pre-fill), and welcome overlay for first-time users
-- **Guided tour**: Step-by-step walkthrough of sidebar, pipeline tracker, workbench tabs, document editor, LaTeX source, PDF preview, research chat, modes, config panel, kanban board, and session controls. Arrow positioning (top/bottom/left/right) with viewport clamping. Step dots, prev/next/close buttons, highlight pulse animation
-- **Contextual tooltips**: 22 hover/focus tooltip definitions for all key UI elements. Smooth fade-in animation, positioned below target, auto-cleanup on hide. Injected via inline `<style>` in the self-contained script
-- **Sample topics**: 6 one-click research topics (Transformer Architectures, RL for Robotics, Diffusion Models, LLM Reasoning, NLP Trends, Graph Neural Networks). Pre-fills topic text, sets template/depth/mode, flashes send button. Collapsible panel with toggle
-- **Welcome overlay**: Full-screen backdrop with feature grid, 3 action buttons (Take the Tour / Start Exploring / Browse Sample Topics), "Don't show again" checkbox persisted to localStorage
-- **CSS**: ~250 new lines covering welcome overlay, tour tooltip (with arrow pseudo-elements), tour dots/buttons/highlights, sample topics panel/buttons
-
-**Estimated effort:** 2-3 sprints | **Frontend-only, no backend changes**
+- **Guided tour**: Step-by-step walkthrough of sidebar, pipeline tracker, workbench tabs, document editor, LaTeX source, PDF preview, research chat, modes, config panel, kanban board, and session controls
+- **Contextual tooltips**: 22 hover/focus tooltip definitions for all key UI elements
+- **Sample topics**: 6 one-click research topics with auto-fill
+- **Welcome overlay**: Full-screen backdrop with feature grid, 3 action buttons, "Don't show again" checkbox
 
 ---
 
 ## New: Plugin System & Extensibility
 
-### P19 — Plugin System
-- [ ] **Entry-point based plugin discovery** (Python namespace packages)
-- [ ] **Plugin lifecycle hooks**: `on_run_start`, `on_section_generated`, `on_run_complete`
-- [ ] **Plugin marketplace** UI for browsing/installing
-- [ ] **Sandboxed plugin execution** for safety
-- [ ] **Community plugin registry** with versioning
+### ✅ P19 — Plugin System
+**Completed July 2026.** Full plugin system with entry-point discovery, lifecycle hooks, marketplace UI, sandboxed execution, and community registry.
 
-**Estimated effort:** 3 sprints
+**Key deliverables:**
+- **Entry-point based plugin discovery** (Python namespace packages via `research_agent.plugins` entry point)
+- **Plugin lifecycle hooks**: `on_run_start`, `on_section_generated`, `on_run_complete`, `on_tool_call`
+- **Plugin marketplace** UI for browsing/installing with enabled/disabled toggle
+- **Sandboxed plugin execution** with isolated subprocess
+- **Community plugin registry** with versioning and dependency resolution
+- **Web UI**: Full plugin manager panel with list, detail view, settings form, hook listing, enable/disable toggle
 
 ---
 
-### P20 — Mobile & Offline Support
-- [ ] **PWA manifest** for installable web app
-- [ ] **Service worker** for offline caching
-- [ ] **Local-first architecture** (IndexedDB for offline state)
-- [ ] **Background sync** when connectivity restored
-- [ ] **Mobile-responsive UI** for phone/tablet
+### ✅ P20 — Mobile & Offline Support (PWA)
+**Completed July 2026.** Full PWA with manifest, service worker, offline fallback, background sync, and mobile-responsive UI.
 
-**Estimated effort:** 3-4 sprints
+**Key deliverables:**
+- **PWA manifest** (`manifest.json`): app name, SVG icons (192/512), theme color, shortcuts, display modes
+- **Service worker** (`service-worker.js`): cache-first for static/CDN, network-first for API, offline navigation fallback, background sync for library data
+- **Offline fallback page** (`offline.html`): styled dark theme with animated status dot, retry button
+- **Service worker registration**: update prompt toast with controller change auto-reload
+- **API data pre-caching**: pre-fetches library/reading list data after auth for offline use
+- **Mobile-responsive UI**: viewport meta tags, apple-mobile-web-app support
+- **Backend routes**: `/manifest.json`, `/service-worker.js`, `/offline.html` at root scope with proper headers
 
 ---
 
@@ -429,27 +442,31 @@ Sprint NOW (Complete):   P21 Deep Research Engine (iterative search + citation c
 Sprint 1-2:              P24 Code Sandbox (unique differentiator)
                            → P16 Job Queue (infrastructure)
 Sprint 3-4:              P22 Multi-Modal Analysis → P17 Observability (Complete)
-Sprint 5-6:              P23 GraphRAG → P28 Personal Library
+Sprint 5-6:              P23 GraphRAG → P28 Personal Library (Complete)
 Sprint 7-8:              P25 Co-Editing → P27 Submission Pipeline → P18 Security (Complete)
-Sprint 9+:               P26 Advanced Agentic → P34 Swarm → P19 Plugins
+Sprint 9-10:             P19 Plugin System → P20 PWA → P36 Paper-git (Complete)
+Sprint 11+:              P26 Advanced Agentic → P34 Swarm → P35 Cross-Lingual
 ```
 
 ### First-Mover Advantage Features
 
 | Rank | Feature | Differentiation | Effort |
 |------|---------|----------------|--------|
-| ⭐ | **P24 Verified Code Sandbox** | No other tool verifies paper claims by executing code | 3-4 sprints |
-| 🥇 | **P22 Multi-Modal RAG** | Figure/table/equation understanding is the next frontier | 4-5 sprints |
-| ✅ | **P21 Deep Research Engine** | ✅ Completed July 2026 — iterative query refinement + citation chaining | 3-4 sprints |
-| 🥉 | **P23 GraphRAG** | Cross-run knowledge graphs for multi-hop reasoning | 4-5 sprints |
-| 💡 | **P36 Paper-git** | Research artifact versioning is an unmet need | 3-4 sprints |
-| 🔌 | **P19 Plugin System** | Enables community contributions and marketplace | 3 sprints |
+| ⭐ | **P24 Verified Code Sandbox** | ✅ Completed — Claim verification via code execution | 3-4 sprints |
+| 🥇 | **P22 Multi-Modal RAG** | ✅ Completed — Figure/table/equation understanding | 4-5 sprints |
+| ✅ | **P21 Deep Research Engine** | ✅ Completed — Iterative query refinement + citation chaining | 3-4 sprints |
+| 🥉 | **P23 GraphRAG** | ✅ Completed — Cross-run knowledge graphs | 4-5 sprints |
+| 💡 | **P36 Paper-git** | ✅ Completed — Research artifact versioning | 3-4 sprints |
+| 🔌 | **P19 Plugin System** | ✅ Completed — Community plugin marketplace | 3 sprints |
 
 ### Quick Wins (1-2 sprints each)
 
 | Feature | Effort | Why Quick |
 |---------|--------|-----------|
-| **P29 Reproducibility Dashboard** | 2-3 sprints | Leverages existing artifact structure |
-| **P37 Peer Review with Confidence** | 2-3 sprints | Builds on existing peer review node |
-| **P38 Onboarding System** | 2-3 sprints | Frontend-only, no backend changes |
-| **P39 Research Templates** | 2-3 sprints | Template-based, no new infra
+| **P29 Reproducibility Dashboard** | ✅ Completed | 2-3 sprints |
+| **P37 Peer Review with Confidence** | ✅ Completed | 2-3 sprints |
+| **P38 Onboarding System** | ✅ Completed | 2-3 sprints |
+| **P28 Personal Library** | ✅ Completed | 4-5 sprints |
+| **P20 Mobile & Offline (PWA)** | ✅ Completed | 3-4 sprints |
+| **P39 Research Templates** | 2-3 sprints | Template-based, no new infra |
+| **P40 Research Team Management** | 3-4 sprints | Multi-user workspaces
