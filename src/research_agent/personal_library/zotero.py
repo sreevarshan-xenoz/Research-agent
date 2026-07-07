@@ -297,7 +297,6 @@ class ZoteroImporter:
 
         for match in entry_pattern.finditer(bibtex):
             try:
-                entry_type = match.group(1).lower()
                 cite_key = match.group(2).strip()
                 body = match.group(3)
 
@@ -343,7 +342,7 @@ class ZoteroImporter:
                     venue=venue,
                     url=url,
                     doi=doi,
-                    bibtex=bibtex_content_from_match(bibtex, match) if False else f"@{entry_type}{{{cite_key},...}}",
+                    bibtex=match.group(0)[:500],  # store first 500 chars of bibtex entry
                     tags=tags,
                     status=LibraryEntryStatus.IMPORTED,
                     reading_status=ReadingListStatus.TO_READ,
@@ -395,11 +394,6 @@ class ZoteroImporter:
     def close(self) -> None:
         """Close the HTTP client."""
         self._client.close()
-
-
-def bibtex_content_from_match(bibtex: str, match: re.Match) -> str:
-    """Extract the full BibTeX entry string from a match."""
-    return match.group(0)
 
 
 # ── Standalone convenience functions (used by routes.py) ────────────────────

@@ -125,10 +125,11 @@ async def delete_library_item(
     item_id: str,
     user: User = Depends(current_active_user),
 ) -> dict[str, bool]:
-    delete_annotations_for_item(item_id)
     deleted = delete_item(item_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Library item not found")
+    # Clean up any orphaned annotations
+    delete_annotations_for_item(item_id)
     return {"deleted": True}
 
 

@@ -44,6 +44,7 @@ from research_agent.app.collab_routes import router as collab_router
 from research_agent.app.submission_routes import router as submission_router
 from research_agent.app.template_routes import router as template_router
 from research_agent.personal_library.routes import router as personal_library_router
+from research_agent.paper_git.routes import router as paper_git_router
 from research_agent.config import load_settings, validate_insecure_defaults
 from research_agent.models.llm_client import _resolve_api_key
 from research_agent.output.grant_proposal import generate_grant_proposal
@@ -341,6 +342,8 @@ def create_app(
     app.include_router(template_router)
     # P28: Personal Research Library routes
     app.include_router(personal_library_router)
+    # P36: Paper-git Version Control routes
+    app.include_router(paper_git_router)
 
     tool_registry = registry if registry is not None else build_tool_registry(settings)
 
