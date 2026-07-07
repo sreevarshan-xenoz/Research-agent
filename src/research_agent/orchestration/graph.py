@@ -53,6 +53,7 @@ from research_agent.observability.checkpoints import cleanup_old_checkpoints
 from research_agent.observability.logging import ErrorSeverity, log_error, log_exception, get_node_timings, reset_trace_context, wrap_node_fn, set_trace_context
 from research_agent.observability.metrics import observe_run_duration, count_run, set_active_runs
 from research_agent.observability.structured_log import set_correlation_id, reset_correlation_id
+from research_agent.plugins.manager import get_plugin_manager
 
 
 logger = logging.getLogger(__name__)
@@ -374,6 +375,13 @@ async def run_graph(
     set_active_runs(1)
 
     try:
+        # P19: Fire plugin on_run_start hook
+        try:
+            plugin_mgr = get_plugin_manager()
+            await plugin_mgr.run_hook("on_run_start", run_id=state.run_id, topic=state.topic, template=state.template, depth=state.depth)
+        except Exception as _pe:
+            logger.warning("Plugin on_run_start hook failed: %s", _pe)
+
         compiled = build_graph(
             registry=registry,
             checkpointer=checkpointer,
@@ -395,6 +403,13 @@ async def run_graph(
         # Inspect thread state after invocation to check for breakpoints
         post_thread_state = await compiled.aget_state(config)
         ret_state = from_graph_state(result)
+
+        # P19: Fire plugin on_run_complete hook
+        try:
+            if ret_state.latex_main or ret_state.bibtex:
+                await plugin_mgr.run_hook("on_run_complete", run_id=state.run_id, latex_main=ret_state.latex_main, bibtex=ret_state.bibtex, sections=ret_state.combined_sections, citations=ret_state.citations, artifact_dir=ret_state.artifact_dir)
+        except Exception as _pe:
+            logger.warning("Plugin on_run_complete hook failed: %s", _pe)
 
         # Check if we're at a breakpoint (plan_validation)
         if post_thread_state.next and "plan_validation" in post_thread_state.next:

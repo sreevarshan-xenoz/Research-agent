@@ -421,6 +421,19 @@ class ObservabilitySettings(BaseModel):
 
 
 
+class PluginSettings(BaseModel):
+    """Configuration for the Plugin System (P19).
+
+    Controls plugin discovery, sandboxing, and lifecycle hooks.
+    """
+    enabled: bool = True
+    sandbox_enabled: bool = Field(default=True, description="Enable sandboxed execution for plugins")
+    sandbox_timeout_seconds: int = Field(default=30, ge=5, le=300, description="Max seconds per plugin hook execution")
+    auto_discover: bool = Field(default=True, description="Auto-discover plugins on startup")
+    plugin_dirs: list[str] = Field(default_factory=lambda: ["research_agent.plugins.sample_plugins"], description="Additional plugin scan directories")
+    allow_user_plugins: bool = Field(default=False, description="Allow users to install custom plugins")
+
+
 class TemplateLibrarySettings(BaseModel):
     """Configuration for Research Templates & Presets (P39).
 
@@ -463,4 +476,5 @@ class AppSettings(BaseModel):
     job_queue: JobQueueSettings = Field(default_factory=JobQueueSettings)
     ensemble: EnsembleSettings = Field(default_factory=EnsembleSettings)
     multi_modal: MultiModalSettings = Field(default_factory=MultiModalSettings)
+    plugins: PluginSettings = Field(default_factory=PluginSettings)
     template_library: TemplateLibrarySettings = Field(default_factory=TemplateLibrarySettings)
