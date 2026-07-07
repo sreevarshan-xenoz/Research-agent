@@ -46,3 +46,4 @@ spec/
 .venv_test/
 .antigravitycli/
 package-lock.json
+node_modules/

@@ -21,6 +21,12 @@ function _pgAuthPlain() {
   return { "Authorization": `Bearer ${_pgAuthToken()}` };
 }
 
+// ── Inline Status Helper (replaces alerts) ────────────────────────────
+function _pgStatus(msg) {
+  const el = document.getElementById("pgStatsText");
+  if (el) el.textContent = msg;
+}
+
 // ── Entry Point ─────────────────────────────────────────────────────────────
 async function loadPaperGitBrowser() {
   const panel = document.querySelector("#paperGitWorkbench");
@@ -136,9 +142,9 @@ async function _pgRestoreSnapshot(snapId) {
       method: "POST",
       headers: _pgAuthPlain()
     });
-    alert("Restored successfully!");
+    _pgStatus("Restored successfully!");
   } catch (e) {
-    alert("Restore failed: " + e.message);
+    const _pgStatusEl = document.getElementById("pgStatsText"); if (_pgStatusEl) _pgStatusEl.textContent = "Restore failed: " + e.message;
   }
 }
 
@@ -218,7 +224,7 @@ async function _pgCreateBranch() {
   const name = prompt("Enter new branch name:");
   if (!name) return;
   const fromSnap = _pgSnapshots[0];
-  if (!fromSnap) { alert("No snapshots to branch from. Create a snapshot first."); return; }
+  if (!fromSnap) { _pgStatus("No snapshots to branch from. Create a snapshot first."); return; }
   try {
     await fetch(`/api/paper-git/branches?name=${encodeURIComponent(name)}&from_snapshot_id=${fromSnap.id}`, {
       method: "POST",
@@ -226,11 +232,11 @@ async function _pgCreateBranch() {
       body: "{}"
     });
     await Promise.all([_pgLoadBranches(), _pgLoadStats()]);
-  } catch (e) { alert("Failed to create branch: " + e.message); }
+  } catch (e) { const _pgSe = document.getElementById("pgStatsText"); _pgStatus("Failed to create branch: ") + e.message; }
 }
 
 async function _pgMergeBranch() {
-  if (!_pgSelectedBranch || _pgSelectedBranch === "main") { alert("Cannot merge main into itself or no branch selected."); return; }
+  if (!_pgSelectedBranch || _pgSelectedBranch === "main") { _pgStatus("Cannot merge main into itself or no branch selected."); return; }
   const target = prompt(`Merge "${_pgSelectedBranch}" into which branch?`, "main");
   if (!target) return;
   const res = await fetch("/api/paper-git/merge", {
@@ -239,7 +245,7 @@ async function _pgMergeBranch() {
     body: JSON.stringify({ source_branch: _pgSelectedBranch, target_branch: target, author: "user", message: `Merge ${_pgSelectedBranch} into ${target}` })
   });
   const result = await res.json();
-  alert(result.message || "Merge completed");
+  const _pgSe = document.getElementById("pgStatsText"); if (_pgSe) _pgStatus(result.message || "Merge completed");
   await Promise.all([_pgLoadBranches(), _pgLoadSnapshots(), _pgLoadStats()]);
 }
 
@@ -400,7 +406,7 @@ async function _pgAddPrComment() {
     });
     input.value = "";
     _pgLoadPrComments(_pgSelectedPrId);
-  } catch (e) { alert("Failed to add comment"); }
+  } catch (e) { _pgStatus("Failed to add comment"); }
 }
 
 async function _pgApprovePr() {
@@ -426,7 +432,7 @@ async function _pgMergePr() {
   if (!confirm("Merge this pull request?")) return;
   const res = await fetch(`/api/paper-git/prs/${_pgSelectedPrId}/merge`, { method: "POST", headers: _pgAuthHeaders(), body: "{}" });
   const result = await res.json();
-  alert(result.message || "Merge completed");
+  const _pgSe = document.getElementById("pgStatsText"); if (_pgSe) _pgStatus(result.message || "Merge completed");
   _pgSelectPr(_pgSelectedPrId);
   _pgLoadPrs();
   _pgLoadSnapshots();
@@ -441,7 +447,7 @@ async function _pgClosePr() {
 }
 
 async function _pgCreatePr() {
-  if (_pgBranches.length < 2) { alert("Need at least 2 branches to create a PR."); return; }
+  if (_pgBranches.length < 2) { _pgStatus("Need at least 2 branches to create a PR."); return; }
   const source = prompt("Source branch:", _pgBranches.find(b => b.name !== "main")?.name || "");
   const target = prompt("Target branch:", "main");
   const title = prompt("PR title:");
@@ -455,7 +461,7 @@ async function _pgCreatePr() {
     _pgLoadPrs();
     _pgSwitchSubTab("prs");
     _pgLoadStats();
-  } catch (e) { alert("Failed to create PR"); }
+  } catch (e) { _pgStatus("Failed to create PR"); }
 }
 
 // ── Diff Viewer ────────────────────────────────────────────────────────────
@@ -514,15 +520,15 @@ async function _pgCompareDiff() {
 
 async function _pgCreateSnapshot() {
   const runId = prompt("Run ID to snapshot (e.g. run-abc123):");
-  if (!runId) { alert("A run ID is required to create a snapshot."); return; }
+  if (!runId) { _pgStatus("A run ID is required to create a snapshot."); return; }
   try {
     await fetch(`/api/paper-git/snapshots?run_id=${encodeURIComponent(runId)}&message=${encodeURIComponent("Manual snapshot via UI")}&author=user`, {
       method: "POST",
       headers: { "Authorization": `Bearer ${_pgAuthToken()}` },
     });
     await Promise.all([_pgLoadSnapshots(), _pgLoadStats()]);
-    alert("Snapshot created!");
-  } catch (e) { alert("Failed: " + e.message); }
+    _pgStatus("Snapshot created!");
+  } catch (e) { const _pgSe = document.getElementById("pgStatsText"); _pgStatus("Failed: ") + e.message; }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -558,7 +564,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("pgBranchMergeBtn")?.addEventListener("click", _pgMergeBranch);
   document.getElementById("pgBranchCreatePrBtn")?.addEventListener("click", _pgCreatePr);
   document.getElementById("pgBranchDeleteBtn")?.addEventListener("click", async () => {
-    if (!_pgSelectedBranch || _pgSelectedBranch === "main") { alert("Cannot delete main branch."); return; }
+    if (!_pgSelectedBranch || _pgSelectedBranch === "main") { _pgStatus("Cannot delete main branch."); return; }
     if (!confirm(`Delete branch "${_pgSelectedBranch}"?`)) return;
     await fetch(`/api/paper-git/branches/${encodeURIComponent(_pgSelectedBranch)}`, { method: "DELETE", headers: _pgAuthPlain() });
     _pgSelectedBranch = null;
