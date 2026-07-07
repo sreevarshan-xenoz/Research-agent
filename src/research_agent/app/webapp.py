@@ -36,7 +36,7 @@ from research_agent.app.auth import (
     fastapi_users,
     auth_backend,
 )
-from research_agent.app.security import get_user_role, set_user_role, is_admin
+from research_agent.app.security import set_user_role, is_admin
 from research_agent.app.audit import AuditMiddleware, get_audit_store
 from research_agent.app.rate_limit import RateLimitMiddleware, start_rate_limit_cleanup
 from research_agent.app.sso import build_sso_router
@@ -46,6 +46,7 @@ from research_agent.app.template_routes import router as template_router
 from research_agent.personal_library.routes import router as personal_library_router
 from research_agent.paper_git.routes import router as paper_git_router
 from research_agent.plugins.routes import router as plugins_router
+from research_agent.app.research_suggestions import router as research_suggestions_router, load_past_topics_for_user
 from research_agent.config import load_settings, validate_insecure_defaults
 from research_agent.models.llm_client import _resolve_api_key
 from research_agent.output.grant_proposal import generate_grant_proposal
@@ -59,7 +60,7 @@ from research_agent.observability.structured_log import configure_json_logging
 from research_agent.observability.tracing import init_tracing
 from research_agent.observability.error_tracking import init_sentry
 from research_agent.orchestration.graph import close_redis_pool, get_memory_diagnostics, get_redis_pool, run_graph
-from research_agent.orchestration.job_queue import JobPriority, JobStatus, get_job_manager
+from research_agent.orchestration.job_queue import JobStatus, get_job_manager
 from research_agent.orchestration.state import WorkflowState
 from research_agent.tools.cache import close_global_tool_cache
 from research_agent.tools.registry import build_tool_registry
@@ -288,8 +289,6 @@ def create_app(
             try:
                 from research_agent.app.auth import get_jwt_strategy, async_session_maker, UserManager, User
                 from fastapi_users.db import SQLAlchemyUserDatabase
-                from fastapi import Request as _Req
-                import uuid
                 token = auth_header[len("Bearer "):]
                 strategy = get_jwt_strategy()
                 async with async_session_maker() as _db:
@@ -347,6 +346,7 @@ def create_app(
     app.include_router(paper_git_router)
     # P19: Plugin System routes
     app.include_router(plugins_router)
+    app.include_router(research_suggestions_router)
 
     tool_registry = registry if registry is not None else build_tool_registry(settings)
 
@@ -1075,6 +1075,8 @@ def create_app(
             max_runtime_minutes=settings.runtime.max_runtime_minutes,
             max_cost_usd=settings.runtime.max_cost_usd,
             max_iterations=settings.runtime.max_iterations,
+
+            past_research_topics=load_past_topics_for_user(str(user.id)),
         )
 
         try:
@@ -1143,6 +1145,8 @@ def create_app(
                 max_runtime_minutes=settings.runtime.max_runtime_minutes,
                 max_cost_usd=settings.runtime.max_cost_usd,
                 max_iterations=settings.runtime.max_iterations,
+
+            past_research_topics=load_past_topics_for_user(str(user.id)),
             )
 
             # Queue for progress events from the running graph
@@ -1503,6 +1507,8 @@ def create_app(
         run_id = f"run-{uuid.uuid4().hex[:8]}"
 
         actual_graph_runner = graph_runner or run_graph
+
+            past_research_topics=load_past_topics_for_user(str(user.id)),
         tool_registry_local = registry if registry is not None else build_tool_registry(settings)
 
         initial_state = WorkflowState(
@@ -2637,6 +2643,8 @@ def create_app(
         depth = body.get("depth", "balanced")
         template = body.get("template", "ieee")
 
+
+            past_research_topics=load_past_topics_for_user(str(user.id)),
         run_id = f"run-{uuid.uuid4().hex[:8]}"
 
         actual_graph_runner = graph_runner or run_graph
@@ -2741,7 +2749,7 @@ def create_app(
 
         Sends a test email to verify SMTP settings are working.
         """
-        from research_agent.app.watchdog_storage import get_watchdog_storage, NotificationPrefs, InterestProfile, WatchdogDigest
+        from research_agent.app.watchdog_storage import WatchdogDigest
         import uuid
         import time
 
@@ -3319,6 +3327,8 @@ async def _execute_research_run(
         message = payload.get("message", "")
 
         # Track agent activity for the frontend's Kanban board
+
+            past_research_topics=load_past_topics_for_user(str(user.id)),
         existing = next((a for a in agent_activity if a["name"] == agent_name), None)
         if existing:
             existing["status"] = status
@@ -3396,6 +3406,10 @@ async def _execute_research_run(
                     {"section": sec, "confidence": conf, "sources": []}
                     for sec, conf in (final_state.section_confidence or {}).items()
                 ],
+                # P26: Advanced AI Research Assistant data
+                "generated_hypotheses": final_state.generated_hypotheses or [],
+                "research_strategy": final_state.research_strategy,
+                "gap_exploration": final_state.gap_exploration,
             })
             
         return True
