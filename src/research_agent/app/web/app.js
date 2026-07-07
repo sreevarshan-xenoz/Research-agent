@@ -331,6 +331,9 @@ function switchWorkbenchTab(tab) {
   if (trendsTabBtn) trendsTabBtn.classList.toggle("active", tab === "trends");
   if (reproducibilityTabBtn) reproducibilityTabBtn.classList.toggle("active", tab === "reproducibility");
   if (submissionTabBtn) submissionTabBtn.classList.toggle("active", tab === "submission");
+  if (libraryTabBtn) libraryTabBtn.classList.toggle("active", tab === "library");
+  if (paperGitTabBtn) paperGitTabBtn.classList.toggle("active", tab === "paperGit");
+  if (pluginsTabBtn) pluginsTabBtn.classList.toggle("active", tab === "plugins");
 
   const docPanel = document.querySelector(".doc-panel");
   const latexPanel = document.querySelector(".latex-panel");
@@ -355,6 +358,12 @@ function switchWorkbenchTab(tab) {
   if (reproducibilityPanel) reproducibilityPanel.classList.toggle("active", tab === "reproducibility");
   if (submissionPanel) submissionPanel.classList.toggle("active", tab === "submission");
   if (kgPanel) kgPanel.classList.toggle("active", tab === "kg");
+  const libraryPanel = document.querySelector(".library-panel");
+  if (libraryPanel) libraryPanel.classList.toggle("active", tab === "library");
+  const pgPanel = document.querySelector(".paper-git-panel");
+  if (pgPanel) pgPanel.classList.toggle("active", tab === "paperGit");
+  const pluginsPanel = document.querySelector(".plugins-panel");
+  if (pluginsPanel) pluginsPanel.classList.toggle("active", tab === "plugins");
 
   if (tab === "citation") {
     loadCitationGraph();
@@ -370,6 +379,13 @@ function switchWorkbenchTab(tab) {
     loadKgExplorer();
   } else if (tab === "submission") {
     loadSubmissionPipeline();
+  } else if (tab === "library") {
+    if (typeof loadLibraryBrowser === "function") loadLibraryBrowser();
+  }
+  } else if (tab === "paperGit") {
+    loadPaperGitBrowser();
+  } else if (tab === "plugins") {
+    if (typeof loadPluginsBrowser === "function") loadPluginsBrowser();
   }
 }
 
@@ -1056,10 +1072,16 @@ proposalTabBtn?.addEventListener("click", () => switchWorkbenchTab("proposal"));
 trendsTabBtn?.addEventListener("click", () => switchWorkbenchTab("trends"));
 const kgTabBtn = document.getElementById("kgTabBtn");
 const submissionTabBtn = document.getElementById("submissionTabBtn");
+const libraryTabBtn = document.getElementById("libraryTabBtn");
+const paperGitTabBtn = document.getElementById("paperGitTabBtn");
+const pluginsTabBtn = document.getElementById("pluginsTabBtn");
 
 reproducibilityTabBtn?.addEventListener("click", () => switchWorkbenchTab("reproducibility"));
 kgTabBtn?.addEventListener("click", () => switchWorkbenchTab("kg"));
 submissionTabBtn?.addEventListener("click", () => switchWorkbenchTab("submission"));
+libraryTabBtn?.addEventListener("click", () => switchWorkbenchTab("library"));
+  paperGitTabBtn?.addEventListener("click", () => switchWorkbenchTab("paperGit"));
+pluginsTabBtn?.addEventListener("click", () => switchWorkbenchTab("plugins"));
 copyDocBtn?.addEventListener("click", copyDocumentToClipboard);
 
 
