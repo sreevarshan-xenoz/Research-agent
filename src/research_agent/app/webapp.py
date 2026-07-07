@@ -1508,7 +1508,6 @@ def create_app(
 
         actual_graph_runner = graph_runner or run_graph
 
-            past_research_topics=load_past_topics_for_user(str(user.id)),
         tool_registry_local = registry if registry is not None else build_tool_registry(settings)
 
         initial_state = WorkflowState(
@@ -1521,6 +1520,7 @@ def create_app(
             max_runtime_minutes=settings.runtime.max_runtime_minutes,
             max_cost_usd=settings.runtime.max_cost_usd,
             max_iterations=settings.runtime.max_iterations,
+            past_research_topics=load_past_topics_for_user(str(user.id)),
         )
 
         try:
@@ -2644,7 +2644,6 @@ def create_app(
         template = body.get("template", "ieee")
 
 
-            past_research_topics=load_past_topics_for_user(str(user.id)),
         run_id = f"run-{uuid.uuid4().hex[:8]}"
 
         actual_graph_runner = graph_runner or run_graph
@@ -2660,6 +2659,7 @@ def create_app(
             max_runtime_minutes=settings.runtime.max_runtime_minutes,
             max_cost_usd=settings.runtime.max_cost_usd,
             max_iterations=1,  # Single pass for deep-dive speed
+            past_research_topics=load_past_topics_for_user(str(user.id)),
         )
 
         try:
@@ -3328,7 +3328,6 @@ async def _execute_research_run(
 
         # Track agent activity for the frontend's Kanban board
 
-            past_research_topics=load_past_topics_for_user(str(user.id)),
         existing = next((a for a in agent_activity if a["name"] == agent_name), None)
         if existing:
             existing["status"] = status
