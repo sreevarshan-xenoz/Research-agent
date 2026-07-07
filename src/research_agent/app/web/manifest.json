@@ -1,0 +1,42 @@
+{
+  "name": "Research Agent",
+  "short_name": "ResAgent",
+  "description": "Autonomous AI research assistant — generate papers, surveys, and knowledge graphs",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#8b5cf6",
+  "orientation": "any",
+  "categories": ["research", "productivity", "education"],
+  "lang": "en",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/static/pwa-icon-192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/pwa-icon-512.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "New Research",
+      "short_name": "Research",
+      "description": "Start a new research paper",
+      "url": "/?action=research"
+    },
+    {
+      "name": "Library",
+      "short_name": "Library",
+      "description": "Browse your personal research library",
+      "url": "/?action=library"
+    }
+  ]
+}
