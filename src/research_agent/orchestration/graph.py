@@ -46,6 +46,9 @@ from research_agent.orchestration.nodes import (
     dataset_discovery_node,
     grant_proposal_node,
     multi_modal_node,
+    hypothesis_generator_node,
+    strategy_recommender_node,
+    gap_exploration_node,
 )
 from research_agent.orchestration.state import GraphState, WorkflowState, from_graph_state, to_graph_state
 from research_agent.tools.base import BaseToolAdapter
@@ -134,6 +137,10 @@ async def close_redis_pool() -> None:
 
 
 def _route_after_clarifier(state: GraphState) -> str:
+    # P26: In autonomous mode, skip user clarification entirely.
+    # The intake already auto-selected the topic, so no user input is needed.
+    if state.get("autonomy_mode") == "autonomous":
+        return "planner"
     if state["needs_clarification"] and state["clarification_questions"]:
         return "await_user"
     return "planner"
@@ -254,6 +261,10 @@ def build_graph(
     graph.add_node("dataset_discovery", wrap_node_fn("dataset_discovery", dataset_discovery_node))
     graph.add_node("grant_proposal", wrap_node_fn("grant_proposal", grant_proposal_node))
     graph.add_node("multi_modal", wrap_node_fn("multi_modal", multi_modal_node))
+    # P26: Advanced AI Research Assistant nodes
+    graph.add_node("hypothesis_generator", wrap_node_fn("hypothesis_generator", hypothesis_generator_node))
+    graph.add_node("strategy_recommender", wrap_node_fn("strategy_recommender", strategy_recommender_node))
+    graph.add_node("gap_exploration", wrap_node_fn("gap_exploration", gap_exploration_node))
 
 
 
@@ -270,7 +281,9 @@ def build_graph(
     )
     graph.add_edge("await_user", END)
     graph.add_edge("planner", "plan_validation")
-    graph.add_edge("plan_validation", "worker_executor")
+    # P26: Strategy recommendation guides the worker execution direction
+    graph.add_edge("plan_validation", "strategy_recommender")
+    graph.add_edge("strategy_recommender", "worker_executor")
     graph.add_conditional_edges(
         "worker_executor",
         _route_after_worker,
@@ -303,7 +316,10 @@ def build_graph(
     graph.add_edge("knowledge_graph", "bias_detector")
     graph.add_edge("bias_detector", "future_work")
     graph.add_edge("future_work", "gap_analyzer")
-    graph.add_edge("gap_analyzer", "comparison_table")
+    # P26: Hypothesis generation and gap exploration after gap analysis
+    graph.add_edge("gap_analyzer", "hypothesis_generator")
+    graph.add_edge("hypothesis_generator", "gap_exploration")
+    graph.add_edge("gap_exploration", "comparison_table")
     graph.add_edge("comparison_table", "citation_graph")
     graph.add_edge("citation_graph", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
