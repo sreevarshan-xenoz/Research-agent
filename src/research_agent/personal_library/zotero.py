@@ -432,6 +432,204 @@ def import_from_bibtex(content: str) -> list[LibraryItem]:
     return [_entry_to_library_item(e) for e in result.entries]
 
 
+def generate_bibtex_string(item: LibraryItem) -> str:
+    """Generate a BibTeX entry string from a LibraryItem's metadata.
+
+    Uses the stored bibtex field if available, otherwise generates
+    a BibTeX entry from the item's metadata fields.
+    """
+    # Use stored bibtex if available
+    if item.bibtex and len(item.bibtex) > 20:
+        return item.bibtex
+
+    # Determine entry type based on kind
+    kind_map = {
+        "article": "article",
+        "book": "book",
+        "thesis": "phdthesis",
+        "conference": "inproceedings",
+        "report": "techreport",
+        "manual": "misc",
+    }
+    entry_type = kind_map.get(item.kind or "article", "misc")
+
+    # Build cite key
+    first_author = ""
+    if item.authors:
+        first = item.authors[0]
+        parts = first.split(", ")
+        if len(parts) == 2:
+            first_author = parts[0]
+        else:
+            last_part = first.split()[-1] if first.split() else ""
+            first_author = last_part
+    year_str = (item.year or item.published_at or "")[:4]
+    cite_key = first_author.lower() if first_author else "unknown"
+    if year_str:
+        cite_key += year_str
+    if item.doi:
+        cite_key += re.sub(r"[^a-zA-Z0-9]", "", item.doi[:8])
+    cite_key = re.sub(r"[^a-zA-Z0-9_-]", "", cite_key) or "ref"
+
+    lines = [f"@{entry_type}{{{cite_key},"]
+    _add_bibtex_field(lines, "title", item.title)
+    _add_bibtex_field(lines, "author", " and ".join(item.authors) if item.authors else "")
+    _add_bibtex_field(lines, "abstract", item.abstract)
+    _add_bibtex_field(lines, "year", year_str)
+    _add_bibtex_field(lines, "doi", item.doi)
+    _add_bibtex_field(lines, "url", item.url)
+    _add_bibtex_field(lines, "journal", item.venue if item.kind == "article" else "")
+    _add_bibtex_field(lines, "booktitle", item.venue if item.kind == "conference" else "")
+    _add_bibtex_field(lines, "publisher", item.venue if item.kind == "book" else "")
+    if item.arxiv_id:
+        _add_bibtex_field(lines, "archivePrefix", "arXiv")
+        _add_bibtex_field(lines, "eprint", item.arxiv_id)
+    if item.tags:
+        _add_bibtex_field(lines, "keywords", ", ".join(item.tags))
+    lines.append("}")
+
+    return "\n".join(lines)
+
+
+def _add_bibtex_field(lines: list[str], key: str, value: str) -> None:
+    """Add a BibTeX field line if value is non-empty."""
+    if not value or not value.strip():
+        return
+    # Escape special BibTeX characters
+    escaped = value.replace("}", "\}").replace("{", "\{")
+    escaped = escaped.replace("\&", "\\&")
+    lines.append(f"  {key} = {{{escaped}}},")
+
+
+def generate_ris_string(item: LibraryItem) -> str:
+    """Generate a RIS format entry string from a LibraryItem's metadata."""
+    lines = []
+
+    # Determine RIS type
+    type_map = {
+        "article": "JOUR",
+        "book": "BOOK",
+        "thesis": "THES",
+        "conference": "CONF",
+        "report": "RPRT",
+        "manual": "GEN",
+    }
+    ris_type = type_map.get(item.kind or "article", "JOUR")
+    lines.append(f"TY  - {ris_type}")
+
+    if item.title:
+        lines.append(f"TI  - {item.title}")
+
+    if item.authors:
+        for author in item.authors:
+            lines.append(f"AU  - {author}")
+
+    year_str = (item.year or item.published_at or "")[:4]
+    if year_str:
+        lines.append(f"PY  - {year_str}//")
+
+    if item.doi:
+        lines.append(f"DO  - {item.doi}")
+
+    if item.url:
+        lines.append(f"UR  - {item.url}")
+
+    if item.abstract:
+        lines.append(f"AB  - {item.abstract}")
+
+    if item.tags:
+        for tag in item.tags:
+            lines.append(f"KW  - {tag}")
+
+    if item.venue:
+        if ris_type == "JOUR":
+            lines.append(f"JF  - {item.venue}")
+        elif ris_type == "CONF":
+            lines.append(f"T2  - {item.venue}")
+        else:
+            lines.append(f"PB  - {item.venue}")
+
+    if item.arxiv_id:
+        lines.append(f"ID  - arXiv:{item.arxiv_id}")
+
+    lines.append("ER  - ")
+
+    return "\n".join(lines)
+
+
+def generate_csl_json_string(item: LibraryItem) -> str:
+    """Generate a CSL JSON entry string from a LibraryItem's metadata."""
+    type_map = {
+        "article": "article-journal",
+        "book": "book",
+        "thesis": "thesis",
+        "conference": "paper-conference",
+        "report": "report",
+        "manual": "article",
+    }
+    csl_type = type_map.get(item.kind or "article", "article")
+
+    csl: dict[str, Any] = {
+        "id": item.id or "",
+        "type": csl_type,
+        "title": item.title or "",
+    }
+
+    if item.authors:
+        csl["author"] = []
+        for author_str in item.authors:
+            parts = author_str.split(", ")
+            if len(parts) == 2:
+                csl["author"].append({
+                    "family": parts[0],
+                    "given": parts[1],
+                })
+            else:
+                name_parts = author_str.split()
+                if len(name_parts) >= 2:
+                    csl["author"].append({
+                        "family": name_parts[-1],
+                        "given": " ".join(name_parts[:-1]),
+                    })
+                else:
+                    csl["author"].append({"literal": author_str})
+
+    year_str = (item.year or item.published_at or "")[:4]
+    if year_str:
+        csl["issued"] = {"date-parts": [[int(year_str)]]}
+
+    if item.doi:
+        csl["DOI"] = item.doi
+
+    if item.url:
+        csl["URL"] = item.url
+
+    if item.abstract:
+        csl["abstract"] = item.abstract
+
+    if item.venue:
+        if csl_type in ("article-journal", "article-magazine"):
+            csl["container-title"] = item.venue
+        elif csl_type == "paper-conference":
+            csl["container-title"] = item.venue
+        elif csl_type == "book":
+            csl["publisher"] = item.venue
+        else:
+            csl["publisher"] = item.venue
+
+    if item.tags:
+        csl["categories"] = item.tags
+
+    if item.notes:
+        csl["note"] = item.notes
+
+    if item.arxiv_id:
+        csl["archive"] = "arXiv"
+        csl["archive_location"] = item.arxiv_id
+
+    return json.dumps(csl, indent=2, ensure_ascii=False)
+
+
 def import_from_zotero_json(content: str) -> list[LibraryItem]:
     """Parse a Zotero CSL JSON string and return a list of LibraryItem objects."""
     try:
