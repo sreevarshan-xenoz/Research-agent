@@ -1824,6 +1824,36 @@ def create_app(
             return index_file.read_text(encoding="utf-8")
         return "<h1>Research Agent Web API</h1><p>Static files not found.</p>"
 
+    # P20: PWA Manifest - serve at root scope for browsers
+    @app.get("/manifest.json", response_class=FileResponse)
+    async def pwa_manifest():
+        manifest_path = Path(static_dir) / "manifest.json"
+        if manifest_path.exists():
+            return FileResponse(manifest_path, media_type="application/manifest+json")
+        raise HTTPException(status_code=404, detail="Manifest not found")
+
+    @app.get("/service-worker.js")
+    async def service_worker():
+        sw_path = Path(static_dir) / "service-worker.js"
+        if sw_path.exists():
+            from fastapi.responses import PlainTextResponse
+            return PlainTextResponse(
+                sw_path.read_text(encoding="utf-8"),
+                media_type="application/javascript",
+                headers={
+                    "Service-Worker-Allowed": "/",
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                },
+            )
+        raise HTTPException(status_code=404, detail="Service Worker not found")
+
+    @app.get("/offline.html", response_class=HTMLResponse)
+    async def offline_page():
+        offline_path = Path(static_dir) / "offline.html"
+        if offline_path.exists():
+            return offline_path.read_text(encoding="utf-8")
+        return "<h1>Offline</h1><p>You are offline.</p>"
+
     if Path(static_dir).exists():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
         app.mount("/web", StaticFiles(directory=static_dir), name="web")
