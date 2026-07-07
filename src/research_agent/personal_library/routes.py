@@ -57,6 +57,7 @@ from research_agent.personal_library.zotero import (
     import_from_bibtex,
     import_from_zotero_json,
 )
+from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/personal-library", tags=["Personal Library"])
 
@@ -424,6 +425,119 @@ async def remove_from_reading_list_endpoint(
     if not remove_from_reading_list(item_id):
         raise HTTPException(status_code=404, detail="Reading list entry not found")
     return {"deleted": True}
+
+
+# ── BibTeX Export ──────────────────────────────────────────────────────────
+
+
+@router.get("/export/bibtex")
+async def export_bibtex(
+    ids: str = "",
+    user: User = Depends(current_active_user),
+) -> PlainTextResponse:
+    """Export one or more library items as BibTeX."""
+    from fastapi.responses import PlainTextResponse
+    from research_agent.personal_library.zotero import generate_bibtex_string
+
+    items = _resolve_export_items(ids)
+    if not items:
+        raise HTTPException(status_code=404, detail="No items to export")
+
+    bibtex_parts = []
+    for item in items:
+        bibtex_parts.append(generate_bibtex_string(item))
+        bibtex_parts.append("")
+
+    content = "\n".join(bibtex_parts)
+    filename = "library-export.bib"
+
+    return PlainTextResponse(
+        content,
+        media_type="application/x-bibtex",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/x-bibtex",
+        },
+    )
+
+
+# ── RIS Export ─────────────────────────────────────────────────────────────
+
+
+@router.get("/export/ris")
+async def export_ris(
+    ids: str = "",
+    user: User = Depends(current_active_user),
+) -> PlainTextResponse:
+    """Export one or more library items as RIS."""
+    from fastapi.responses import PlainTextResponse
+    from research_agent.personal_library.zotero import generate_ris_string
+
+    items = _resolve_export_items(ids)
+    if not items:
+        raise HTTPException(status_code=404, detail="No items to export")
+
+    ris_parts = []
+    for item in items:
+        ris_parts.append(generate_ris_string(item))
+
+    content = "\n\n".join(ris_parts)
+    filename = "library-export.ris"
+
+    return PlainTextResponse(
+        content,
+        media_type="application/x-ris",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "application/x-ris",
+        },
+    )
+
+
+# ── CSL JSON Export ────────────────────────────────────────────────────────
+
+
+@router.get("/export/csl-json")
+async def export_csl_json(
+    ids: str = "",
+    user: User = Depends(current_active_user),
+) -> JSONResponse:
+    """Export one or more library items as CSL JSON (array)."""
+    from fastapi.responses import JSONResponse
+    from research_agent.personal_library.zotero import generate_csl_json_string
+
+    items = _resolve_export_items(ids)
+    if not items:
+        raise HTTPException(status_code=404, detail="No items to export")
+
+    csl_entries = []
+    for item in items:
+        csl_str = generate_csl_json_string(item)
+        csl_entries.append(json.loads(csl_str))
+
+    filename = "library-export.json"
+
+    return JSONResponse(
+        content=csl_entries,
+        media_type="application/vnd.citationstyles.csl+json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+def _resolve_export_items(ids: str) -> list[LibraryItem]:
+    """Resolve comma-separated IDs to library items, or return all items."""
+    if ids:
+        id_list = [i.strip() for i in ids.split(",") if i.strip()]
+        items = []
+        for iid in id_list:
+            item = get_item(iid)
+            if item:
+                items.append(item)
+    else:
+        items = list_items(limit=500)
+    return items
 
 
 # ── Library stats ──────────────────────────────────────────────────────────
