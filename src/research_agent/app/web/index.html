@@ -62,13 +62,25 @@
       <div class="panel config-panel">
         <h2>Configuration</h2>
         <div class="field">
-          <label for="templateSelect">Template</label>
+          <label for="templateSelect">LaTeX Template</label>
           <select id="templateSelect">
             <option value="ieee-2col">IEEE (2-column)</option>
             <option value="ieee-1col">IEEE (1-column)</option>
             <option value="acm">ACM</option>
             <option value="springer">Springer</option>
           </select>
+        </div>
+        <!-- P39: Research Template Selector -->
+        <div class="field">
+          <label for="researchTemplateSelect">Research Template</label>
+          <select id="researchTemplateSelect">
+            <option value="standard">Standard</option>
+            <option value="literature_survey">Literature Survey</option>
+            <option value="meta_analysis">Meta-Analysis</option>
+            <option value="systematic_review">Systematic Review</option>
+            <option value="case_study">Case Study</option>
+          </select>
+          <div id="researchTemplateDesc" class="template-desc" style="font-size:0.65rem;margin-top:4px;line-height:1.4;min-height:2.4em;color:#71717a;padding:3px 6px;background:rgba(0,0,0,0.15);border-radius:4px;transition:color 0.2s;">General-purpose research paper with standard sections.</div>
         </div>
         <div class="field">
           <label for="languageSelect">Language</label>

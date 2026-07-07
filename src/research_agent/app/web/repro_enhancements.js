@@ -351,7 +351,6 @@ async function loadReproducibilityRunHistory() {
       });
       el.addEventListener("mouseleave", _hideReproTooltip);
     });
-    });
     
     // Apply staggered animation to history items
     _applyStaggeredAnimations(reproRunHistory);

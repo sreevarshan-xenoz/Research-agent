@@ -493,6 +493,7 @@ def create_app(
                     depth = (data.get("depth") or "balanced").strip().lower()
                     autonomy_mode = (data.get("autonomy_mode") or "hybrid").strip().lower()
                     max_iterations = max(1, settings.runtime.max_iterations)
+                    research_template = (data.get("research_template") or "standard").strip().lower()
                     
                     actual_graph_runner = graph_runner or run_graph
 
@@ -509,6 +510,7 @@ def create_app(
                             language=language,
                             depth=depth,
                             autonomy_mode=autonomy_mode,
+                            research_template=research_template,
                             max_runtime_minutes=runtime_cap,
                             max_cost_usd=cost_cap,
                             max_iterations=max_iterations,
@@ -3292,12 +3294,13 @@ async def _execute_research_run(
     language: str,
     depth: str,
     autonomy_mode: str,
-    max_runtime_minutes: int,
-    max_cost_usd: float,
-    max_iterations: int,
-    graph_runner,
-    tool_registry,
-    emit_callback,
+    research_template: str = 'standard',
+    max_runtime_minutes: int = 25,
+    max_cost_usd: float = 5.0,
+    max_iterations: int = 4,
+    graph_runner = None,
+    tool_registry = None,
+    emit_callback = None,
     critic_user_feedback: str | None = None
 ) -> bool:
     initial_state = WorkflowState(
@@ -3307,6 +3310,7 @@ async def _execute_research_run(
         language=language,
         depth=depth,
         autonomy_mode=autonomy_mode,
+        research_template=research_template,
         max_runtime_minutes=max_runtime_minutes,
         max_cost_usd=max_cost_usd,
         max_iterations=max_iterations,

@@ -2,6 +2,8 @@ const getMessagesEl = () => document.getElementById("messages");
 const chatForm = document.getElementById("chatForm");
 const messageInput = document.getElementById("messageInput");
 const templateSelect = document.getElementById("templateSelect");
+const researchTemplateSelect = document.getElementById("researchTemplateSelect");
+const researchTemplateDesc = document.getElementById("researchTemplateDesc");
 const languageSelect = document.getElementById("languageSelect");
 const depthSelect = document.getElementById("depthSelect");
 const autonomySelect = document.getElementById("autonomySelect");
@@ -315,6 +317,7 @@ function checkAuth() {
     appShellEl.classList.remove("hidden");
     tryResumeSession();
     loadResearchSuggestions();
+    loadResearchTemplates();
   } else {
     authOverlayEl.classList.remove("hidden");
     appShellEl.classList.add("hidden");
@@ -843,6 +846,7 @@ async function sendMessageStream(text, onEvent) {
     action: "chat", message: text,
     template: templateSelect?.value, language: languageSelect?.value,
     depth: depthSelect?.value, autonomy_mode: autonomySelect?.value,
+    research_template: researchTemplateSelect?.value || "standard",
     max_runtime_minutes: Number.parseInt(runtimeCapInput?.value),
     max_cost_usd: Number.parseFloat(costCapInput?.value),
   });
@@ -994,6 +998,61 @@ async function runLibraryChatFlow(question) {
     stopGeneratingUI();
   }
 }
+
+// P39: Load available research templates from the API and populate the selector
+const TEMPLATE_DESCRIPTIONS = {
+  "standard": "General-purpose research paper with standard introduction, methodology, results, and discussion sections.",
+  "literature_survey": "Comprehensive survey of existing literature on a topic. Includes background, taxonomy, timeline, and future directions.",
+  "meta_analysis": "Quantitative synthesis of multiple studies. Includes effect size analysis, heterogeneity assessment, and publication bias evaluation.",
+  "systematic_review": "Structured review following PRISMA guidelines. Includes PICO framework, quality assessment, and evidence synthesis.",
+  "case_study": "In-depth analysis of a specific case or application. Includes context, methodology, findings, and lessons learned.",
+};
+
+async function loadResearchTemplates() {
+  if (!researchTemplateSelect) return;
+  try {
+    const res = await fetch("/api/templates", {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const templates = data.templates || [];
+      // Keep the current selection value
+      const currentVal = researchTemplateSelect.value;
+      // Clear existing options except "Standard" (built-in)
+      researchTemplateSelect.innerHTML = "";
+      templates.forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = t.id || "standard";
+        opt.textContent = t.name || t.id;
+        opt.dataset.description = t.description || "";
+        researchTemplateSelect.appendChild(opt);
+      });
+      // Restore selection or default to standard
+      if (currentVal && [...researchTemplateSelect.options].some(o => o.value === currentVal)) {
+        researchTemplateSelect.value = currentVal;
+      }
+      // Update description for current selection
+      updateTemplateDescription();
+    }
+  } catch (err) {
+    console.warn("Failed to load research templates:", err);
+  }
+}
+
+function updateTemplateDescription() {
+  if (!researchTemplateSelect || !researchTemplateDesc) return;
+  const id = researchTemplateSelect.value;
+  const sel = researchTemplateSelect;
+  const selectedOpt = sel.options[sel.selectedIndex];
+  // Prefer API description from data attribute, fall back to local map
+  const apiDesc = selectedOpt?.dataset?.description;
+  const desc = apiDesc || TEMPLATE_DESCRIPTIONS[id] || "Custom research template.";
+  researchTemplateDesc.textContent = desc;
+}
+
+// Update description on change
+researchTemplateSelect?.addEventListener("change", updateTemplateDescription);
 
 chatForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
