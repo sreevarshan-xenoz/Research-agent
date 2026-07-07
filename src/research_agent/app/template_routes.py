@@ -405,13 +405,13 @@ async def get_template_library_stats(
 
     return {
         "total_templates": len(templates),
-        "builtin_templates": sum(1 for t in templates if t.get("template_id") in [
-            "standard", "lit_survey", "meta_analysis", "systematic_review",
-            "case_study", "technical_report"
+        "builtin_templates": sum(1 for t in templates if t.get("id") in [
+            "standard", "literature_survey", "meta_analysis", "systematic_review",
+            "case_study"
         ]),
-        "custom_templates": sum(1 for t in templates if t.get("template_id") not in [
-            "standard", "lit_survey", "meta_analysis", "systematic_review",
-            "case_study", "technical_report"
+        "custom_templates": sum(1 for t in templates if t.get("id") not in [
+            "standard", "literature_survey", "meta_analysis", "systematic_review",
+            "case_study"
         ]),
         "total_presets": len(presets),
         "categories": [
