@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Research Agent Web</title>
+  
+  <!-- P20: PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#8b5cf6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ResAgent" />
+  <link rel="apple-touch-icon" href="/static/pwa-icon-192.svg" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="application-name" content="Research Agent" />
+
+  <!-- Preconnect for performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
@@ -256,6 +268,9 @@
         <button id="reproducibilityTabBtn" class="tab-btn" type="button">Reproducibility</button>
         <button id="kgTabBtn" class="tab-btn" type="button">Knowledge Graph</button>
         <button id="submissionTabBtn" class="tab-btn" type="button">Submission</button>
+        <button id="libraryTabBtn" class="tab-btn" type="button">📚 Library</button>
+        <button id="paperGitTabBtn" class="tab-btn" type="button">🔄 Paper-git</button>
+        <button id="pluginsTabBtn" class="tab-btn" type="button">🧩 Plugins</button>
       </header>
 
 
@@ -734,8 +749,734 @@
         </div>
       </section>
 
-    </main>
+      <!-- P28: Personal Library Browser -->
+      <section id="libraryWorkbench" class="panel library-panel">
+        <div class="library-topbar">
+          <div class="library-search-row">
+            <input id="librarySearchInput" type="text" placeholder="Search library items..." class="library-search-input" />
+            <div class="library-filter-group">
+              <select id="libraryTagFilter" class="library-filter-select" title="Filter by tag">
+                <option value="">All Tags</option>
+              </select>
+              <select id="libraryCollectionFilter" class="library-filter-select" title="Filter by collection">
+                <option value="">All Collections</option>
+              </select>
+              <select id="libraryKindFilter" class="library-filter-select" title="Filter by type">
+                <option value="">All Types</option>
+                <option value="article">Articles</option>
+                <option value="book">Books</option>
+                <option value="thesis">Theses</option>
+                <option value="conference">Conference</option>
+                <option value="report">Reports</option>
+              </select>
+            </div>
+            <div class="library-actions-group">
+              <button id="libraryImportBtn" class="btn-icon" type="button" title="Import references">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Import
+              </button>
+              <button id="libraryCollectionBtn" class="btn-icon" type="button" title="Manage collections">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                Collections
+              </button>
+              <button id="libraryReadingListBtn" class="btn-icon" type="button" title="View reading list">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 14l2 2 4-4"/></svg>
+                Reading List
+              </button>
+              <div class="lib-export-group" style="display: inline-flex; align-items: center; gap: 3px;">
+              <select id="toolbarExportFormat" class="library-filter-select" style="width: auto; font-size: 0.7rem; padding: 4px 6px; background: rgba(10,10,12,0.9);" title="Export format">
+                <option value="bibtex">BibTeX</option>
+                <option value="ris">RIS</option>
+                <option value="csl-json">CSL JSON</option>
+              </select>
+              <button id="libraryExportBtn" class="btn-icon" type="button" title="Export items">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Export
+              </button>
+            </div>
+              <button id="libraryRefreshBtn" class="btn-icon" type="button" title="Refresh">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              </button>
+            </div>
+          </div>
+          <!-- Multi-select action bar -->
+          <div id="libSelectionBar" class="lib-selection-bar hidden">
+            <span class="mono small" style="color: #c4b5fd;">
+              <span id="libSelectedCount">0</span> selected
+            </span>
+            <div class="lib-selection-actions">
+              <button id="libSelectAllBtn" class="btn-icon small" type="button" title="Select all items">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                All
+              </button>
+              <button id="libClearSelectionBtn" class="btn-icon small" type="button" title="Clear selection">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Clear
+              </button>
+              <div class="lib-export-group" style="display: inline-flex; align-items: center; gap: 3px;">
+              <select id="selExportFormat" class="library-filter-select" style="width: auto; font-size: 0.65rem; padding: 3px 4px; background: rgba(10,10,12,0.9);" title="Export format">
+                <option value="bibtex">BibTeX</option>
+                <option value="ris">RIS</option>
+                <option value="csl-json">CSL JSON</option>
+              </select>
+              <button id="libExportCheckedBtn" class="btn-icon small primary" type="button" title="Export selected items" style="background: var(--primary-glow); border: none; color: white;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Export
+              </button>
+            </div>
+            </div>
+          </div>
+          <div id="libraryStatusBar" class="library-status-bar">
+            <span id="libraryStatsText" class="mono small muted">Loading library...</span>
+          </div>
+        </div>
 
+        <div class="library-split">
+          <!-- LEFT: Item List -->
+          <div class="library-item-list" id="libraryItemList">
+            <div class="library-list-header">
+              <span class="mono small" style="color: var(--muted);">Items</span>
+              <span id="libraryItemCount" class="mono small" style="color: var(--muted);">0</span>
+            </div>
+            <div id="libraryItemsContainer" class="library-items-container">
+              <p class="small muted" style="padding: 20px; text-align: center;">No items yet. Import BibTeX or Zotero references.</p>
+            </div>
+          </div>
+
+          <!-- RIGHT: Item Detail -->
+          <div class="library-item-detail" id="libraryItemDetail">
+            <div id="libraryDetailEmpty" class="library-detail-empty">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.3; margin-bottom: 12px;"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+              <p class="muted" style="font-size: 0.85rem;">Select an item to view details</p>
+              <p class="small muted" style="font-size: 0.75rem;">Use Search or click Import to add references.</p>
+            </div>
+
+            <!-- Detail Content (shown when item selected) -->
+            <div id="libraryDetailContent" class="library-detail-content hidden">
+              <!-- Metadata -->
+              <div class="library-detail-section">
+                <h3 id="libraryDetailTitle" class="library-detail-title"></h3>
+                <div class="library-detail-meta">
+                  <span id="libraryDetailAuthors" class="library-detail-authors"></span>
+                  <span id="libraryDetailVenue" class="library-detail-venue"></span>
+                  <span id="libraryDetailYear" class="library-detail-year"></span>
+                </div>
+                <div class="library-detail-links">
+                  <a id="libraryDetailDoi" href="#" target="_blank" class="btn-link small hidden">DOI</a>
+                  <a id="libraryDetailUrl" href="#" target="_blank" class="btn-link small hidden">URL</a>
+                  <a id="libraryDetailArxiv" href="#" target="_blank" class="btn-link small hidden">arXiv</a>
+                  <span id="libraryDetailSource" class="mono small" style="opacity: 0.5;"></span>
+                </div>
+              </div>
+
+              <!-- Abstract -->
+              <div class="library-detail-section">
+                <div class="library-section-header">
+                  <h4>Abstract</h4>
+                </div>
+                <p id="libraryDetailAbstract" class="library-detail-abstract"></p>
+              </div>
+
+              <!-- Tags -->
+              <div class="library-detail-section">
+                <div class="library-section-header">
+                  <h4>Tags</h4>
+                  <div class="library-section-actions">
+                    <button id="libraryAutoTagBtn" class="btn-icon small" type="button" title="Auto-tag with AI">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                      Auto-Tag
+                    </button>
+                    <button id="libraryAddTagBtn" class="btn-icon small" type="button" title="Add tag">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div id="libraryDetailTags" class="library-detail-tags"></div>
+                <div id="libraryAddTagRow" class="library-add-tag-row hidden">
+                  <input id="libraryNewTagInput" type="text" placeholder="Enter tag name..." class="library-tag-input" />
+                  <button id="libraryConfirmTagBtn" class="btn-icon small" type="button">Add</button>
+                </div>
+              </div>
+
+              <!-- Notes -->
+              <div class="library-detail-section">
+                <div class="library-section-header">
+                  <h4>Notes</h4>
+                  <button id="libraryEditNotesBtn" class="btn-icon small" type="button" title="Edit notes">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                </div>
+                <p id="libraryDetailNotes" class="library-detail-notes-text"></p>
+                <textarea id="libraryNotesTextarea" class="library-notes-textarea hidden" rows="4" placeholder="Add notes..."></textarea>
+                <div id="libraryNotesActions" class="hidden" style="display: flex; gap: 8px; margin-top: 8px;">
+                  <button id="librarySaveNotesBtn" class="btn-icon small primary" type="button">Save Notes</button>
+                  <button id="libraryCancelNotesBtn" class="btn-icon small" type="button">Cancel</button>
+                </div>
+              </div>
+
+              <!-- Annotations -->
+              <div class="library-detail-section">
+                <div class="library-section-header">
+                  <h4>Annotations <span id="libraryAnnotationCount" class="mono small" style="opacity: 0.5;">0</span></h4>
+                  <button id="libraryAddAnnotationBtn" class="btn-icon small" type="button" title="Add annotation">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    Add
+                  </button>
+                </div>
+                <div id="libraryAnnotationsList" class="library-annotations-list">
+                  <p class="small muted">No annotations yet.</p>
+                </div>
+                <!-- New Annotation Form -->
+                <div id="libraryNewAnnotationForm" class="library-new-annotation hidden">
+                  <div class="annotation-form-row">
+                    <select id="libraryAnnKind" class="library-filter-select" style="width: auto;">
+                      <option value="highlight">Highlight</option>
+                      <option value="note">Note</option>
+                      <option value="comment">Comment</option>
+                      <option value="question">Question</option>
+                    </select>
+                    <input id="libraryAnnColor" type="color" value="#ffff00" title="Color" style="width: 36px; height: 32px; padding: 2px; border-radius: var(--radius-sm);" />
+                  </div>
+                  <div id="libraryAnnTextRow" class="annotation-form-row">
+                    <input id="libraryAnnText" type="text" placeholder="Selected / highlighted text..." class="library-tag-input" />
+                  </div>
+                  <div class="annotation-form-row">
+                    <textarea id="libraryAnnNote" rows="2" placeholder="Annotation note..." class="library-notes-textarea" style="min-height: 40px;"></textarea>
+                  </div>
+                  <div class="annotation-form-actions">
+                    <button id="librarySaveAnnotationBtn" class="btn-icon small primary" type="button">Save</button>
+                    <button id="libraryCancelAnnotationBtn" class="btn-icon small" type="button">Cancel</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Collections -->
+              <div class="library-detail-section">
+                <div class="library-section-header">
+                  <h4>Collections</h4>
+                </div>
+                <div id="libraryDetailCollections" class="library-detail-tags"></div>
+              </div>
+
+              <!-- Reading List Actions -->
+              <div class="library-detail-section">
+                <div class="library-section-header">
+                  <h4>Reading List</h4>
+                </div>
+                <div id="libraryReadingListBlock" class="library-reading-block">
+                  <div class="reading-list-status-row">
+                    <select id="libraryReadingStatus" class="library-filter-select" style="width: auto;">
+                      <option value="to_read">📋 To Read</option>
+                      <option value="reading">📖 Reading</option>
+                      <option value="completed">✅ Completed</option>
+                      <option value="skipped">⏭ Skipped</option>
+                    </select>
+                    <select id="libraryReadingPriority" class="library-filter-select" style="width: auto;">
+                      <option value="0">Priority: None</option>
+                      <option value="1">Low</option>
+                      <option value="2">Medium-Low</option>
+                      <option value="3">Medium</option>
+                      <option value="4">High</option>
+                      <option value="5">Critical</option>
+                    </select>
+                    <input id="libraryReadingGoalDate" type="date" class="library-filter-select" style="width: auto; max-width: 150px;" />
+                  </div>
+                  <div class="reading-list-progress-row">
+                    <label style="font-size: 0.65rem; opacity: 0.7;">Progress:</label>
+                    <input id="libraryReadingProgress" type="range" min="0" max="100" value="0" style="flex: 1;" />
+                    <span id="libraryReadingProgressVal" class="mono small" style="min-width: 30px; text-align: right;">0%</span>
+                  </div>
+                  <div class="reading-list-actions">
+                    <button id="librarySaveReadingBtn" class="btn-icon small primary" type="button">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+                      Save to Reading List
+                    </button>
+                    <button id="libraryRemoveReadingBtn" class="btn-icon small" type="button" style="color: #f43f5e;">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Export & Delete -->
+              <div class="library-detail-section" style="display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--glass-border);">
+                <div class="lib-export-group" style="display: inline-flex; align-items: center; gap: 3px; flex: 1;">
+              <select id="detailExportFormat" class="library-filter-select" style="width: auto; font-size: 0.65rem; padding: 3px 4px; background: rgba(10,10,12,0.9);" title="Export format">
+                <option value="bibtex">BibTeX</option>
+                <option value="ris">RIS</option>
+                <option value="csl-json">CSL JSON</option>
+              </select>
+              <button id="libraryExportSingleBtn" class="btn-icon small" type="button" title="Export this item" style="flex: 1;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Export
+              </button>
+            </div>
+                <button id="libraryCopyBibtexBtn" class="btn-icon small" type="button" title="Copy BibTeX to clipboard" style="color: #c4b5fd; border-color: rgba(139,92,246,0.3);">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  Copy BibTeX
+                </button>
+                <button id="libraryDeleteItemBtn" class="btn-icon small" type="button" style="color: #f43f5e; border-color: rgba(244,63,94,0.3);">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reading List Overlay Panel -->
+        <div id="libraryReadingListPanel" class="library-overlay-panel hidden">
+          <div class="library-overlay-header">
+            <h3>Reading List</h3>
+            <div class="library-overlay-actions">
+              <button id="libraryReadingListRefreshBtn" class="btn-icon small" type="button">Refresh</button>
+              <button id="libraryReadingListCloseBtn" class="btn-icon small" type="button" title="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="library-reading-stats-row">
+            <div class="reading-stat-chip"><span id="rlToReadCount">0</span> To Read</div>
+            <div class="reading-stat-chip"><span id="rlReadingCount">0</span> Reading</div>
+            <div class="reading-stat-chip"><span id="rlCompletedCount">0</span> Completed</div>
+            <div class="reading-stat-chip"><span id="rlSkippedCount">0</span> Skipped</div>
+          </div>
+          <div class="library-reading-filter-row">
+            <select id="rlStatusFilter" class="library-filter-select">
+              <option value="">All Statuses</option>
+              <option value="to_read">To Read</option>
+              <option value="reading">Reading</option>
+              <option value="completed">Completed</option>
+              <option value="skipped">Skipped</option>
+            </select>
+            <input id="rlSearchInput" type="text" placeholder="Search reading list..." class="library-search-input" style="flex: 1;" />
+          </div>
+          <div id="rlItemsContainer" class="rl-items-container">
+            <p class="small muted" style="padding: 20px; text-align: center;">Loading reading list...</p>
+          </div>
+        </div>
+
+        <!-- Collections Overlay Panel -->
+        <div id="libraryCollectionsPanel" class="library-overlay-panel hidden">
+          <div class="library-overlay-header">
+            <h3>📂 Collections</h3>
+            <div class="library-overlay-actions">
+              <button id="libraryCreateCollectionBtn" class="btn-icon small primary" type="button" title="Create new collection" style="background: var(--primary-glow); border: none; color: white;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                New Collection
+              </button>
+              <button id="libraryCollectionsRefreshBtn" class="btn-icon small" type="button">Refresh</button>
+              <button id="libraryCollectionsCloseBtn" class="btn-icon small" type="button" title="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="collections-split">
+            <!-- LEFT: Collection List -->
+            <div class="collections-list" id="collectionsList">
+              <div class="collections-list-header">
+                <span class="mono small" style="color: var(--muted);">All Collections</span>
+                <span id="collectionsCount" class="mono small" style="color: var(--muted);">0</span>
+              </div>
+              <div id="collectionsItemsContainer" class="collections-items-container">
+                <p class="small muted" style="padding: 20px; text-align: center;">No collections yet. Create one to organize your items.</p>
+              </div>
+            </div>
+
+            <!-- RIGHT: Collection Detail -->
+            <div class="collections-detail" id="collectionsDetail">
+              <div id="collectionsDetailEmpty" class="collections-detail-empty">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.3; margin-bottom: 12px;">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                </svg>
+                <p class="muted" style="font-size: 0.85rem;">Select a collection to view details</p>
+                <p class="small muted" style="font-size: 0.75rem;">Click "New Collection" to create one with optional auto-filter rules.</p>
+              </div>
+
+              <div id="collectionsDetailContent" class="collections-detail-content hidden">
+                <!-- Header -->
+                <div class="collections-detail-header">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="collectionsDetailIcon" style="font-size: 1.5rem;">📁</span>
+                    <div>
+                      <h3 id="collectionsDetailName" class="collections-detail-name"></h3>
+                      <span id="collectionsDetailMeta" class="mono small muted"></span>
+                    </div>
+                  </div>
+                  <div class="collections-detail-actions">
+                    <button id="collectionsEditBtn" class="btn-icon small" type="button" title="Edit collection">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit
+                    </button>
+                    <button id="collectionsDeleteBtn" class="btn-icon small" type="button" title="Delete collection" style="color: #f43f5e;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Description -->
+                <div class="collections-detail-section">
+                  <p id="collectionsDetailDesc" class="collections-detail-desc"></p>
+                </div>
+
+                <!-- Color bar -->
+                <div id="collectionsDetailColorBar" class="collections-color-bar" style="height: 3px; border-radius: 2px; margin-bottom: 8px;"></div>
+
+                <!-- Smart Rules -->
+                <div id="collectionsRulesSection" class="collections-detail-section">
+                  <div class="collections-section-header">
+                    <h4>Auto-Filter Rules</h4>
+                    <span id="collectionsRulesBadge" class="badge small">Smart</span>
+                  </div>
+                  <div id="collectionsRulesList" class="collections-rules-list">
+                    <p class="small muted">No rules — manual collection.</p>
+                  </div>
+                </div>
+
+                <!-- Members -->
+                <div class="collections-detail-section">
+                  <div class="collections-section-header">
+                    <h4>Members <span id="collectionsMemberCount" class="mono small" style="opacity: 0.5;">0</span></h4>
+                  </div>
+                  <div id="collectionsMembersList" class="collections-members-list">
+                    <p class="small muted">No items in this collection.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import Modal -->
+        <div id="libraryImportModal" class="modal-overlay hidden">
+          <div class="modal-container panel" style="width: 520px;">
+            <div class="modal-header">
+              <h2>Import References</h2>
+              <button id="libraryImportModalClose" class="btn-icon modal-close" title="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="import-tabs" style="display: flex; gap: 8px; margin-bottom: 16px;">
+                <button id="importBibtexTab" class="tab-btn active" type="button">BibTeX</button>
+                <button id="importZoteroTab" class="tab-btn" type="button">Zotero JSON</button>
+                <button id="importFileTab" class="tab-btn" type="button">Upload File</button>
+              </div>
+              <div id="importBibtexBlock">
+                <label for="importBibtexTextarea">Paste BibTeX content:</label>
+                <textarea id="importBibtexTextarea" rows="8" class="library-notes-textarea" placeholder="@article{...}"></textarea>
+              </div>
+              <div id="importZoteroBlock" class="hidden">
+                <label for="importZoteroTextarea">Paste Zotero JSON export:</label>
+                <textarea id="importZoteroTextarea" rows="8" class="library-notes-textarea" placeholder='[{...}]'></textarea>
+              </div>
+              <div id="importFileBlock" class="hidden">
+                <label for="importFileInput">Select .bib or Zotero JSON file:</label>
+                <input id="importFileInput" type="file" accept=".bib,.json" style="display: block; margin-top: 8px;" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button id="libraryImportModalCancel" class="secondary">Cancel</button>
+              <button id="libraryImportModalConfirm" class="primary">Import</button>
+            </div>
+            <div id="libraryImportResult" class="hidden" style="padding: 12px 24px;"></div>
+          </div>
+        </div>
+
+        <!-- Collection Create/Edit Modal -->
+        <div id="libraryCollectionModal" class="modal-overlay hidden">
+          <div class="modal-container panel" style="width: 560px;">
+            <div class="modal-header">
+              <h2 id="collectionModalTitle">Create Collection</h2>
+              <button id="libraryCollectionModalClose" class="btn-icon modal-close" title="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <!-- Basic fields -->
+              <div class="field">
+                <label for="collectionEditName">Collection Name *</label>
+                <input id="collectionEditName" type="text" placeholder="e.g. LLM Safety Papers" class="library-tag-input" />
+              </div>
+              <div class="field">
+                <label for="collectionEditDesc">Description</label>
+                <textarea id="collectionEditDesc" rows="2" placeholder="Optional description..." class="library-notes-textarea" style="min-height: 50px;"></textarea>
+              </div>
+              <div class="field-row" style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px;">
+                <div class="field">
+                  <label for="collectionEditIcon">Icon</label>
+                  <input id="collectionEditIcon" type="text" value="📁" maxlength="2" class="library-tag-input" style="text-align: center; font-size: 1.2rem;" />
+                </div>
+                <div class="field">
+                  <label for="collectionEditColor">Color</label>
+                  <input id="collectionEditColor" type="color" value="#8b5cf6" style="width: 100%; height: 36px; padding: 2px; border-radius: var(--radius-sm); background: rgba(10,10,12,0.9); border: 1px solid var(--glass-border);" />
+                </div>
+                <div class="field" style="display: flex; align-items: flex-end; padding-bottom: 4px;">
+                  <label class="plugins-toggle-label" style="font-size: 0.8rem; gap: 6px;">
+                    <input id="collectionEditIsDynamic" type="checkbox" class="plugins-toggle-input" />
+                    <span class="plugins-toggle-slider"></span>
+                    <span>Smart Collection (auto-filter)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Rules Editor (shown when isDynamic) -->
+              <div id="collectionRulesEditor" class="hidden" style="margin-top: 16px;">
+                <div class="collections-section-header">
+                  <h4>Auto-Filter Rules <span class="small muted">(all rules must match — AND logic)</span></h4>
+                </div>
+                <div id="collectionRulesList" class="collection-rules-editor-list">
+                  <!-- Rule rows rendered here -->
+                </div>
+                <button id="collectionAddRuleBtn" class="btn-icon small" type="button" style="margin-top: 8px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                  Add Rule
+                </button>
+              </div>
+              <div id="collectionModalStatus" class="hidden" style="margin-top: 12px; padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.8rem;"></div>
+            </div>
+            <div class="modal-footer">
+              <button id="libraryCollectionModalCancel" class="secondary">Cancel</button>
+              <button id="libraryCollectionModalConfirm" class="primary">Save Collection</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P36: Paper-git Version Control -->
+      <section id="paperGitWorkbench" class="panel paper-git-panel">
+        <div class="pg-topbar">
+          <div class="pg-topbar-left">
+            <h3 style="margin: 0; font-size: 1rem; font-weight: 700;">&#x1F504; Paper-git</h3>
+            <span id="pgStatsText" class="mono small muted" style="margin-left: 8px;">Loading...</span>
+          </div>
+          <div class="pg-topbar-actions">
+            <button id="pgCreateSnapshotBtn" class="btn-icon small" type="button" title="Take a snapshot of current results">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              Snapshot
+            </button>
+            <button id="pgCreateBranchBtn" class="btn-icon small" type="button" title="Create a new branch">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a3 3 0 00-3-3H6"/></svg>
+              Branch
+            </button>
+            <button id="pgRefreshBtn" class="btn-icon small" type="button" title="Refresh">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="pgStatusBar" class="pg-status-bar"><span class="small muted">Paper-git version control for research documents</span></div>
+
+        <!-- Sub-tabs -->
+        <div class="pg-sub-tabs">
+          <button id="pgTimelineTab" class="tab-btn active" type="button">&#x1F4DC; Timeline</button>
+          <button id="pgBranchesTab" class="tab-btn" type="button">&#x1F33F; Branches</button>
+          <button id="pgPrsTab" class="tab-btn" type="button">&#x1F4E5; Pull Requests</button>
+          <button id="pgDiffTab" class="tab-btn" type="button">&#x1F50D; Diff Viewer</button>
+        </div>
+
+        <!-- Timeline -->
+        <div id="pgTimelinePanel" class="pg-sub-panel active">
+          <div class="pg-panel-header">
+            <span class="mono small" style="color: var(--muted);">Snapshot History</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <select id="pgTimelineBranchFilter" class="pg-filter-select">
+                <option value="">All Branches</option>
+              </select>
+              <span id="pgSnapshotCount" class="mono small" style="color: var(--muted);">0</span>
+            </div>
+          </div>
+          <div id="pgTimelineContainer" class="pg-timeline-container">
+            <p class="small muted" style="padding: 20px; text-align: center;">No snapshots yet. Run a research paper to create snapshots.</p>
+          </div>
+        </div>
+
+        <!-- Branches -->
+        <div id="pgBranchesPanel" class="pg-sub-panel">
+          <div class="pg-branches-layout">
+            <div id="pgBranchesList" class="pg-branches-list">
+              <div class="pg-panel-header"><span class="mono small" style="color: var(--muted);">Branches</span><span id="pgBranchCount" class="mono small">0</span></div>
+              <div id="pgBranchesContainer"><p class="small muted" style="padding: 12px; text-align: center;">No branches yet.</p></div>
+            </div>
+            <div id="pgBranchDetail" class="pg-branch-detail">
+              <div id="pgBranchEmpty" class="pg-detail-empty"><p class="muted" style="font-size: 0.85rem;">Select a branch</p></div>
+              <div id="pgBranchContent" class="hidden" style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div><h4 id="pgBranchDetailName" style="margin: 0; font-size: 1.1rem; font-weight: 700;"></h4><span id="pgBranchDetailMeta" class="mono small muted"></span></div>
+                  <div style="display: flex; gap: 6px;">
+                    <button id="pgBranchMergeBtn" class="btn-icon small" type="button">&#x1F500; Merge</button>
+                    <button id="pgBranchCreatePrBtn" class="btn-icon small" type="button">&#x2B50; New PR</button>
+                    <button id="pgBranchDeleteBtn" class="btn-icon small" type="button" style="color: #f43f5e;">&times;</button>
+                  </div>
+                </div>
+                <div id="pgBranchSnapshots" style="max-height: 200px; overflow-y: auto;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pull Requests -->
+        <div id="pgPrsPanel" class="pg-sub-panel">
+          <div class="pg-panel-header">
+            <span class="mono small" style="color: var(--muted);">Pull Requests</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <select id="pgPrStatusFilter" class="pg-filter-select">
+                <option value="">All</option><option value="open">Open</option><option value="approved">Approved</option><option value="changes_requested">Changes Requested</option><option value="merged">Merged</option><option value="closed">Closed</option>
+              </select>
+              <button id="pgCreatePrBtn" class="btn-icon small primary" type="button" style="background: var(--primary-glow); border: none; color: white;">+ New PR</button>
+            </div>
+          </div>
+          <div class="pg-prs-layout">
+            <div id="pgPrsList" class="pg-prs-list"><p class="small muted" style="padding: 12px;">No pull requests yet.</p></div>
+            <div id="pgPrDetail" class="pg-pr-detail">
+              <div id="pgPrEmpty" class="pg-detail-empty"><p class="muted">Select a PR</p></div>
+              <div id="pgPrContent" class="hidden" style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                  <div><h4 id="pgPrDetailTitle" style="margin: 0; font-size: 1.1rem; font-weight: 700;"></h4><span id="pgPrDetailMeta" class="mono small muted"></span></div>
+                  <div class="pg-pr-status-badge" id="pgPrStatusBadge"></div>
+                </div>
+                <p id="pgPrDetailDesc" class="small" style="margin: 0; color: #d4d4d8;"></p>
+                <div id="pgPrActions" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                  <button id="pgPrApproveBtn" class="btn-icon small" type="button" style="background: rgba(52,211,153,0.1); color: #34d399; border-color: rgba(52,211,153,0.2);">&#x2705; Approve</button>
+                  <button id="pgPrRequestChangesBtn" class="btn-icon small" type="button" style="color: #f59e0b;">&#x1F504; Request Changes</button>
+                  <button id="pgPrMergeBtn" class="btn-icon small" type="button" style="background: rgba(139,92,246,0.1); color: #c4b5fd;">&#x1F500; Merge</button>
+                  <button id="pgPrCloseBtn" class="btn-icon small" type="button" style="color: #f43f5e;">&#x2715; Close</button>
+                </div>
+                <div id="pgPrDiffPreview" class="pg-detail-section">
+                  <div class="pg-section-header"><h4>Diff Preview</h4><button id="pgPrViewDiffBtn" class="btn-icon small">View Full Diff</button></div>
+                  <div id="pgPrDiffContent" class="pg-diff-content"><p class="small muted">Load PR to see diff.</p></div>
+                </div>
+                <div class="pg-detail-section">
+                  <div class="pg-section-header"><h4>Comments <span id="pgPrCommentCount" class="mono small">0</span></h4></div>
+                  <div id="pgPrCommentsList" class="pg-comments-list"><p class="small muted">No comments yet.</p></div>
+                  <div class="pg-comment-input-row"><input id="pgPrCommentInput" type="text" placeholder="Add a review comment..." class="pg-comment-input" /><button id="pgPrCommentSubmit" class="btn-icon small">Send</button></div>
+                </div>
+                <div class="pg-detail-section">
+                  <div class="pg-section-header"><h4>Approvals <span id="pgPrApprovalCount" class="mono small">0</span></h4></div>
+                  <div id="pgPrApprovalsList" class="pg-approvals-list"><p class="small muted">No approvals yet.</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Diff Viewer -->
+        <div id="pgDiffPanel" class="pg-sub-panel">
+          <div class="pg-panel-header"><span class="mono small" style="color: var(--muted);">Diff Viewer</span></div>
+          <div class="pg-diff-controls">
+            <select id="pgDiffOldSnapshot" class="pg-filter-select" style="flex: 1;"><option value="">Select old snapshot...</option></select>
+            <span style="color: var(--muted);">&#x2192;</span>
+            <select id="pgDiffNewSnapshot" class="pg-filter-select" style="flex: 1;"><option value="">Select new snapshot...</option></select>
+            <button id="pgDiffCompareBtn" class="btn-icon small primary" type="button" style="background: var(--primary-glow); border: none; color: white;">Compare</button>
+          </div>
+          <div id="pgDiffResult" class="pg-diff-result"><p class="small muted" style="padding: 20px; text-align: center;">Select two snapshots and click Compare.</p></div>
+        </div>
+      </section>
+
+      <!-- P19: Plugin System Browser -->
+      <section id="pluginsWorkbench" class="panel plugins-panel">
+        <div class="plugins-topbar">
+          <div class="plugins-topbar-left">
+            <h3 style="margin: 0; font-size: 1rem; font-weight: 700;">🧩 Plugin Manager</h3>
+            <span id="pluginsCountText" class="mono small muted" style="margin-left: 8px;">0 plugins</span>
+          </div>
+          <div class="plugins-topbar-actions">
+            <button id="pluginsRediscoverBtn" class="btn-icon" type="button" title="Re-discover plugins">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+              Rediscover
+            </button>
+            <button id="pluginsRefreshBtn" class="btn-icon" type="button" title="Refresh">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="plugins-status-bar">
+          <span id="pluginsStatusText" class="small muted">Loading plugins...</span>
+        </div>
+
+        <div class="plugins-split">
+          <!-- LEFT: Plugin List -->
+          <div class="plugins-list" id="pluginsList">
+            <div class="plugins-list-header">
+              <span class="mono small" style="color: var(--muted);">Installed Plugins</span>
+              <span id="pluginsEnabledCount" class="mono small" style="color: var(--muted);">0 enabled</span>
+            </div>
+            <div id="pluginsItemsContainer" class="plugins-items-container">
+              <p class="small muted" style="padding: 20px; text-align: center;">No plugins discovered.</p>
+            </div>
+          </div>
+
+          <!-- RIGHT: Plugin Detail -->
+          <div class="plugins-detail" id="pluginsDetail">
+            <div id="pluginsDetailEmpty" class="plugins-detail-empty">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.3; margin-bottom: 12px;">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              <p class="muted" style="font-size: 0.85rem;">Select a plugin to view details</p>
+              <p class="small muted" style="font-size: 0.75rem;">Click a plugin on the left to see its hooks, settings, and UI components.</p>
+            </div>
+
+            <div id="pluginsDetailContent" class="plugins-detail-content hidden">
+              <!-- Header -->
+              <div class="plugins-detail-header">
+                <div>
+                  <h3 id="pluginsDetailName" class="plugins-detail-name"></h3>
+                  <span id="pluginsDetailVersion" class="mono small" style="opacity: 0.5;"></span>
+                </div>
+                <label class="plugins-toggle-label" title="Enable/disable plugin">
+                  <input id="pluginsDetailToggle" type="checkbox" class="plugins-toggle-input" />
+                  <span class="plugins-toggle-slider"></span>
+                  <span id="pluginsToggleStatus" class="mono small">Disabled</span>
+                </label>
+              </div>
+
+              <!-- Description -->
+              <div class="plugins-detail-section">
+                <p id="pluginsDetailDesc" class="plugins-detail-desc"></p>
+                <div class="plugins-detail-meta">
+                  <span id="pluginsDetailAuthor" class="mono small muted"></span>
+                  <a id="pluginsDetailHomepage" href="#" target="_blank" class="btn-link small hidden">Homepage</a>
+                </div>
+              </div>
+
+              <!-- Tags -->
+              <div class="plugins-detail-section">
+                <div class="plugins-section-header">
+                  <h4>Tags</h4>
+                </div>
+                <div id="pluginsDetailTags" class="plugins-detail-tags"></div>
+              </div>
+
+              <!-- Hooks -->
+              <div class="plugins-detail-section">
+                <div class="plugins-section-header">
+                  <h4>Implemented Hooks</h4>
+                </div>
+                <div id="pluginsDetailHooks" class="plugins-detail-hooks"></div>
+              </div>
+
+              <!-- Settings Schema -->
+              <div id="pluginsSettingsSection" class="plugins-detail-section hidden">
+                <div class="plugins-section-header">
+                  <h4>Settings</h4>
+                </div>
+                <div id="pluginsSettingsForm" class="plugins-settings-form"></div>
+              </div>
+
+              <!-- UI Components -->
+              <div id="pluginsUiSection" class="plugins-detail-section hidden">
+                <div class="plugins-section-header">
+                  <h4>UI Components</h4>
+                </div>
+                <div id="pluginsUiComponents" class="plugins-ui-components"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
     <!-- RIGHT: CHAT INTERFACE -->
     <aside class="chat-area">
       <header class="chat-header">
@@ -936,5 +1677,70 @@ Try asking something like "Find recent papers on transformer architectures" or "
   <script src="/static/repro_enhancements.js?v=1" defer></script>
   <script src="/static/onboarding_guide.js?v=1" defer></script>
   <script src="/static/collaborative-editor.js?v=1" defer></script>
+  <script src="/static/personal_library.js?v=1" defer></script>
+  <script src="/static/plugins.js?v=1" defer></script>
+  <script src="/static/paper_git.js?v=1" defer></script>
+  
+  <!-- P20: Service Worker Registration -->
+  <script defer>
+    if ('serviceWorker' in navigator) {
+      // Register the service worker for offline caching and PWA support
+      navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+        .then((reg) => {
+          console.log('[PWA] Service Worker registered, scope:', reg.scope);
+          
+          // Check for updates on navigation
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                // New version available - show update prompt
+                const updatePrompt = document.createElement('div');
+                updatePrompt.className = 'pwa-update-prompt';
+                updatePrompt.innerHTML = `
+                  <span>A new version is available.</span>
+                  <button onclick="window.location.reload()" class="btn-icon primary" style="padding: 4px 12px; font-size: 0.75rem;">Refresh</button>
+                `;
+                document.body.appendChild(updatePrompt);
+              }
+            });
+          });
+        })
+        .catch((err) => console.warn('[PWA] Service Worker registration failed:', err));
+
+      // Listen for controller change (new SW activated)
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+
+      // Cache key API data for offline use
+      const cacheApiData = async (url) => {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const resp = await fetch(url);
+          if (resp.ok) {
+            const data = await resp.json();
+            reg.active.postMessage({ type: 'CACHE_API_DATA', url, data });
+          }
+        } catch (e) { /* offline, ignore */ }
+      };
+
+      // Pre-cache initial library and plugin data after auth
+      document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          if (localStorage.getItem('research_auth_token')) {
+            cacheApiData('/api/personal-library/items?limit=200');
+            cacheApiData('/api/personal-library/collections');
+            cacheApiData('/api/personal-library/reading-list');
+            cacheApiData('/api/plugins');
+          }
+        }, 3000);
+      });
+    }
+  </script>
 </body>
 </html>
