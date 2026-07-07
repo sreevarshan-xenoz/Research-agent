@@ -14,7 +14,7 @@ import time
 from functools import wraps
 from typing import Any, Callable
 
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CollectorRegistry
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CollectorRegistry, start_http_server
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +153,16 @@ def count_provider_failure(provider: str) -> None:
 def set_active_runs(count: int) -> None:
     """Set the active runs gauge."""
     ACTIVE_RUNS.set(count)
+
+
+def start_metrics_server(port: int = 9090) -> None:
+    """Start a Prometheus metrics HTTP server on the given port.
+
+    This runs a lightweight HTTP server that exposes /metrics for
+    Prometheus scraping. Uses Python's built-in http.server.
+    """
+    start_http_server(port, registry=REGISTRY)
+    logger.info("Prometheus metrics server listening on port %d", port)
 
 
 def get_metrics_text() -> bytes:
