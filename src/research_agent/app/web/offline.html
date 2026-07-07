@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline — Research Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #050505;
+      color: #e4e4e7;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .offline-card {
+      text-align: center;
+      padding: 48px;
+      max-width: 400px;
+      background: rgba(20,20,25,0.6);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      backdrop-filter: blur(12px);
+    }
+    .offline-icon {
+      width: 64px; height: 64px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 12px; }
+    p { font-size: 0.9rem; color: #a1a1aa; line-height: 1.6; margin-bottom: 24px; }
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      background: #f43f5e;
+      border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+      margin-right: 6px;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .btn-retry {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+      border: none;
+      border-radius: 999px;
+      color: white;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-retry:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(139,92,246,0.3); }
+    .muted { color: #71717a; font-size: 0.75rem; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="offline-card">
+    <div class="offline-icon">🔬</div>
+    <h1>You're Offline</h1>
+    <p>
+      <span class="status-dot"></span>
+      Research Agent is disconnected from the network.<br />
+      Your locally cached content is still available.
+    </p>
+    <button class="btn-retry" onclick="window.location.reload()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      Try Again
+    </button>
+    <div class="muted">Cached pages and data are available offline</div>
+  </div>
+</body>
+</html>
