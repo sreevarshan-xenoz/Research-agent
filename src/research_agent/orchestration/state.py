@@ -71,6 +71,12 @@ class GraphState(TypedDict):
     empirical_claims: list[dict[str, Any]]
     code_verification_items: list[dict[str, Any]]
     code_reproducibility_report: str | None
+    # P26: Advanced AI Research Assistant fields
+    generated_hypotheses: list[dict[str, Any]]
+    research_strategy: dict[str, Any] | None
+    gap_exploration: dict[str, Any] | None
+    # User's past research topics (sourced from session history + agent memory)
+    past_research_topics: list[str]
 
 
 @dataclass
@@ -141,6 +147,12 @@ class WorkflowState:
     empirical_claims: List[Dict[str, Any]] = field(default_factory=list)
     code_verification_items: List[Dict[str, Any]] = field(default_factory=list)
     code_reproducibility_report: Optional[str] = None
+    # P26: Advanced AI Research Assistant fields
+    generated_hypotheses: List[Dict[str, Any]] = field(default_factory=list)
+    research_strategy: Optional[Dict[str, Any]] = None
+    gap_exploration: Optional[Dict[str, Any]] = None
+    # User-specific past research topics (sourced from session history + agent memory)
+    past_research_topics: List[str] = field(default_factory=list)
 
 
 def to_graph_state(state: WorkflowState) -> GraphState:
@@ -207,6 +219,10 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "code_verification_items": state.code_verification_items,
         "code_reproducibility_report": state.code_reproducibility_report,
         "multi_modal_results": state.multi_modal_results,
+        "generated_hypotheses": state.generated_hypotheses,
+        "research_strategy": state.research_strategy,
+        "gap_exploration": state.gap_exploration,
+        "past_research_topics": state.past_research_topics,
     }
 
 
@@ -274,4 +290,8 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         code_verification_items=state.get("code_verification_items", []),
         code_reproducibility_report=state.get("code_reproducibility_report"),
         multi_modal_results=state.get("multi_modal_results", []),
+        generated_hypotheses=list(state.get("generated_hypotheses", [])),
+        research_strategy=state.get("research_strategy"),
+        gap_exploration=state.get("gap_exploration"),
+        past_research_topics=list(state.get("past_research_topics", [])),
     )
