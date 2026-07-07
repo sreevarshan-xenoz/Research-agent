@@ -4,6 +4,7 @@ import re
 from research_agent.models import agenerate_json, run_json_ensemble
 from research_agent.observability import apublish_progress
 from research_agent.orchestration.state import GraphState
+from research_agent.templates import get_template
 
 
 def _extract_topic_keywords(topic: str) -> list[str]:
@@ -69,21 +70,43 @@ async def planner_node(state: GraphState) -> dict:
         message="Planning research subtasks",
     )
 
+    # P39: Load research template for context-sensitive planning
+    template_id = state.get("research_template", "standard")
+    tmpl = get_template(template_id)
+
     # Topic-adaptive fallback tasks (used when head model unavailable or fails)
     tasks = _build_adaptive_fallback_tasks(topic)
 
-    # Use depth to determine task count
+    # P39: Use depth from template if available, otherwise default
     depth = state.get("depth", "balanced")
-    task_counts = {"quick": 3, "balanced": 4, "deep": 6}
-    num_tasks = task_counts.get(depth, 4)
+    if tmpl and tmpl.depth_defaults:
+        task_counts = tmpl.depth_defaults
+    else:
+        task_counts = {"quick": 3, "balanced": 4, "deep": 6}
+    num_tasks = task_counts.get(depth, task_counts.get("balanced", 4))
+
+    # P39: Inject template guidance into planner prompt
+    template_guidance = ""
+    if tmpl and tmpl.planner_guidance:
+        template_guidance = f"\n\nTemplate Guidance ({tmpl.name}):\n{tmpl.planner_guidance}"
+    # P39: Use template task sections to guide section planning
+    template_sections = ""
+    if tmpl and tmpl.task_sections:
+        sections_list = ", ".join(tmpl.task_sections)
+        template_sections = f"\nExpected paper sections: {sections_list}"
+
+    provider_options = "duckduckgo, arxiv, semantic_scholar, openalex, pubmed"
+    if tmpl and tmpl.preferred_providers:
+        preferred = ", ".join(tmpl.preferred_providers)
+        provider_options = f"{preferred} (preferred), duckduckgo, arxiv, semantic_scholar, openalex, pubmed"
 
     prompt = (
         f"Decompose the following research topic into {num_tasks} specific sub-research tasks: '{topic}'.\n"
-        f"Depth: {depth} (quick=3, balanced=4, deep=6 tasks).\n"
+        f"Depth: {depth} (tasks: ~{num_tasks}).\n"
         "Each task must have a 'task_id' (e.g. t1, t2), 'title', 'objective', 'depends_on' (a list of other task_ids), "
-        "and 'providers' (a list of recommended providers from: duckduckgo, arxiv, semantic_scholar, openalex).\n"
+        f"and 'providers' (a list of recommended providers from: {provider_options}).\n"
         "Ensure the tasks form a valid Directed Acyclic Graph (DAG).\n"
-        "Return a JSON object with a 'tasks' key containing the list of task objects."
+        f"Return a JSON object with a 'tasks' key containing the list of task objects.{template_sections}{template_guidance}"
     )
 
     feedback = state.get("critic_user_feedback")
@@ -131,14 +154,22 @@ async def planner_node(state: GraphState) -> dict:
         if valid_tasks:
             tasks = valid_tasks
 
+    # P39: Log which template was used
+    if tmpl:
+        run_warnings = list(state.get("run_warnings", []))
+        run_warnings.append(f"planner:template:{tmpl.id}:{len(tasks)}_tasks")
+    else:
+        run_warnings = list(state.get("run_warnings", []))
+
     await apublish_progress(
         agent="Planner",
         status="complete",
-        detail=f"Planned {len(tasks)} tasks",
+        detail=f"Planned {len(tasks)} tasks ({template_id} template)",
         message="Task graph ready",
     )
     return {
         "tasks": tasks,
         "phase": "planning_complete",
-        "critic_user_feedback": None
+        "critic_user_feedback": None,
+        "run_warnings": run_warnings,
     }

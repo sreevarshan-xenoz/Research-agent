@@ -75,7 +75,9 @@ class GraphState(TypedDict):
     generated_hypotheses: list[dict[str, Any]]
     research_strategy: dict[str, Any] | None
     gap_exploration: dict[str, Any] | None
-    # User's past research topics (sourced from session history + agent memory)
+    # P39: Research Template & Presets
+    research_template: str | None
+    # User-specific past research topics (sourced from session history + agent memory)
     past_research_topics: list[str]
 
 
@@ -151,6 +153,8 @@ class WorkflowState:
     generated_hypotheses: List[Dict[str, Any]] = field(default_factory=list)
     research_strategy: Optional[Dict[str, Any]] = None
     gap_exploration: Optional[Dict[str, Any]] = None
+    # P39: Research Template & Presets
+    research_template: str = "standard"
     # User-specific past research topics (sourced from session history + agent memory)
     past_research_topics: List[str] = field(default_factory=list)
 
@@ -222,6 +226,7 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "generated_hypotheses": state.generated_hypotheses,
         "research_strategy": state.research_strategy,
         "gap_exploration": state.gap_exploration,
+        "research_template": state.research_template,
         "past_research_topics": state.past_research_topics,
     }
 
@@ -294,4 +299,5 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         research_strategy=state.get("research_strategy"),
         gap_exploration=state.get("gap_exploration"),
         past_research_topics=list(state.get("past_research_topics", [])),
+        research_template=state.get("research_template", "standard"),
     )

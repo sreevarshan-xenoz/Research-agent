@@ -11,6 +11,46 @@ let _libAnnotations = [];
 let _libReadingListItems = [];
 let _libCheckedItems = new Set();
 
+// ── Toast Notification ──────────────────────────────────────────────────────
+const _TOAST_MAX_VISIBLE = 3;
+
+function _showToast(message, type) {
+  let container = document.querySelector(".toast-container");
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+  // Enforce max visible toast limit: remove oldest if exceeding limit
+  let toasts = container.querySelectorAll(".toast:not(.toast-hiding)");
+  while (toasts.length >= _TOAST_MAX_VISIBLE) {
+    let oldest = toasts[0];
+    if (oldest && oldest.parentNode) {
+      oldest.parentNode.removeChild(oldest);
+    }
+    toasts = container.querySelectorAll(".toast:not(.toast-hiding)");
+  }
+  const toast = document.createElement("div");
+  toast.className = "toast" + (type === "error" ? " toast-error" : "");
+  const icon = type === "error" ? "\u2716" : "\u2713";
+  toast.innerHTML = '<span class="toast-icon">' + icon + '</span><span class="toast-message">' + message + '</span>';
+  container.appendChild(toast);
+  toast.offsetHeight;
+  toast.classList.add("toast-visible");
+  setTimeout(function() {
+    toast.classList.remove("toast-visible");
+    toast.classList.add("toast-hiding");
+    setTimeout(function() {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+      // Clean up empty container
+      if (container && !container.querySelector(".toast")) {
+        if (container.parentNode) container.parentNode.removeChild(container);
+      }
+    }, 300);
+  }, 2500);
+}
+
+
 function _getAuthToken() {
   return localStorage.getItem("research_auth_token") || "";
 }
@@ -566,7 +606,7 @@ async function _confirmImport() {
     let res;
     if (_importMode === "bibtex") {
       const content = document.getElementById("importBibtexTextarea")?.value;
-      if (!content) { alert("Paste BibTeX content first."); return; }
+      if (!content) { _setLibStatus("Paste BibTeX content first."); return; }
       res = await fetch("/api/personal-library/import/bibtex", {
         method: "POST",
         headers: _authHeaders(),
@@ -574,7 +614,7 @@ async function _confirmImport() {
       });
     } else if (_importMode === "zotero") {
       const content = document.getElementById("importZoteroTextarea")?.value;
-      if (!content) { alert("Paste Zotero JSON content first."); return; }
+      if (!content) { _setLibStatus("Paste Zotero JSON content first."); return; }
       res = await fetch("/api/personal-library/import/zotero", {
         method: "POST",
         headers: _authHeaders(),
@@ -583,7 +623,7 @@ async function _confirmImport() {
     } else {
       const fileInput = document.getElementById("importFileInput");
       const file = fileInput?.files?.[0];
-      if (!file) { alert("Select a file first."); return; }
+      if (!file) { _setLibStatus("Select a file first."); return; }
       const formData = new FormData();
       formData.append("file", file);
       res = await fetch("/api/personal-library/import/file", {
@@ -1077,7 +1117,7 @@ async function _exportItems(selectId) {
     }
   } catch (err) {
     console.error("Export failed:", err);
-    alert(`Export failed: ${err.message}`);
+    _showToast(`Export failed: ${err.message}`, "error");
   }
 }
 
@@ -1085,13 +1125,13 @@ async function _exportCheckedItems() {
   // Selection bar: export ONLY checked items
   const format = _getExportFormat("selExportFormat");
   try {
-    if (_libCheckedItems.size === 0) { alert("No items selected."); return; }
+    if (_libCheckedItems.size === 0) { _setLibStatus("No items selected."); return; }
     const ids = Array.from(_libCheckedItems).join(",");
     await _downloadExport(ids, format);
     _clearSelection();
   } catch (err) {
     console.error("Export failed:", err);
-    alert(`Export failed: ${err.message}`);
+    _showToast(`Export failed: ${err.message}`, "error");
   }
 }
 
@@ -1104,19 +1144,67 @@ async function _exportSingleItem() {
     await _downloadExport(itemId, format);
   } catch (err) {
     console.error(err);
-    alert(`Export failed: ${err.message}`);
+    _showToast(`Export failed: ${err.message}`, "error");
   }
 }
 
-let _copyTimer = null;
+function _formatInlineCitation(item) {
+  // Build a clean inline citation: [Author, Year] or [Author et al., Year] or [Title, Year]
+  let authorStr = "";
+  if (item.authors && item.authors.length > 0) {
+    const first = item.authors[0];
+    // Extract last name from "Last, First" or "First Last" format
+    const parts = first.split(", ");
+    const lastName = parts.length === 2 ? parts[0] : first.split(" ").pop() || first;
+    if (item.authors.length === 1) {
+      authorStr = lastName;
+    } else if (item.authors.length === 2) {
+      authorStr = `${lastName} & ${item.authors[1].split(", ")[0] || item.authors[1].split(" ").pop() || item.authors[1]}`;
+    } else {
+      authorStr = `${lastName} et al.`;
+    }
+  }
+  const yearStr = (item.year || item.published_at || "").slice(0, 4);
+  if (authorStr && yearStr) {
+    return `[${authorStr}, ${yearStr}]`;
+  } else if (authorStr) {
+    return `[${authorStr}]`;
+  } else if (yearStr) {
+    return `[${yearStr}]`;
+  }
+  return "[Unknown]"
+}
+
+async function _copyCitation() {
+  const itemId = document.getElementById("libraryDetailContent")?.getAttribute("data-item-id");
+  if (!itemId) return;
+  // Find item from cached list or fetch
+  let item = _libItems.find(i => i.id === itemId);
+  if (!item) {
+    try {
+      const res = await fetch(`/api/personal-library/items/${itemId}`, { headers: _authHeadersPlain() });
+      item = await res.json();
+    } catch (err) {
+      console.error("Failed to fetch item for citation:", err);
+      _showToast("Failed to load item for citation", "error");
+      return;
+    }
+  }
+  if (!item) return;
+  const citation = _formatInlineCitation(item);
+  try {
+    await navigator.clipboard.writeText(citation);
+    _showToast("Copied: " + citation, "success");
+  } catch (err) {
+    console.error("Copy citation failed:", err);
+    _showToast("Failed to copy citation", "error");
+  }
+}
 
 async function _copyAsBibtex() {
   // Detail view: copy BibTeX for the current item to clipboard
   const itemId = document.getElementById("libraryDetailContent")?.getAttribute("data-item-id");
   if (!itemId) return;
-  const btn = document.getElementById("libraryCopyBibtexBtn");
-  const originalHtml = btn ? btn.innerHTML : "";
-  if (_copyTimer) clearTimeout(_copyTimer);
   try {
     const res = await fetch(`/api/personal-library/export/bibtex?ids=${itemId}`, {
       headers: { "Authorization": `Bearer ${_getAuthToken()}` }
@@ -1124,19 +1212,10 @@ async function _copyAsBibtex() {
     if (!res.ok) throw new Error("Failed to fetch BibTeX");
     const text = await res.text();
     await navigator.clipboard.writeText(text);
-    if (btn) {
-      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Copied!';
-      btn.style.color = "#34d399";
-      _copyTimer = setTimeout(() => { btn.innerHTML = originalHtml; btn.style.color = ""; }, 2000);
-    }
+    _showToast("BibTeX copied to clipboard", "success");
   } catch (err) {
     console.error("Copy failed:", err);
-    if (btn) {
-      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Error';
-      btn.style.color = "#f43f5e";
-      _copyTimer = setTimeout(() => { btn.innerHTML = originalHtml; btn.style.color = ""; }, 2000);
-    }
-    alert(`Copy failed: ${err.message}`);
+    _showToast("Failed to copy BibTeX", "error");
   }
 }
 
@@ -1295,13 +1374,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // Multi-select
   document.getElementById("libSelectAllBtn")?.addEventListener("click", _selectAllItems);
   document.getElementById("libClearSelectionBtn")?.addEventListener("click", _clearSelection);
-  document.getElementById("libExportCheckedBtn")?.addEventListener("click", _exportCheckedBibtex);
-
   // Export (multi-format)
   document.getElementById("libraryExportBtn")?.addEventListener("click", () => _exportItems("toolbarExportFormat"));
   document.getElementById("libExportCheckedBtn")?.addEventListener("click", _exportCheckedItems);
   document.getElementById("libraryExportSingleBtn")?.addEventListener("click", _exportSingleItem);
   document.getElementById("libraryCopyBibtexBtn")?.addEventListener("click", _copyAsBibtex);
+  document.getElementById("libraryCopyCitationBtn")?.addEventListener("click", _copyCitation);
 
   // Delete
   document.getElementById("libraryDeleteItemBtn")?.addEventListener("click", _deleteLibraryItem);

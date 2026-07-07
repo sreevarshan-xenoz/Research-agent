@@ -305,7 +305,7 @@ authFormEl?.addEventListener("submit", async (e) => {
     localStorage.setItem("research_auth_token", authToken);
     checkAuth();
   } catch (err) {
-    alert(err.message);
+    if (authStatusEl) authStatusEl.textContent = err.message;
   }
 });
 
@@ -314,6 +314,7 @@ function checkAuth() {
     authOverlayEl.classList.add("hidden");
     appShellEl.classList.remove("hidden");
     tryResumeSession();
+    loadResearchSuggestions();
   } else {
     authOverlayEl.classList.remove("hidden");
     appShellEl.classList.add("hidden");
@@ -381,7 +382,6 @@ function switchWorkbenchTab(tab) {
     loadSubmissionPipeline();
   } else if (tab === "library") {
     if (typeof loadLibraryBrowser === "function") loadLibraryBrowser();
-  }
   } else if (tab === "paperGit") {
     loadPaperGitBrowser();
   } else if (tab === "plugins") {
@@ -559,6 +559,16 @@ function resetWorkbench() {
   if (trendsAuthorsContainer) trendsAuthorsContainer.innerHTML = "";
   if (trendsVenuesContainer) trendsVenuesContainer.innerHTML = "";
   if (trendsQueryInput) trendsQueryInput.value = "";
+
+  // P26: Reset hypothesis and strategy panels
+  const hypPanel = document.getElementById("hypothesisPanel");
+  if (hypPanel) hypPanel.innerHTML = '<p class="small muted">Run a research topic to generate hypotheses.</p>';
+  const hypBadge = document.getElementById("hypothesisBadge");
+  if (hypBadge) hypBadge.textContent = "0";
+  const stratPanel = document.getElementById("strategyPanel");
+  if (stratPanel) stratPanel.innerHTML = '<p class="small muted">Run a research topic to generate strategy recommendations.</p>';
+  const stratBadge = document.getElementById("strategyBadge");
+  if (stratBadge) stratBadge.textContent = "—";
 }
 
 
@@ -1034,6 +1044,10 @@ chatForm?.addEventListener("submit", async (e) => {
         if (codeEl && payload.latex_text) { codeEl.textContent = payload.latex_text; Prism.highlightElement(codeEl); }
         renderDocPreview(payload.doc_preview_html);
         renderArtifacts(payload.artifact_urls);
+        // P26: Render hypothesis and strategy panels
+        if (payload.generated_hypotheses) renderHypotheses(payload.generated_hypotheses);
+        if (payload.research_strategy) renderStrategy(payload.research_strategy);
+        if (payload.gap_exploration) renderGapExploration(payload.gap_exploration);
         setWorkbenchStatus("ready", "success");
         updatePipelineTracker("completed");
         switchWorkbenchTab("doc");
@@ -1048,9 +1062,22 @@ chatForm?.addEventListener("submit", async (e) => {
 });
 
 
+// P26: Auto-Discover button — launches autonomous research on a trending topic
+const autoDiscoverBtn = document.getElementById("autoDiscoverBtn");
+autoDiscoverBtn?.addEventListener("click", async () => {
+  // Set autonomy mode to autonomous and send empty topic signal
+  // Ensure paper research mode for the autonomous pipeline
+  const paperRadio = document.querySelector('input[name="runMode"][value="paper"]');
+  if (paperRadio) paperRadio.click();
+  if (autonomySelect) autonomySelect.value = "autonomous";
+  if (messageInput) messageInput.value = "auto-discover";
+  chatForm?.dispatchEvent(new Event("submit"));
+});
+
 newSessionBtn?.addEventListener("click", () => {
   sessionId = null; localStorage.removeItem("research_session_id");
   resetWorkbench(); appendMessage("assistant", "Session reset.");
+  loadResearchSuggestions();
 });
 
 stopRunBtn?.addEventListener("click", async () => {
@@ -1095,7 +1122,7 @@ renderPdfBtn?.addEventListener("click", () => {
 
 async function compilePdfForRun(runId) {
   if (!runId) {
-    alert("Please run a research topic first.");
+    if (renderStatusText) renderStatusText.textContent = "Please run a research topic first.";
     return;
   }
   if (renderPdfBtn) renderPdfBtn.disabled = true;
@@ -1136,7 +1163,7 @@ generateBlogBtn?.addEventListener("click", () => {
 
 async function generateBlogPosts(runId) {
   if (!runId) {
-    alert("Please run a research topic first.");
+    if (blogStatusText) blogStatusText.textContent = "Please run a research topic first.";
     return;
   }
   if (generateBlogBtn) generateBlogBtn.disabled = true;
@@ -1749,7 +1776,7 @@ generateProposalBtn?.addEventListener("click", async () => {
   const agency = proposalAgency?.value || "nsf";
   
   if (!title) {
-    alert("Please provide a Project Title.");
+    if (proposalStatusText) proposalStatusText.textContent = "Please provide a Project Title.";
     return;
   }
   
@@ -1785,7 +1812,6 @@ generateProposalBtn?.addEventListener("click", async () => {
     }
   } catch (err) {
     if (proposalStatusText) proposalStatusText.textContent = `Generation failed: ${err.message}`;
-    alert(err.message);
   } finally {
     generateProposalBtn.disabled = false;
     generateProposalBtn.textContent = "Generate Proposal";
@@ -1835,7 +1861,7 @@ function renderTrendBar(container, items, maxCount, colorVar = "var(--primary-gl
 async function searchTrends() {
   const query = trendsQueryInput?.value?.trim();
   if (!query) {
-    alert("Please enter a search query.");
+    if (trendsStatusText) trendsStatusText.textContent = "Please enter a search query.";
     return;
   }
 
@@ -1880,8 +1906,8 @@ trendsQueryInput?.addEventListener("keydown", (e) => {
 subscribeTrendsBtn?.addEventListener("click", async () => {
   const email = trendsEmailInput?.value?.trim();
   const query = trendsQueryInput?.value?.trim();
-  if (!email) { alert("Please enter your email address."); return; }
-  if (!query) { alert("Please enter a search query first."); return; }
+  if (!email) { if (trendsStatusText) trendsStatusText.textContent = "Please enter your email address."; return; }
+  if (!query) { if (trendsStatusText) trendsStatusText.textContent = "Please enter a search query first."; return; }
 
   try {
     const res = await fetch(`/api/trends/report?query=${encodeURIComponent(query)}&email=${encodeURIComponent(email)}`, {
@@ -1895,7 +1921,7 @@ subscribeTrendsBtn?.addEventListener("click", async () => {
       setTimeout(() => { subscribeTrendsBtn.textContent = "Subscribe"; subscribeTrendsBtn.disabled = false; }, 3000);
     }
   } catch (err) {
-    alert("Failed to subscribe: " + err.message);
+    if (trendsStatusText) trendsStatusText.textContent = "Failed to subscribe: " + err.message;
   }
 });
 
@@ -2388,6 +2414,71 @@ async function loadAgentSuggestions() {
   }
 }
 
+async function renderResearchSuggestions(suggestions) {
+  const container = document.getElementById("researchSuggestionsContainer");
+  const wrapper = document.getElementById("researchSuggestions");
+  const countEl = document.getElementById("researchSuggestionsCount");
+  if (!container || !wrapper) return;
+  if (!suggestions || suggestions.length === 0) {
+    wrapper.classList.add("hidden");
+    return;
+  }
+  wrapper.classList.remove("hidden");
+  if (countEl) countEl.textContent = suggestions.length + " topics";
+  container.innerHTML = suggestions.map(s => {
+    const title = s.title || s.query || "Research topic";
+    const domain = s.domain || "";
+    const reason = s.reason || "";
+    const query = s.query || title;
+    const type = s.type || "trending";
+    const domainColors = {
+      "NLP": "#06b6d4", "AI": "#8b5cf6", "NLP/IR": "#06b6d4",
+      "Multimodal": "#f59e0b", "Efficiency": "#10b981",
+      "Safety": "#f43f5e", "Science": "#3b82f6", "ML Theory": "#a78bfa",
+      "past_research": "#34d399", "agent_memory": "#c4b5fd",
+      "literature_monitoring": "#f0abfc"
+    };
+    const dotColor = domainColors[domain] || "#71717a";
+    const typeLabels = { "trending": "\ud83d\udd25", "past_topic": "\ud83d\udcdc",
+      "memory_topic": "\ud83e\udde0", "watchdog_topic": "\ud83d\udc40" };
+    const icon = typeLabels[type] || "\ud83d\udd0d";
+    return `
+      <button class="research-suggestion-card" data-query="${query.replace(/"/g, '&quot;')}" title="${reason.replace(/"/g, '&quot;')}">
+        <span class="research-suggestion-icon">${icon}</span>
+        <div class="research-suggestion-body">
+          <span class="research-suggestion-title">${title}</span>
+          <span class="research-suggestion-reason">${reason}</span>
+        </div>
+        <span class="research-suggestion-dot" style="background: ${dotColor};"></span>
+      </button>
+    `;
+  }).join("");
+}
+
+async function loadResearchSuggestions() {
+  try {
+    const res = await fetch("/api/research/suggestions", {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderResearchSuggestions(data.suggestions || []);
+  } catch (err) {
+    console.error("Failed to load research suggestions:", err);
+  }
+}
+
+// Click delegation for research suggestion cards
+document.addEventListener("click", (e) => {
+  const card = e.target.closest(".research-suggestion-card");
+  if (!card) return;
+  const query = card.dataset.query || card.textContent;
+  if (messageInput) {
+    messageInput.value = query;
+    chatForm?.dispatchEvent(new Event("submit"));
+  }
+});
+
 async function runAgentChatFlow(message) {
   const sid = await ensureAgentSession();
   if (!sid) {
@@ -2718,6 +2809,169 @@ chatForm?.addEventListener("submit", async (e) => {
   setTimeout(() => loadWatchdogDigests(), 3000);
 })();
 
+
+// ── P26: Hypothesis & Strategy Panel Renderers ──────────────────────────────
+
+function renderHypotheses(hypotheses) {
+  const panel = document.getElementById("hypothesisPanel");
+  const badge = document.getElementById("hypothesisBadge");
+  if (!panel) return;
+  if (!hypotheses || hypotheses.length === 0) {
+    panel.innerHTML = '<p class="small muted">No hypotheses generated yet.</p>';
+    if (badge) badge.textContent = "0";
+    return;
+  }
+  if (badge) badge.textContent = hypotheses.length;
+  panel.innerHTML = hypotheses.map((h, idx) => {
+    const noveltyScore = (h.novelty_score || 0) * 100;
+    const feasibilityScore = (h.feasibility_score || 0) * 100;
+    const gapLabel = h.gap_addressed || "general";
+    const gapColors = { "methodology": "#8b5cf6", "evaluation": "#06b6d4", "coverage": "#10b981", "general": "#71717a" };
+    const gapColor = gapColors[gapLabel] || "#71717a";
+    return `
+      <div class="p26-card hypothesis-card" style="animation-delay: ${idx * 0.05}s">
+        <div class="p26-card-header">
+          <span class="p26-card-title">${h.title || "Hypothesis " + (idx + 1)}</span>
+          <span class="p26-gap-badge" style="background: ${gapColor}22; border-color: ${gapColor}44; color: ${gapColor};">${gapLabel}</span>
+        </div>
+        <div class="p26-card-body">
+          <p class="p26-hypothesis-statement">${h.hypothesis || ""}</p>
+          <p class="p26-hypothesis-rationale">${h.rationale || ""}</p>
+        </div>
+        <div class="p26-card-scores">
+          <div class="p26-score-bar">
+            <span class="p26-score-label">Novelty</span>
+            <div class="p26-score-track">
+              <div class="p26-score-fill" style="width: ${noveltyScore}%; background: linear-gradient(90deg, #8b5cf6, #a78bfa);"></div>
+            </div>
+            <span class="p26-score-value">${Math.round(noveltyScore)}%</span>
+          </div>
+          <div class="p26-score-bar">
+            <span class="p26-score-label">Feasibility</span>
+            <div class="p26-score-track">
+              <div class="p26-score-fill" style="width: ${feasibilityScore}%; background: linear-gradient(90deg, #10b981, #34d399);"></div>
+            </div>
+            <span class="p26-score-value">${Math.round(feasibilityScore)}%</span>
+          </div>
+        </div>
+        ${h.proposed_approach ? `<div class="p26-card-detail"><strong>Approach:</strong> ${h.proposed_approach}</div>` : ""}
+        ${h.evaluation_approach ? `<div class="p26-card-detail"><strong>Evaluation:</strong> ${h.evaluation_approach}</div>` : ""}
+        ${h.required_resources && h.required_resources.length > 0 ? `
+          <div class="p26-card-tags">
+            ${h.required_resources.map(r => `<span class="p26-tag">${r}</span>`).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+function renderStrategy(strategy) {
+  const panel = document.getElementById("strategyPanel");
+  const badge = document.getElementById("strategyBadge");
+  if (!panel) return;
+  if (!strategy || !strategy.methodology) {
+    panel.innerHTML = '<p class="small muted">No strategy recommendations yet.</p>';
+    if (badge) badge.textContent = "Ready";
+    return;
+  }
+  if (badge) badge.textContent = "Ready";
+  let html = "";
+
+  // Methodology
+  if (strategy.methodology) {
+    html += '<div class="p26-section-label">Methodology</div>';
+    if (strategy.methodology.recommended_approaches) {
+      strategy.methodology.recommended_approaches.forEach(a => {
+        html += \`
+          <div class="p26-card">
+            <div class="p26-card-header">
+              <span class="p26-card-title-small">\${a.name || ""}</span>
+            </div>
+            <div class="p26-card-body">
+              <p class="p26-card-desc">\${a.description || ""}</p>
+              \${a.rationale ? \`<p class="p26-card-rationale">\${a.rationale}</p>\` : ""}
+            </div>
+          </div>
+        \`;
+      });
+    }
+    if (strategy.methodology.avoid && strategy.methodology.avoid.length > 0) {
+      html += '<div class="p26-card-avoid">';
+      html += '<span class="p26-avoid-label">Avoid</span>';
+      strategy.methodology.avoid.forEach(a => {
+        html += \`<span class="p26-avoid-chip">\${a}</span>\`;
+      });
+      html += '</div>';
+    }
+  }
+
+  // Datasets
+  if (strategy.datasets && strategy.datasets.recommended) {
+    html += '<div class="p26-section-label" style="margin-top: 8px;">Datasets</div>';
+    strategy.datasets.recommended.forEach(d => {
+      html += \`
+        <div class="p26-card p26-card-compact">
+          <span class="p26-card-title-small">\${d.name || ""}</span>
+          <p class="p26-card-desc">\${d.description || ""}</p>
+        </div>
+      \`;
+    });
+  }
+
+  // Baselines
+  if (strategy.baselines && strategy.baselines.recommended) {
+    html += '<div class="p26-section-label" style="margin-top: 8px;">Baselines</div>';
+    strategy.baselines.recommended.forEach(b => {
+      html += \`
+        <div class="p26-card p26-card-compact">
+          <span class="p26-card-title-small">\${b.name || ""}</span>
+          <p class="p26-card-desc">\${b.description || ""}</p>
+        </div>
+      \`;
+    });
+  }
+
+  // Evaluation
+  if (strategy.evaluation) {
+    html += '<div class="p26-section-label" style="margin-top: 8px;">Evaluation</div>';
+    if (strategy.evaluation.primary_metrics) {
+      html += '<div class="p26-card-tags">' +
+        strategy.evaluation.primary_metrics.map(m => \`<span class="p26-tag">\${m}</span>\`).join("") +
+        '</div>';
+    }
+    if (strategy.evaluation.ablation) {
+      html += '<div class="p26-card-detail" style="margin-top: 4px;"><strong>Ablation:</strong> ' +
+        (Array.isArray(strategy.evaluation.ablation) ? strategy.evaluation.ablation.join("; ") : strategy.evaluation.ablation) +
+        '</div>';
+    }
+  }
+
+  panel.innerHTML = html;
+}
+
+function renderGapExploration(gapExp) {
+  if (!gapExp || !gapExp.is_thin) return;
+  const panel = document.getElementById("hypothesisPanel");
+  if (!panel) return;
+  // Add gap exploration note at the top of the hypothesis panel
+  const note = document.createElement("div");
+  note.className = "p26-card p26-thin-note";
+  note.innerHTML = \`
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+      <span style="font-size: 1rem;">\u26a0\ufe0f</span>
+      <span style="font-weight: 600; font-size: 0.75rem; color: #f59e0b;">Thin Literature Detected</span>
+    </div>
+    <p style="font-size: 0.7rem; color: #a1a1aa; margin: 0; line-height: 1.4;">\${gapExp.analysis || ""}</p>
+    <div style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap;">
+      \${(gapExp.alternative_queries || []).map(q => \`<span class="p26-tag p26-tag-alt">\${q}</span>\`).join("")}
+    </div>
+    <div style="margin-top: 6px; font-size: 0.65rem; color: #f59e0b; font-weight: 600; text-transform: uppercase;">
+      Recommendation: \${(gapExp.recommendation || "").replace(/_/g, " ")}
+    </div>
+  \`;
+  panel.insertBefore(note, panel.firstChild);
+}
 
 // ── Watchdog Dashboard Widget (P13) ──────────────────────────────
 

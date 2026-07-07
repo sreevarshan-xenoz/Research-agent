@@ -2981,6 +2981,571 @@ button:active {
 }
 
 
+
+/* ── P26: Research Suggestions (composer area) ──────────────────────── */
+.research-suggestions {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: var(--radius-md);
+  animation: fadeIn 0.3s ease;
+}
+
+.research-suggestions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.research-suggestions-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #c4b5fd;
+}
+
+.research-suggestions-count {
+  font-size: 0.6rem;
+  font-family: 'Fira Code', monospace;
+  color: #71717a;
+  background: rgba(255,255,255,0.04);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.research-suggestions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.research-suggestion-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.research-suggestion-card:nth-child(1) { animation-delay: 0.02s; }
+.research-suggestion-card:nth-child(2) { animation-delay: 0.06s; }
+.research-suggestion-card:nth-child(3) { animation-delay: 0.10s; }
+.research-suggestion-card:nth-child(4) { animation-delay: 0.14s; }
+.research-suggestion-card:nth-child(5) { animation-delay: 0.18s; }
+.research-suggestion-card:nth-child(6) { animation-delay: 0.22s; }
+.research-suggestion-card:nth-child(7) { animation-delay: 0.26s; }
+.research-suggestion-card:nth-child(8) { animation-delay: 0.30s; }
+
+.research-suggestion-card:hover {
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateX(2px);
+}
+
+.research-suggestion-card:active {
+  transform: translateX(1px);
+}
+
+.research-suggestion-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  margin-top: 1px;
+}
+
+.research-suggestion-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.research-suggestion-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.research-suggestion-reason {
+  font-size: 0.65rem;
+  color: #71717a;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.research-suggestion-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  transition: all 0.2s ease;
+}
+
+.research-suggestion-card:hover .research-suggestion-dot {
+  box-shadow: 0 0 8px currentColor;
+}
+
+@media (max-width: 768px) {
+  .research-suggestions {
+    padding: 8px;
+  }
+  .research-suggestions-grid {
+    max-height: 150px;
+  }
+  .research-suggestion-title {
+    font-size: 0.7rem;
+  }
+}
+
+
+
+/* Panel wrapper: subtle left accent border per panel type */
+
+/* Hypothesis panel - purple accent */
+.panel.status-panel:has(#hypothesisPanel) {
+  border-left: 3px solid rgba(139, 92, 246, 0.3);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.panel.status-panel:has(#hypothesisPanel):hover {
+  border-left-color: rgba(139, 92, 246, 0.6);
+  box-shadow: inset 3px 0 12px -6px rgba(139, 92, 246, 0.15);
+}
+
+/* Strategy panel - emerald accent */
+.panel.status-panel:has(#strategyPanel) {
+  border-left: 3px solid rgba(16, 185, 129, 0.3);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.panel.status-panel:has(#strategyPanel):hover {
+  border-left-color: rgba(16, 185, 129, 0.6);
+  box-shadow: inset 3px 0 12px -6px rgba(16, 185, 129, 0.15);
+}
+
+/* Hypothesis badge: purple accent */
+#hypothesisBadge {
+  background: rgba(139, 92, 246, 0.12);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  font-size: 0.6rem;
+  min-width: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+/* Strategy badge: emerald accent */
+#strategyBadge {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  font-size: 0.6rem;
+  min-width: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+/* Panel header inside hypothesis/strategy panels */
+.panel.status-panel:has(#hypothesisPanel) .panel-header,
+.panel.status-panel:has(#strategyPanel) .panel-header {
+  cursor: default;
+  user-select: none;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 10px;
+  transition: border-color 0.3s ease;
+}
+
+.panel.status-panel:has(#hypothesisPanel):hover .panel-header {
+  border-bottom-color: rgba(139, 92, 246, 0.15);
+}
+
+.panel.status-panel:has(#strategyPanel):hover .panel-header {
+  border-bottom-color: rgba(16, 185, 129, 0.15);
+}
+
+/* Panel h2 heading colors */
+.panel.status-panel:has(#hypothesisPanel) .panel-header h2 {
+  color: #a78bfa;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+}
+
+.panel.status-panel:has(#strategyPanel) .panel-header h2 {
+  color: #34d399;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+}
+
+/* When panel has content, subtle background */
+.p26-panel:not(:has(> p.muted)) {
+  padding: 2px 0;}
+
+/* Animate panel content appearing */
+.p26-panel .p26-card {
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+.p26-panel .p26-card:nth-child(1) { animation-delay: 0.03s; }
+.p26-panel .p26-card:nth-child(2) { animation-delay: 0.06s; }
+.p26-panel .p26-card:nth-child(3) { animation-delay: 0.09s; }
+.p26-panel .p26-card:nth-child(4) { animation-delay: 0.12s; }
+.p26-panel .p26-card:nth-child(5) { animation-delay: 0.15s; }
+.p26-panel .p26-card:nth-child(6) { animation-delay: 0.18s; }
+.p26-panel .p26-card:nth-child(7) { animation-delay: 0.21s; }
+.p26-panel .p26-card:nth-child(8) { animation-delay: 0.24s; }
+
+/* ── P26: Hypothesis & Strategy Sidebar Panels ──────────────────────── */
+.p26-panel {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.p26-panel > p.muted {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 0.7rem;
+}
+
+/* Hypothesis Card */
+.p26-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  animation: fadeIn 0.3s ease forwards;
+  opacity: 0;
+}
+
+.p26-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.p26-card-compact {
+  padding: 6px 8px;
+  margin-bottom: 4px;
+}
+
+.p26-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.p26-card-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #e4e4e7;
+  line-height: 1.3;
+  flex: 1;
+}
+
+.p26-card-title-small {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #d4d4d8;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.p26-card-body {
+  margin-bottom: 4px;
+}
+
+.p26-hypothesis-statement {
+  font-size: 0.68rem;
+  color: #c4b5fd;
+  line-height: 1.4;
+  margin: 0 0 4px 0;
+  font-style: italic;
+}
+
+.p26-hypothesis-rationale {
+  font-size: 0.65rem;
+  color: #71717a;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.p26-card-desc {
+  font-size: 0.65rem;
+  color: #a1a1aa;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.p26-card-rationale {
+  font-size: 0.6rem;
+  color: #71717a;
+  line-height: 1.3;
+  margin: 2px 0 0 0;
+}
+
+.p26-card-detail {
+  font-size: 0.65rem;
+  color: #a1a1aa;
+  line-height: 1.3;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.p26-card-detail strong {
+  color: #d4d4d8;
+  font-weight: 600;
+}
+
+/* Score Bars */
+.p26-card-scores {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.p26-score-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.p26-score-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: #71717a;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  min-width: 32px;
+}
+
+.p26-score-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.p26-score-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.p26-score-value {
+  font-size: 0.55rem;
+  font-family: 'Fira Code', monospace;
+  color: #71717a;
+  min-width: 24px;
+  text-align: right;
+}
+
+/* Gap Badge */
+.p26-gap-badge {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Tags */
+.p26-card-tags {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.p26-tag {
+  display: inline-flex;
+  padding: 1px 5px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 999px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: #c4b5fd;
+}
+
+.p26-tag-alt {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+/* Strategy Section Labels */
+.p26-section-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #52525b;
+  margin-bottom: 4px;
+}
+
+/* Avoid Chips */
+.p26-card-avoid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.p26-avoid-label {
+  font-size: 0.55rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #f43f5e;
+  margin-right: 2px;
+}
+
+.p26-avoid-chip {
+  display: inline-flex;
+  padding: 1px 5px;
+  background: rgba(244, 63, 94, 0.08);
+  border: 1px solid rgba(244, 63, 94, 0.15);
+  border-radius: 999px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: #fda4af;
+}
+
+/* Thin Literature Warning */
+.p26-thin-note {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.2);
+  margin-bottom: 6px;
+}
+
+/* Scrollbar for P26 panels */
+.p26-panel::-webkit-scrollbar { width: 3px; }
+.p26-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ── Toast Notifications (clipboard copy feedback) ───────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 30000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(20, 20, 28, 0.97);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(52, 211, 153, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 0.85rem;
+  color: #e4e4e7;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(12px) scale(0.96);
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 360px;
+}
+
+.toast.toast-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.toast.toast-hiding {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast.toast-error {
+  border-color: rgba(244, 63, 94, 0.3);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(244, 63, 94, 0.08);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.toast:not(.toast-error) .toast-icon {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+
+.toast.toast-error .toast-icon {
+  background: rgba(244, 63, 94, 0.15);
+  color: #f43f5e;
+}
+
+.toast-message {
+  flex: 1;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+@media (max-width: 480px) {
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+  .toast {
+    max-width: none;
+  }
+}
 /* ── Multi-select checkboxes and selection bar ───────────────────────── */
 .lib-checkbox-label {
   display: flex;
