@@ -47,6 +47,7 @@ from research_agent.personal_library.routes import router as personal_library_ro
 from research_agent.paper_git.routes import router as paper_git_router
 from research_agent.plugins.routes import router as plugins_router
 from research_agent.app.research_suggestions import router as research_suggestions_router, load_past_topics_for_user
+from research_agent.app.swarm_routes import router as swarm_router
 from research_agent.config import load_settings, validate_insecure_defaults
 from research_agent.models.llm_client import _resolve_api_key
 from research_agent.output.grant_proposal import generate_grant_proposal
@@ -347,6 +348,8 @@ def create_app(
     # P19: Plugin System routes
     app.include_router(plugins_router)
     app.include_router(research_suggestions_router)
+    # P34: Multi-Agent Research Swarm routes
+    app.include_router(swarm_router)
 
     tool_registry = registry if registry is not None else build_tool_registry(settings)
 

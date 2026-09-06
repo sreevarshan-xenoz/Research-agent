@@ -194,6 +194,10 @@ def score_evidence(
     if warning_count > 0:
         overall = max(0.0, overall - warning_count * 0.02)
 
+    # Metadata penalty: reduce overall score when items lack snippet/content
+    if total_items > 0 and metadata_only_count > 0:
+        overall = max(0.0, overall - (metadata_only_count / total_items) * 0.05)
+
     return EvidenceScore(
         overall=round(overall, 3),
         coverage=round(coverage, 3),

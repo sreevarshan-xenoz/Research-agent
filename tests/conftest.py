@@ -81,16 +81,32 @@ def test_env(monkeypatch):
     def _mock_text_sync(*, role="subagent", prompt="", **kwargs):
         return None
 
+    from research_agent.models.ensemble import EnsembleResult, VotingStrategy
+    async def _mock_ensemble(task_type, prompt="", **kwargs):
+        return EnsembleResult(
+            task_type=task_type,
+            strategy=VotingStrategy.MAJORITY,
+            aggregated_text="",
+            aggregated_json=None,
+            num_models=1,
+            num_success=0,
+        )
+
     # Patch source module
     import research_agent.models.llm_client
+    import research_agent.models.ensemble
     monkeypatch.setattr(research_agent.models.llm_client, "agenerate_json", _mock_json)
     monkeypatch.setattr(research_agent.models.llm_client, "agenerate_text", _mock_text)
     monkeypatch.setattr(research_agent.models.llm_client, "generate_json", _mock_json_sync)
     monkeypatch.setattr(research_agent.models.llm_client, "generate_text", _mock_text_sync)
+    monkeypatch.setattr(research_agent.models.ensemble, "run_ensemble", _mock_ensemble)
+    monkeypatch.setattr(research_agent.models.ensemble, "run_json_ensemble", _mock_ensemble)
 
     import research_agent.models
     monkeypatch.setattr(research_agent.models, "agenerate_json", _mock_json)
     monkeypatch.setattr(research_agent.models, "agenerate_text", _mock_text)
+    monkeypatch.setattr(research_agent.models, "run_ensemble", _mock_ensemble)
+    monkeypatch.setattr(research_agent.models, "run_json_ensemble", _mock_ensemble)
 
     # Patch consumer modules at the source namespace.
     # The `from research_agent.models import agenerate_json` pattern creates local
@@ -115,13 +131,28 @@ def test_env(monkeypatch):
         "research_agent.orchestration.nodes.knowledge_graph",
         "research_agent.orchestration.nodes.peer_reviewer",
         "research_agent.orchestration.nodes.code_execution",
+        "research_agent.orchestration.nodes.strategy_recommender",
+        "research_agent.orchestration.nodes.hypothesis_generator",
+        "research_agent.orchestration.nodes.gap_exploration",
+        "research_agent.orchestration.code_sandbox.claim_extractor",
+        "research_agent.orchestration.code_sandbox.code_generator",
+        "research_agent.orchestration.code_sandbox.result_comparator",
+        "research_agent.orchestration.deep_research.query_refiner",
+        "research_agent.output.content_adapter",
+        "research_agent.output.format_converter",
+        "research_agent.chat.agent",
+        "research_agent.swarm.agents",
+        "research_agent.swarm.consensus",
+        "research_agent.orchestration.nodes.swarm_node",
         "research_agent.orchestration.survey",
         "research_agent.rag.table_extractor",
     ]
     for mod_name in _consumer_module_names:
         try:
             mod = importlib.import_module(mod_name)
-            monkeypatch.setattr(mod, "agenerate_json", _mock_json)
-            monkeypatch.setattr(mod, "agenerate_text", _mock_text)
+            monkeypatch.setattr(mod, "agenerate_json", _mock_json, raising=False)
+            monkeypatch.setattr(mod, "agenerate_text", _mock_text, raising=False)
+            monkeypatch.setattr(mod, "run_ensemble", _mock_ensemble, raising=False)
+            monkeypatch.setattr(mod, "run_json_ensemble", _mock_ensemble, raising=False)
         except Exception:
             pass

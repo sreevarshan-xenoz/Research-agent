@@ -34,6 +34,7 @@ from research_agent.orchestration.nodes.grant_proposal import grant_proposal_nod
 from research_agent.orchestration.nodes.hypothesis_generator import hypothesis_generator_node
 from research_agent.orchestration.nodes.strategy_recommender import strategy_recommender_node
 from research_agent.orchestration.nodes.gap_exploration import gap_exploration_node
+from research_agent.orchestration.nodes.swarm_node import swarm_node
 from research_agent.orchestration.code_sandbox import code_sandbox_node
 from research_agent.orchestration.nodes.worker import (
 	get_pending_task_ids,
@@ -81,6 +82,7 @@ __all__ = [
 	"hypothesis_generator_node",
 	"strategy_recommender_node",
 	"gap_exploration_node",
+	"swarm_node",
 ]
 
 

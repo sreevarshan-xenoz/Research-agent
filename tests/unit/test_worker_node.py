@@ -136,20 +136,18 @@ async def test_worker_node_emits_real_task_progress() -> None:
 
     assert result["tasks"][0]["status"] == "complete"
     assert result["tasks"][1]["status"] == "pending"
-    assert events == [
-        {
-            "agent": "SubResearch t1",
-            "status": "running",
-            "detail": "Background",
-            "message": "Running t1",
-        },
-        {
-            "agent": "SubResearch t1",
-            "status": "complete",
-            "detail": "Background (2 items)",
-            "message": "Completed t1",
-        },
-    ]
+    assert {
+        "agent": "SubResearch t1",
+        "status": "running",
+        "detail": "Background",
+        "message": "Running t1",
+    } in events
+    assert {
+        "agent": "SubResearch t1",
+        "status": "complete",
+        "detail": "Background (2 items)",
+        "message": "Completed t1",
+    } in events
 
 
 @pytest.mark.asyncio

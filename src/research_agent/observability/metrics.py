@@ -140,9 +140,10 @@ def record_llm_cost(provider: str, cost_usd: float) -> None:
     LLM_COST.labels(provider=provider).inc(cost_usd)
 
 
-def count_llm_request(provider: str, result: str = "success") -> None:
+def count_llm_request(provider: str, result: str = "success", status: str | None = None) -> None:
     """Increment the LLM request counter."""
-    LLM_REQUESTS.labels(provider=provider, result=result).inc()
+    res = status if status is not None else result
+    LLM_REQUESTS.labels(provider=provider, result=res).inc()
 
 
 def count_provider_failure(provider: str) -> None:

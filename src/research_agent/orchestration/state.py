@@ -77,6 +77,9 @@ class GraphState(TypedDict):
     gap_exploration: dict[str, Any] | None
     # P39: Research Template & Presets
     research_template: str | None
+    # P34: Multi-Agent Research Swarm fields
+    swarm_session: dict[str, Any] | None
+    swarm_consensus: dict[str, Any] | None
     # User-specific past research topics (sourced from session history + agent memory)
     past_research_topics: list[str]
 
@@ -155,6 +158,9 @@ class WorkflowState:
     gap_exploration: Optional[Dict[str, Any]] = None
     # P39: Research Template & Presets
     research_template: str = "standard"
+    # P34: Multi-Agent Research Swarm fields
+    swarm_session: Optional[Dict[str, Any]] = None
+    swarm_consensus: Optional[Dict[str, Any]] = None
     # User-specific past research topics (sourced from session history + agent memory)
     past_research_topics: List[str] = field(default_factory=list)
 
@@ -227,6 +233,8 @@ def to_graph_state(state: WorkflowState) -> GraphState:
         "research_strategy": state.research_strategy,
         "gap_exploration": state.gap_exploration,
         "research_template": state.research_template,
+        "swarm_session": state.swarm_session,
+        "swarm_consensus": state.swarm_consensus,
         "past_research_topics": state.past_research_topics,
     }
 
@@ -300,4 +308,6 @@ def from_graph_state(state: GraphState) -> WorkflowState:
         gap_exploration=state.get("gap_exploration"),
         past_research_topics=list(state.get("past_research_topics", [])),
         research_template=state.get("research_template", "standard"),
+        swarm_session=state.get("swarm_session"),
+        swarm_consensus=state.get("swarm_consensus"),
     )

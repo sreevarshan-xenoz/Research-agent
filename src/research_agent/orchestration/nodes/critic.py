@@ -89,9 +89,11 @@ async def critic_node(state: GraphState) -> dict:
                 notes.append(f"Low source authority for {task_id}")
             if evidence.contradiction_penalty > 0:
                 notes.append(
-                    f"Contradiction penalty for {task_id}: "
+                    f"Contradiction penalty applied for {task_id}: "
                     f"{evidence.contradiction_penalty:.2f}"
                 )
+            if evidence.details.get("metadata_only", 0) > 0:
+                notes.append(f"Metadata fallback penalty applied for {task_id}")
             if evidence.num_providers <= 1 and evidence.num_sources > 0:
                 notes.append(f"Single provider dependency for {task_id}")
 

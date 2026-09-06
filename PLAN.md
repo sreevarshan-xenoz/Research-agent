@@ -56,6 +56,8 @@ The project delivers a complete research lifecycle pipeline with all features li
 | **Plugin System with Discovery and Lifecycle Hooks** | ✅ | **P19** |
 | **PWA Mobile & Offline Support** | ✅ | **P20** |
 | **Interactive Onboarding & Guided Tour** | ✅ | **P38** |
+| **Multi-Agent Research Swarm (Theorist/Experimentalist/Critic/Editor)** | ✅ | **P34** |
+| **Research Templates & Presets Library** | ✅ | **P39** |
 
 ---
 
@@ -298,14 +300,18 @@ The project delivers a complete research lifecycle pipeline with all features li
 
 ## Phase: Cutting-Edge Research Features
 
-### P34 — Multi-Agent Research Swarm
-- [ ] **Role-specialized agents**: Theorist, Experimentalist, Critic, Editor
-- [ ] **Debate protocol**: agents discuss and refine hypotheses
-- [ ] **Consensus mechanisms**: voting/weighting agent outputs
-- [ ] **Swarm coordination**: dynamic task allocation across agents
-- [ ] **Self-improvement**: agents learn from past run outcomes
+### ✅ P34 — Multi-Agent Research Swarm
+**Completed September 2026.** Role-specialized research agents (Theorist, Experimentalist, Critic, Editor, Domain Expert) with multi-turn structured debate rounds, cross-examination, and confidence-weighted consensus synthesis.
 
-**Estimated effort:** 5-6 sprints
+**Key deliverables:**
+- **`swarm/models.py`**: Dataclasses for `SwarmRole`, `AgentContribution`, `DebateRound`, `DebateSession`, and `SwarmConsensus`.
+- **`swarm/agents.py`**: 5 specialized agent personas with custom guidance prompts and proposition, critique, and rebuttal capabilities.
+- **`swarm/consensus.py`**: Consensus score calculation, claim agreement/dispute extraction, and unified synthesis arbitration.
+- **`swarm/coordinator.py`**: `SwarmCoordinator` multi-round debate orchestrator and dynamic task allocation engine.
+- **`orchestration/nodes/swarm_node.py`**: StateGraph node `swarm_debate` wired between `gap_exploration` and `comparison_table`.
+- **`app/swarm_routes.py`**: REST API endpoints for `/api/swarm/roles`, `/api/swarm/debate`, `/api/swarm/synthesize`, and `/api/swarm/health`.
+- **Config schema**: `SwarmSettings` with configurable rounds, active roles, consensus threshold, and debate depth.
+- **Tests**: `tests/unit/test_swarm.py` with 100% test pass rate across all models, agents, consensus math, graph nodes, and API routes.
 
 ---
 

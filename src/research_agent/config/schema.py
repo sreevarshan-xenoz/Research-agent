@@ -445,6 +445,29 @@ class TemplateLibrarySettings(BaseModel):
     store_path: str = Field(default=".runtime/templates.json", description="Path for custom template persistence")
 
 
+class SwarmSettings(BaseModel):
+    """Configuration for Multi-Agent Research Swarm (P34).
+
+    Controls role-specialized agents (Theorist, Experimentalist, Critic, Editor),
+    multi-turn debate protocols, consensus threshold, and dynamic task allocation.
+    """
+    enabled: bool = True
+    max_rounds: int = Field(default=3, ge=1, le=10, description="Max debate rounds per swarm session")
+    roles: list[str] = Field(
+        default_factory=lambda: ["theorist", "experimentalist", "critic", "editor"],
+        description="Active swarm roles in debate sessions",
+    )
+    consensus_threshold: float = Field(default=0.7, ge=0.1, le=1.0, description="Agreement threshold for consensus")
+    debate_depth: Literal["quick", "standard", "thorough"] = Field(
+        default="standard",
+        description="Depth of arguments and critique generation",
+    )
+    allow_dissent_recording: bool = Field(
+        default=True,
+        description="Record persistent dissenting perspectives in research output",
+    )
+
+
 class AppSettings(BaseModel):
     """Main application settings."""
     version: str = "2.0"
@@ -478,3 +501,4 @@ class AppSettings(BaseModel):
     multi_modal: MultiModalSettings = Field(default_factory=MultiModalSettings)
     plugins: PluginSettings = Field(default_factory=PluginSettings)
     template_library: TemplateLibrarySettings = Field(default_factory=TemplateLibrarySettings)
+    swarm: SwarmSettings = Field(default_factory=SwarmSettings)

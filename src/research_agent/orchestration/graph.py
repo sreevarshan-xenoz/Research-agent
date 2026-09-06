@@ -49,6 +49,7 @@ from research_agent.orchestration.nodes import (
     hypothesis_generator_node,
     strategy_recommender_node,
     gap_exploration_node,
+    swarm_node,
 )
 from research_agent.orchestration.state import GraphState, WorkflowState, from_graph_state, to_graph_state
 from research_agent.tools.base import BaseToolAdapter
@@ -265,7 +266,8 @@ def build_graph(
     graph.add_node("hypothesis_generator", wrap_node_fn("hypothesis_generator", hypothesis_generator_node))
     graph.add_node("strategy_recommender", wrap_node_fn("strategy_recommender", strategy_recommender_node))
     graph.add_node("gap_exploration", wrap_node_fn("gap_exploration", gap_exploration_node))
-
+    # P34: Multi-Agent Research Swarm
+    graph.add_node("swarm_debate", wrap_node_fn("swarm_debate", swarm_node))
 
 
 
@@ -319,7 +321,9 @@ def build_graph(
     # P26: Hypothesis generation and gap exploration after gap analysis
     graph.add_edge("gap_analyzer", "hypothesis_generator")
     graph.add_edge("hypothesis_generator", "gap_exploration")
-    graph.add_edge("gap_exploration", "comparison_table")
+    # P34: Swarm debate deliberates on hypotheses and gap insights
+    graph.add_edge("gap_exploration", "swarm_debate")
+    graph.add_edge("swarm_debate", "comparison_table")
     graph.add_edge("comparison_table", "citation_graph")
     graph.add_edge("citation_graph", "figure_generator")
     graph.add_edge("figure_generator", "citation_verifier")
